@@ -39,9 +39,18 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Static files ───────────────────────────────────────────
-app.use(express.static(path.join(process.cwd(), 'public')));
-app.use('/bootstrap',    express.static(path.join(process.cwd(), 'node_modules/bootstrap')));
-app.use('/@fortawesome', express.static(path.join(process.cwd(), 'node_modules/@fortawesome')));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/bootstrap',    express.static(path.join(__dirname, 'node_modules/bootstrap')));
+app.use('/@fortawesome', express.static(path.join(__dirname, 'node_modules/@fortawesome')));
+
+// ── No caching for dynamic/session-bound responses ─────────
+// Sessions + CSRF tokens must never be cached by an edge/CDN layer —
+// a cached login page serves the same CSRF token to every visitor.
+app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    next();
+});
 
 // ── Body + cookie parsing ──────────────────────────────────
 app.use(express.json());
@@ -94,7 +103,7 @@ app.use((req, res, next) => {
 
 // ── View engine ────────────────────────────────────────────
 app.set('view engine', 'ejs');
-app.set('views', path.join(process.cwd(), 'views'));
+app.set('views', path.join(__dirname, 'views'));
 
 // ── DB ─────────────────────────────────────────────────────
 sequelize.authenticate()
