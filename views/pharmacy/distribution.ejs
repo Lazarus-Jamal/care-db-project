@@ -1,0 +1,177 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.78rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6; padding:12px 16px; text-align:center; }
+  .stat-val  { font-size:1.4rem; font-weight:800; line-height:1; }
+  .stat-lbl  { font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:3px; }
+  .is-pending     { background:#fff3cd; color:#856404; }
+  .is-issued      { background:#d1e7dd; color:#0a3622; }
+  .is-partial     { background:#fff0d0; color:#7a4800; }
+  .is-unavailable { background:#f8d7da; color:#842029; }
+  .sp { display:inline-block; padding:1px 7px; border-radius:20px; font-size:.60rem; font-weight:700; text-transform:uppercase; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-chart-bar me-2 text-primary"></i>
+        <%= locale==="fr"?"Rapport de distribution":"Distribution Report" %>
+      </h5>
+      <small class="text-muted"><%= locale==="fr"?"Genere le":"Generated" %> <%= new Date().toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></small>
+    </div>
+  </div>
+
+  <%/* Filters */%>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/pharmacy/distribution" class="d-flex gap-2 flex-wrap align-items-end">
+      <div><label class="lbl"><%= locale==="fr"?"Du":"From" %></label>
+        <input type="date" name="date_from" value="<%= dateFrom %>" class="form-control form-control-sm"></div>
+      <div><label class="lbl"><%= locale==="fr"?"Au":"To" %></label>
+        <input type="date" name="date_to" value="<%= dateTo %>" class="form-control form-control-sm"></div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter"></i></button>
+      <a href="/pharmacy/reports/distribution?print=1&date_from=<%= dateFrom %>&date_to=<%= dateTo %>"
+         target="_blank" class="btn btn-sm btn-outline-primary ms-auto">
+        <i class="fas fa-print me-1"></i><%= locale==="fr"?"Imprimer":"Print" %>
+      </a>
+    </form>
+  </div></div>
+
+  <%/* Stats */%>
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="stat-box shadow-sm">
+      <div class="stat-val text-primary"><%= totalOrders %></div>
+      <div class="stat-lbl"><%= locale==="fr"?"Commandes":"Orders" %></div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="stat-box shadow-sm">
+      <div class="stat-val text-success"><%= totalRows %></div>
+      <div class="stat-lbl"><%= locale==="fr"?"Lignes emises":"Lines Issued" %></div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="stat-box shadow-sm">
+      <div class="stat-val" style="color:#6f42c1;"><%= byProduct.length %></div>
+      <div class="stat-lbl"><%= locale==="fr"?"Produits distincts":"Distinct Products" %></div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="stat-box shadow-sm">
+      <div class="stat-val text-info">
+        <%= rows.reduce(function(s,r){return s+r.qty_issued;},0) %>
+      </div>
+      <div class="stat-lbl"><%= locale==="fr"?"Unites totales":"Total Units" %></div>
+    </div></div>
+  </div>
+
+  <%/* Summary by product */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+      <i class="fas fa-chart-pie me-2 text-success"></i>
+      <%= locale==="fr"?"Resume par produit":"Summary by Product" %>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-xs table-hover align-middle mb-0">
+        <thead class="table-light"><tr>
+          <th><%= locale==="fr"?"Produit":"Product" %></th>
+          <th><%= locale==="fr"?"Code":"Code" %></th>
+          <th><%= locale==="fr"?"Unite":"Unit" %></th>
+          <th class="text-center"><%= locale==="fr"?"Nb commandes":"Orders" %></th>
+          <th class="text-center"><%= locale==="fr"?"Total demande":"Requested" %></th>
+          <th class="text-center"><%= locale==="fr"?"Total emis":"Issued" %></th>
+          <th class="text-center"><%= locale==="fr"?"Taux service":"Fill Rate" %></th>
+        </tr></thead>
+        <tbody>
+          <% if (!byProduct.length) { %>
+            <tr><td colspan="7" class="text-center text-muted py-3"><%= locale==="fr"?"Aucune donnee.":"No data." %></td></tr>
+          <% } else { byProduct.forEach(function(p) {
+            var fill = p.total_requested > 0 ? Math.round(p.total_issued/p.total_requested*100) : 0;
+          %>
+            <tr>
+              <td class="fw-bold" style="font-size:.78rem;"><%= p.name %></td>
+              <td><code style="font-size:.68rem;"><%= p.code %></code></td>
+              <td class="text-muted"><%= p.unit %></td>
+              <td class="text-center"><%= p.order_count %></td>
+              <td class="text-center"><%= p.total_requested %></td>
+              <td class="text-center fw-bold text-success"><%= p.total_issued %></td>
+              <td class="text-center">
+                <span class="badge <%= fill>=90?"bg-success":fill>=70?"bg-warning text-dark":"bg-danger" %>"
+                      style="font-size:.62rem;"><%= fill %>%</span>
+              </td>
+            </tr>
+          <% }); } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <%/* Full detail */%>
+  <div class="card shadow-sm">
+    <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+      <i class="fas fa-list me-2 text-primary"></i>
+      <%= locale==="fr"?"Detail des emissions":"Issue Detail" %>
+      <span class="badge bg-secondary ms-1"><%= rows.length %></span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-xs table-hover align-middle mb-0">
+          <thead class="table-dark"><tr>
+            <th><%= locale==="fr"?"Commande":"Order" %></th>
+            <th><%= locale==="fr"?"Date":"Date" %></th>
+            <th><%= locale==="fr"?"Produit":"Product" %></th>
+            <th class="text-center"><%= locale==="fr"?"Demande":"Req." %></th>
+            <th class="text-center"><%= locale==="fr"?"Emis":"Issued" %></th>
+            <th><%= locale==="fr"?"Lot":"Batch" %></th>
+            <th><%= locale==="fr"?"Peremption":"Expiry" %></th>
+            <th><%= locale==="fr"?"Collecte par":"Collected by" %></th>
+          </tr></thead>
+          <tbody>
+            <% if (!rows.length) { %>
+              <tr><td colspan="8" class="text-center text-muted py-4"><%= locale==="fr"?"Aucune emission.":"No issues." %></td></tr>
+            <% } else { rows.forEach(function(r) { %>
+              <tr>
+                <td class="fw-bold" style="font-size:.74rem;"><%= r.order_number %></td>
+                <td class="text-muted" style="font-size:.72rem;">
+                  <%= new Date(r.requested_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                </td>
+                <td>
+                  <div class="fw-bold" style="font-size:.76rem;"><%= r.product %></div>
+                  <code style="font-size:.64rem;color:#6c757d;"><%= r.item_code %></code>
+                </td>
+                <td class="text-center"><%= r.qty_requested %></td>
+                <td class="text-center fw-bold text-success"><%= r.qty_issued %></td>
+                <td class="text-muted" style="font-size:.72rem;"><%= r.batch_number %></td>
+                <td style="font-size:.72rem;">
+                  <% if (r.expiry_date) { %>
+                    <%= new Date(r.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                  <% } else { %>—<% } %>
+                </td>
+                <td class="text-muted" style="font-size:.72rem;"><%= r.collected_by || "—" %></td>
+              </tr>
+            <% }); } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

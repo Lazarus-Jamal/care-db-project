@@ -1,0 +1,165 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.78rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6;
+              padding:14px 16px; text-align:center; }
+  .stat-val  { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl  { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-clipboard-check me-2" style="color:#20c997;"></i>
+        <%= locale==="fr"?"Journal Controle Qualite":"QC Log" %>
+      </h5>
+      <small class="text-muted"><%= locale==="fr"?"Genere le":"Generated" %> <%= new Date().toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></small>
+    </div>
+    <a href="/warehouse/reports" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i><%= locale==="fr"?"Rapports":"Reports" %>
+    </a>
+  </div>
+
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/warehouse/reports/qc" class="d-flex gap-2 flex-wrap align-items-end">
+      <div><label class="lbl"><%= locale==="fr"?"Du":"From" %></label>
+        <input type="date" name="date_from" value="<%= dateFrom %>" class="form-control form-control-sm"></div>
+      <div><label class="lbl"><%= locale==="fr"?"Au":"To" %></label>
+        <input type="date" name="date_to" value="<%= dateTo %>" class="form-control form-control-sm"></div>
+      <div><label class="lbl"><%= locale==="fr"?"Resultat":"Result" %></label>
+        <select name="result" class="form-select form-select-sm">
+          <option value=""><%= locale==="fr"?"Tous":"All" %></option>
+          <option value="pass" <%= result==="pass"?"selected":"" %>><%= locale==="fr"?"Accepte":"Pass" %></option>
+          <option value="fail" <%= result==="fail"?"selected":"" %>><%= locale==="fr"?"Rejete":"Fail" %></option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter"></i></button>
+      <a href="/warehouse/reports/qc?print=1&date_from=<%= dateFrom %>&date_to=<%= dateTo %><%= result?"&result="+result:"" %>"
+         target="_blank" class="btn btn-sm btn-outline-primary ms-auto">
+        <i class="fas fa-print me-1"></i><%= locale==="fr"?"Imprimer":"Print" %>
+      </a>
+    </form>
+  </div></div>
+
+  <div class="row g-3 mb-3">
+    <% var qcStats = [
+      {val:total,   lbl:locale==="fr"?"Controles total":"Total Checks",    col:"#20c997"},
+      {val:passed,  lbl:locale==="fr"?"Acceptes":"Passed",                col:"#198754"},
+      {val:failed,  lbl:locale==="fr"?"Rejetes":"Failed",                 col:"#dc3545"},
+      {val:tempFail,lbl:locale==="fr"?"Pb temperature":"Temp. Issues",    col:"#ffc107"},
+      {val:totalRej,lbl:locale==="fr"?"Unites rejetees":"Units Rejected", col:"#842029"},
+    ]; %>
+    <% qcStats.forEach(function(s){ %>
+      <div class="col-6 col-md"><div class="stat-box shadow-sm">
+        <div class="stat-val" style="color:<%= s.col %>"><%= s.val %></div>
+        <div class="stat-lbl"><%= s.lbl %></div>
+      </div></div>
+    <% }); %>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+          <i class="fas fa-truck me-2" style="color:#20c997;"></i><%= locale==="fr"?"Par fournisseur":"By Supplier" %>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-xs align-middle mb-0">
+            <thead class="table-light"><tr>
+              <th><%= locale==="fr"?"Fournisseur":"Supplier" %></th>
+              <th class="text-center" style="color:#198754;">OK</th>
+              <th class="text-center" style="color:#dc3545;">NOK</th>
+              <th class="text-center"><%= locale==="fr"?"Rejete":"Rejected" %></th>
+            </tr></thead>
+            <tbody>
+              <% bySupplier.forEach(function(s){ %>
+                <tr>
+                  <td style="font-size:.76rem;font-weight:600;"><%= s.name %></td>
+                  <td class="text-center text-success"><%= s.pass %></td>
+                  <td class="text-center text-danger"><%= s.fail %></td>
+                  <td class="text-center fw-bold text-danger"><%= s.rejected %></td>
+                </tr>
+              <% }); %>
+              <% if (!bySupplier.length) { %>
+                <tr><td colspan="4" class="text-center text-muted py-3"><%= locale==="fr"?"Aucune donnee.":"No data." %></td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+          <i class="fas fa-list me-2" style="color:#20c997;"></i><%= locale==="fr"?"Detail des controles":"Check Details" %>
+        </div>
+        <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark" style="position:sticky;top:0;"><tr>
+              <th><%= locale==="fr"?"Date":"Date" %></th>
+              <th><%= locale==="fr"?"Produit":"Product" %></th>
+              <th><%= locale==="fr"?"Fournisseur":"Supplier" %></th>
+              <th class="text-center"><%= locale==="fr"?"Accepte":"Accepted" %></th>
+              <th class="text-center"><%= locale==="fr"?"Rejete":"Rejected" %></th>
+              <th class="text-center">Temp.</th>
+              <th><%= locale==="fr"?"Motif rejet":"Rejection reason" %></th>
+            </tr></thead>
+            <tbody>
+              <% if (!checks.length) { %>
+                <tr><td colspan="7" class="text-center text-muted py-3"><%= locale==="fr"?"Aucun controle.":"No checks." %></td></tr>
+              <% } else { checks.forEach(function(q){ %>
+                <%
+                  var prod = q.deliveryItem && q.deliveryItem.product ? q.deliveryItem.product.name : "—";
+                  var sup  = q.deliveryItem && q.deliveryItem.delivery && q.deliveryItem.delivery.po &&
+                             q.deliveryItem.delivery.po.supplier ? q.deliveryItem.delivery.po.supplier.name : "—";
+                %>
+                <tr class="<%= q.result==="fail"?"table-danger":"" %>">
+                  <td style="font-size:.72rem;"><%= new Date(q.checked_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+                  <td style="font-size:.74rem;font-weight:600;"><%= prod %></td>
+                  <td style="font-size:.72rem;" class="text-muted"><%= sup %></td>
+                  <td class="text-center text-success fw-bold"><%= q.quantity_accepted %></td>
+                  <td class="text-center text-danger fw-bold"><%= q.quantity_rejected %></td>
+                  <td class="text-center">
+                    <% if (q.temperature_ok === 0) { %>
+                      <span class="badge bg-warning text-dark" style="font-size:.56rem;">NOK</span>
+                    <% } else { %>
+                      <span class="badge bg-success" style="font-size:.56rem;">OK</span>
+                    <% } %>
+                  </td>
+                  <td class="text-muted" style="font-size:.70rem;"><%= q.rejection_reason || "" %></td>
+                </tr>
+              <% }); } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

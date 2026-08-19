@@ -1,0 +1,33 @@
+
+<%- include("../../partials/header", { title: t.adminCfg.pharmacyShelves }) %>
+<%- include("../../partials/navbar") %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper"><div class="row"><div class="col-md-8 offset-md-2">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0"><i class="fas fa-capsules me-2"></i><%= t.adminCfg.pharmacyShelves %></h5>
+    </div>
+    <div class="card-body">
+      <% if (typeof success !== "undefined" && success) { %><div class="alert alert-success"><%= t.adminCfg.saved %></div><% } %>
+      <form method="POST" action="/admin/config/pharmacy-shelves">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="mb-3"><label class="form-label"><%= t.adminCfg.shelfName %></label><input type="text" name="shelf_name" class="form-control form-control-sm"></div>
+        <div class="mb-3"><label class="form-label"><%= t.adminCfg.shelfCode %></label><input type="text" name="shelf_code" class="form-control form-control-sm"></div>
+        
+        <div class="text-end mt-3">
+          <a href="/" class="btn btn-secondary btn-sm"><%= t.common.cancel %></a>
+          <button type="submit" class="btn btn-primary btn-sm ms-2"><%= t.common.save %></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div></div></div>
+<%- include("../../partials/footer") %>
+
+
+
+

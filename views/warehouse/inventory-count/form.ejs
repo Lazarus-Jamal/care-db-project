@@ -1,0 +1,107 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req { color:#dc3545; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:680px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse">Warehouse</a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/inventory-counts"><%= locale==="fr"?"Inventaires":"Counts" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Nouveau":"New" %></li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-2 fw-bold" style="font-size:.88rem;">
+      <i class="fas fa-clipboard-list me-2 text-secondary"></i>
+      <%= locale==="fr"?"Nouvel inventaire physique":"New Physical Inventory Count" %>
+    </div>
+    <div class="card-body">
+
+      <form method="POST" action="/warehouse/inventory-counts/new">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr"?"Type d\"inventaire":"Count Type" %> <span class="req">*</span></label>
+            <select name="count_type" class="form-select form-select-sm" required>
+              <option value="monthly"><%= locale==="fr"?"Mensuel (articles à fort mouvement)":"Monthly (high-movement items)" %></option>
+              <option value="cycle_20pct"><%= locale==="fr"?"Cycle 20% (classe A — haute valeur)":"Cycle 20% (Class A — high value)" %></option>
+              <option value="quarterly"><%= locale==="fr"?"Trimestriel (par catégorie)":"Quarterly (by category)" %></option>
+              <option value="annual"><%= locale==="fr"?"Annuel (tous les produits)":"Annual (all products)" %></option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr"?"Date de comptage":"Count Date" %> <span class="req">*</span></label>
+            <input type="date" name="count_date" class="form-control form-control-sm"
+              value="<%= new Date().toISOString().slice(0,10) %>" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-0">
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr"?"Filtrer par catégorie (optionnel)":"Filter by Category (optional)" %></label>
+            <select name="category_id" class="form-select form-select-sm">
+              <option value=""><%= locale==="fr"?"Toutes les catégories":"All categories" %></option>
+              <% categories.forEach(function(c) { %>
+                <option value="<%= c.category_id %>"><%= c.parent_id ? "  ↳ " : "" %><%= c.name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr"?"Filtrer par classe ABC (optionnel)":"Filter by ABC Class (optional)" %></label>
+            <select name="abc_class" class="form-select form-select-sm">
+              <option value=""><%= locale==="fr"?"Toutes les classes":"All classes" %></option>
+              <option value="A">A — <%= locale==="fr"?"Haute valeur / fort mouvement":"High value / high movement" %></option>
+              <option value="B">B — <%= locale==="fr"?"Valeur moyenne":"Medium value" %></option>
+              <option value="C">C — <%= locale==="fr"?"Faible valeur / lent":"Low value / slow movement" %></option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="lbl">Notes</label>
+          <textarea name="notes" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+        </div>
+
+        <div class="alert alert-info py-2 mt-3" style="font-size:.80rem;">
+          <i class="fas fa-info-circle me-2"></i>
+          <%= locale==="fr"
+            ? "Le système construira la liste des articles à compter selon les critères sélectionnés. Une fois démarré, les mouvements de stock seront verrouillés jusqu\"à l\"approbation."
+            : "The system will build the item list based on the selected criteria. Once started, stock movements will be locked until approval." %>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-secondary btn-sm">
+            <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Créer l\"inventaire":"Create Count" %>
+          </button>
+          <a href="/warehouse/inventory-counts" class="btn btn-outline-secondary btn-sm"><%= locale==="fr"?"Annuler":"Cancel" %></a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

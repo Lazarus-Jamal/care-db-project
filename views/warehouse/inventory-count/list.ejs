@@ -1,0 +1,114 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .sp { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.62rem; font-weight:700; text-transform:uppercase; }
+  .s-draft{background:#e9ecef;color:#495057} .s-in_progress{background:#cfe2ff;color:#084298}
+  .s-pending_approval{background:#fff3cd;color:#856404} .s-approved{background:#d1e7dd;color:#0a3622}
+  .s-cancelled{background:#f8d7da;color:#842029}
+  .type-pill { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.62rem; background:#f0f0f0; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-clipboard-list me-2 text-secondary"></i><%= locale==="fr"?"Inventaires physiques":"Physical Inventory Counts" %></h5>
+      <small class="text-muted"><%= counts.length %> <%= locale==="fr"?"inventaire(s)":"count(s)" %></small>
+    </div>
+    <div class="d-flex gap-2">
+      <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Initiate.InventoryCount")) { %>
+        <a href="/warehouse/inventory-counts/new" class="btn btn-sm btn-secondary">
+          <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Nouvel inventaire":"New Count" %>
+        </a>
+      <% } %>
+      <a href="/warehouse" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Dashboard</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!counts || counts.length === 0) { %>
+        <div class="text-center text-muted py-5"><i class="fas fa-clipboard-list fa-2x mb-2 d-block opacity-25"></i><%= locale==="fr"?"Aucun inventaire.":"No inventory counts." %></div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th><%= locale==="fr"?"N° Inventaire":"Count Number" %></th>
+                <th><%= locale==="fr"?"Type":"Type" %></th>
+                <th class="text-center"><%= locale==="fr"?"Statut":"Status" %></th>
+                <th><%= locale==="fr"?"Date":"Date" %></th>
+                <th><%= locale==="fr"?"Initié par":"Initiated by" %></th>
+                <th class="text-center"><%= locale==="fr"?"Verrou":"Lock" %></th>
+                <th class="text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% counts.forEach(function(c) { %>
+                <%
+                  var typeLabels={monthly:locale==="fr"?"Mensuel":"Monthly",quarterly:locale==="fr"?"Trimestriel":"Quarterly",
+                    cycle_20pct:locale==="fr"?"Cycle 20%":"Cycle 20%",annual:locale==="fr"?"Annuel":"Annual"};
+                  var sLabel={draft:"Draft",in_progress:locale==="fr"?"En cours":"In Progress",
+                    pending_approval:locale==="fr"?"Att. approbation":"Pending Approval",
+                    approved:locale==="fr"?"Approuve":"Approved",cancelled:locale==="fr"?"Annule":"Cancelled"};
+                %>
+                <tr>
+                  <td><a href="/warehouse/inventory-counts/<%= c.count_id %>" class="fw-bold text-decoration-none"><%= c.count_number %></a></td>
+                  <td><span class="type-pill"><%= typeLabels[c.count_type]||c.count_type %></span></td>
+                  <td class="text-center"><span class="sp s-<%= c.status %>"><%= sLabel[c.status]||c.status %></span></td>
+                  <td class="text-muted"><%= new Date(c.count_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+                  <td class="text-muted"><%= c.initiated_by %></td>
+                  <td class="text-center">
+                    <% if (c.is_locked) { %>
+                      <span class="badge bg-danger" style="font-size:.60rem;"><i class="fas fa-lock me-1"></i><%= locale==="fr"?"Verrouillé":"Locked" %></span>
+                    <% } else { %>
+                      <span class="text-muted" style="font-size:.72rem;"><i class="fas fa-lock-open"></i></span>
+                    <% } %>
+                  </td>
+                  <td class="text-center">
+                    <div class="d-flex justify-content-center gap-1">
+                      <a href="/warehouse/inventory-counts/<%= c.count_id %>" class="btn btn-xs btn-outline-secondary"><i class="fas fa-eye"></i></a>
+                      <% if (c.status === "draft" || c.status === "in_progress" || c.status === "pending_approval") { %>
+                        <a href="/warehouse/inventory-counts/<%= c.count_id %>/print" target="_blank"
+                          class="btn btn-xs btn-outline-primary" title="<%= locale==="fr"?"Fiche de comptage":"Count sheet" %>">
+                          <i class="fas fa-print"></i>
+                        </a>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

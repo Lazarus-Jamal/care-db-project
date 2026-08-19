@@ -1,0 +1,1103 @@
+
+<%- include("partials/header") %>
+<%- include("partials/navbar") %>
+
+<div class="container-fluid py-4 content-wrapper">
+  <div class="row g-4">
+
+    <%/* ── Left: Quick navigation ── */%>
+    <div class="col-md-3">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-primary text-white py-2">
+          <h6 class="mb-0"><i class="fas fa-compass me-2"></i><%= t.dash.quickNav %></h6>
+        </div>
+        <div class="list-group list-group-flush">
+
+          <%/* Worklist — hidden for cashier-only */%>
+          <% if (canSeeEncounterWorklist) { %>
+            <a href="/encounters/worklist"
+              class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-stethoscope me-2 text-primary"></i>
+                <%= locale==="fr" ? "File des consultations" : "Encounter Worklist" %>
+              </span>
+              <% if (typeof pendingEncountersCount !== "undefined" && pendingEncountersCount > 0) { %>
+                <span class="badge bg-warning text-dark rounded-pill" style="font-size:.65rem;">
+                  <%= pendingEncountersCount %>
+                </span>
+              <% } %>
+            </a>
+          <% } %>
+
+          <% if (!isCashierOnly && hasAnyPermission(["Patient.Read.PatientRecord","Patient.Create.PatientRecord"])) { %>
+            <a href="/patients/list" class="list-group-item list-group-item-action">
+              <i class="fas fa-user-injured me-2"></i><%= t.dash.managePatients %>
+            </a>
+          <% } %>
+
+          <% if (!isCashierOnly && hasPermission("Pharmacy.Create.Prescription")) { %>
+            <a href="/patients/prescriptions" class="list-group-item list-group-item-action">
+              <i class="fas fa-file-prescription me-2"></i><%= t.dash.prescriptions %>
+            </a>
+          <% } %>
+
+          <% if (hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+            <a href="/billing/worklist"
+              class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-file-invoice-dollar me-2 text-success"></i><%= t.dash.invoicing %></span>
+              <% if (typeof openBillsCount !== "undefined" && openBillsCount > 0) { %>
+                <span class="badge bg-danger rounded-pill" style="font-size:.65rem;"><%= openBillsCount %></span>
+              <% } %>
+            </a>
+          <% } %>
+
+          <% if (!isCashierOnly && !isBillingStaff && hasAnyPermission(["Pharmacy.Dispense.Medication","Inventory.Read.Stock"])) { %>
+            <a href="/pharmacy/distribution" class="list-group-item list-group-item-action">
+              <i class="fas fa-pills me-2"></i><%= t.dash.pharmacy %>
+            </a>
+          <% } %>
+
+          <% if (!isCashierOnly && !isBillingStaff && hasPermission("Appointment.Read.Appointment")) { %>
+            <a href="/patients/appointments" class="list-group-item list-group-item-action">
+              <i class="fas fa-calendar-check me-2"></i><%= t.dash.appointments %>
+            </a>
+          <% } %>
+
+          <% if (hasAnyPermission(["Reports.Generate.FinancialData","Reports.Generate.ConsultationData"])) { %>
+            <a href="/stats/finances" class="list-group-item list-group-item-action">
+              <i class="fas fa-chart-line me-2"></i><%= t.dash.reports %>
+            </a>
+          <% } %>
+
+          <%/* Sales report — cashier and billing staff */%>
+          <% if (hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+            <a href="/billing/sales-report" class="list-group-item list-group-item-action">
+              <i class="fas fa-receipt me-2 text-success"></i>
+              <%= locale==="fr" ? "Rapport des ventes" : "Sales Report" %>
+            </a>
+          <% } %>
+
+          <% if (isAppAdmin || isAdmin) { %>
+            <a href="/admin/users/create" class="list-group-item list-group-item-action">
+              <i class="fas fa-cog me-2"></i><%= t.dash.administration %>
+            </a>
+            <a href="/help/maintenance" class="list-group-item list-group-item-action">
+              <i class="fas fa-wrench me-2"></i><%= t.dash.maintenance %>
+            </a>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <%/* ── Right: main content ── */%>
+    <div class="col-md-9">
+
+      <%/* Welcome banner */%>
+      <div class="alert alert-success d-flex align-items-center mb-3 py-2" role="alert">
+        <i class="fas fa-hospital-user fa-2x me-3"></i>
+        <div>
+          <h5 class="alert-heading mb-0">
+            <%= t.dash.title %>
+            <% if (user.facility && user.facility.id) { %>
+              — <%= user.facility.name %>
+            <% } else { %>
+              — <%= locale==="fr" ? "Tous les etablissements" : "All Facilities" %>
+            <% } %>
+          </h5>
+          <p class="mb-0" style="font-size:.88rem;">
+            <%= t.dash.welcome %>,
+            <strong>
+              <% if (user.firstName && user.lastName) { %>
+                <%= user.firstName %> <%= user.lastName %>
+              <% } else { %>
+                <%= user.username %>
+              <% } %>
+            </strong>!
+            <%= t.dash.overview %>
+          </p>
+        </div>
+      </div>
+
+      <%/* ══════════════════════════════════════════════════════════
+           CASHIER DASHBOARD
+      ══════════════════════════════════════════════════════════ */%>
+      <% if (isCashierOnly) { %>
+
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-cash-register me-1"></i>
+          <%= locale==="fr" ? "Encaissement" : "Cashier Overview" %>
+        </h6>
+        <div class="row g-3 mb-4">
+
+          <%/* Open bills */%>
+          <div class="col-md-6">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #dc3545;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Factures a encaisser" : "Bills to collect" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#dc3545;font-size:2.2rem;">
+                      <%= typeof openBillsCount !== "undefined" ? openBillsCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Ouvertes et partielles" : "Open and partial" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-file-invoice-dollar fa-2x opacity-50 mt-1" style="color:#dc3545;"></i>
+                </div>
+              </div>
+              <a href="/billing/worklist" class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(220,53,69,.08);">
+                <%= locale==="fr" ? "Voir les factures" : "View bills" %> &rarr;
+              </a>
+            </div>
+          </div>
+
+          <%/* My payments today */%>
+          <div class="col-md-6">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #198754;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Encaissements auj." : "Payments today" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#198754;font-size:2.2rem;">
+                      <%= typeof myPaidTodayCount !== "undefined" ? myPaidTodayCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Traites par moi" : "Processed by me" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-check-circle fa-2x opacity-50 mt-1" style="color:#198754;"></i>
+                </div>
+              </div>
+              <a href="/billing/sales-report" class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(25,135,84,.08);">
+                <%= locale==="fr" ? "Voir le rapport" : "View report" %> &rarr;
+              </a>
+            </div>
+          </div>
+
+        </div>
+
+        <%/* Open bills embedded table for cashier */%>
+        <%- include("partials/open_bills_table", {
+              enrichedOpenBills: enrichedOpenBills,
+              locale: locale,
+              hasAnyPermission: hasAnyPermission
+            }) %>
+
+      <%/* ══════════════════════════════════════════════════════════
+           BILLING CLERK / FINANCE OFFICER DASHBOARD
+      ══════════════════════════════════════════════════════════ */%>
+      <% } else if (isBillingStaff) { %>
+
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-file-invoice-dollar me-1"></i>
+          <%= locale==="fr" ? "Apercu facturation" : "Billing Overview" %>
+        </h6>
+        <div class="row g-3 mb-4">
+
+          <%/* Open bills */%>
+          <div class="col-md-4">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #dc3545;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Factures ouvertes" : "Open Bills" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#dc3545;font-size:2.2rem;">
+                      <%= typeof openBillsCount !== "undefined" ? openBillsCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Ouvertes et partielles" : "Open and partial" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-file-invoice-dollar fa-2x opacity-50 mt-1" style="color:#dc3545;"></i>
+                </div>
+              </div>
+              <a href="/billing/worklist" class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(220,53,69,.08);">
+                <%= locale==="fr" ? "Voir la file" : "View worklist" %> &rarr;
+              </a>
+            </div>
+          </div>
+
+          <%/* All payments today (all cashiers) */%>
+          <div class="col-md-4">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #198754;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Paiements auj." : "Payments today" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#198754;font-size:2.2rem;">
+                      <%= typeof allPaidTodayCount !== "undefined" ? allPaidTodayCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Tous caissiers" : "All cashiers" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-check-circle fa-2x opacity-50 mt-1" style="color:#198754;"></i>
+                </div>
+              </div>
+              <a href="/billing/sales-report" class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(25,135,84,.08);">
+                <%= locale==="fr" ? "Rapport" : "Report" %> &rarr;
+              </a>
+            </div>
+          </div>
+
+          <%/* Today's new unpaid bills */%>
+          <div class="col-md-4">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #fd7e14;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Impayees auj." : "Unpaid today" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#fd7e14;font-size:2.2rem;">
+                      <%= typeof todayUnpaidCount !== "undefined" ? todayUnpaidCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Nouvelles factures impayees" : "New unpaid bills" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-exclamation-circle fa-2x opacity-50 mt-1" style="color:#fd7e14;"></i>
+                </div>
+              </div>
+              <div class="card-footer py-1" style="background:rgba(253,126,20,.08);"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <%/* 7-day combined sales + unpaid chart — billing clerk and admin only */%>
+        <% if ((isBillingStaff || isAdmin || isAppAdmin) &&
+               typeof unpaidLast7 !== "undefined" && unpaidLast7.length > 0) { %>
+          <div class="card shadow-sm mb-4">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+              <span class="fw-bold" style="font-size:.82rem;">
+                <i class="fas fa-chart-bar me-2 text-primary"></i>
+                <%= locale==="fr"
+                  ? "Ventes et factures payees (mois en cours)"
+                  : "Daily Collections & Paid Bills (current month)" %>
+              </span>
+              <div style="font-size:.70rem;color:#6c757d;">
+                <span class="me-3">
+                  <span style="display:inline-block;width:10px;height:10px;
+                    background:rgba(13,110,253,.6);border-radius:2px;vertical-align:middle;"></span>
+                  &nbsp;<%= locale==="fr" ? "Encaisse (FCFA)" : "Collected (FCFA)" %>
+                </span>
+                <span>
+                  <span style="display:inline-block;width:14px;height:3px;
+                    background:#198754;vertical-align:middle;border-radius:2px;"></span>
+                  &nbsp;<%= locale==="fr" ? "Factures payees (nb)" : "Paid bills (count)" %>
+                </span>
+              </div>
+            </div>
+            <div class="card-body py-3" style="height:200px;position:relative;">
+              <canvas id="salesUnpaidChart"></canvas>
+            </div>
+          </div>
+          <script>
+          (function() {
+            var labels  = [<% unpaidLast7.forEach(function(d,i) {
+              var p = d.date.split("-"); var lbl = p[1]+"-"+p[2];
+            %>"<%= lbl %>"<% if(i<unpaidLast7.length-1){%>,<%} }); %>];
+            var sales   = [<% if(typeof salesLast7!=="undefined"){
+              salesLast7.forEach(function(d,i){
+            %><%= Math.round(d.total) %><%if(i<salesLast7.length-1){%>,<%}})}; %>];
+            var unpaid  = [<% unpaidLast7.forEach(function(d,i){
+              %><%= d.count %><%if(i<unpaidLast7.length-1){%>,<%}}); %>];
+            var ctx = document.getElementById('salesUnpaidChart');
+            if (!ctx) return;
+            new Chart(ctx, {
+              data: {
+                labels: labels,
+                datasets: [
+                  {
+                    type: 'bar',
+                    label: "<%= locale==="fr"?"Encaisse (FCFA)":"Collected (FCFA)" %>",
+                    data:  sales,
+                    backgroundColor: 'rgba(13,110,253,.55)',
+                    borderColor: '#0d6efd',
+                    borderWidth: 1,
+                    yAxisID: 'ySales',
+                    order: 2,
+                  },
+                  {
+                    type: 'line',
+                    label: "<%= locale==="fr"?"Factures payees":"Paid bills" %>",
+                    data:  unpaid,
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25,135,84,.12)',
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#198754',
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'yUnpaid',
+                    order: 1,
+                  }
+                ]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: function(ctx) {
+                        if (ctx.dataset.yAxisID === 'ySales') {
+                          return ' ' + Math.round(ctx.parsed.y).toLocaleString('fr-FR') + ' FCFA';
+                        }
+                        return ' ' + ctx.parsed.y +
+                          " <%= locale==="fr"?"facture(s) payee(s)":"paid bill(s)" %>";
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  ySales: {
+                    type: 'linear', position: 'left',
+                    beginAtZero: true,
+                    ticks: {
+                      font: { size: 10 },
+                      callback: function(v) {
+                        return v >= 1000
+                          ? (v/1000).toLocaleString('fr-FR') + 'k'
+                          : v.toLocaleString('fr-FR');
+                      }
+                    },
+                    grid: { color: 'rgba(0,0,0,.04)' },
+                  },
+                  yUnpaid: {
+                    type: 'linear', position: 'right',
+                    beginAtZero: true,
+                    ticks: { font: { size: 10 }, stepSize: 1 },
+                    grid: { drawOnChartArea: false },
+                  },
+                  x: { ticks: { font: { size: 10 } } }
+                }
+              }
+            });
+          })();
+          </script>
+        <% } %>
+
+        <%/* Open bills embedded table for billing staff */%>
+        <%- include("partials/open_bills_table", {
+              enrichedOpenBills: enrichedOpenBills,
+              locale: locale,
+              hasAnyPermission: hasAnyPermission
+            }) %>
+
+      <%/* ══════════════════════════════════════════════════════════
+           ADMIN / APPAMDIN DASHBOARD
+      ══════════════════════════════════════════════════════════ */%>
+      <% } else if (isAdmin || isAppAdmin) { %>
+
+        <%/* Encounter queue cards */%>
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-stethoscope me-1"></i>
+          <%= locale==="fr" ? "File des consultations" : "Consultation Queue" %>
+        </h6>
+        <div class="row g-3 mb-4">
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #ffc107;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "File Département" : "Dept. Queue" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#ffc107;font-size:2.2rem;">
+                      <%= typeof pendingEncountersCount !== "undefined" ? pendingEncountersCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "En attente / Actifs" : "Pending / Active" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-users fa-2x text-warning opacity-50 mt-1"></i>
+                </div>
+              </div>
+              <a href="/encounters/worklist?tab=dept"
+                class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(255,193,7,.1);">
+                <%= locale==="fr" ? "Voir la file" : "View worklist" %> &rarr;
+              </a>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #0d6efd;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Mes patients" : "My Patients" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#0d6efd;font-size:2.2rem;">
+                      <%= typeof myEncountersCount !== "undefined" ? myEncountersCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Assignés à moi" : "Assigned to me" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-user-md fa-2x text-primary opacity-50 mt-1"></i>
+                </div>
+              </div>
+              <a href="/encounters/worklist?tab=mine"
+                class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(13,110,253,.08);">
+                <%= locale==="fr" ? "Mes consultations" : "My encounters" %> &rarr;
+              </a>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #6f42c1;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= t.dash.activePrescript %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#6f42c1;font-size:2.2rem;">
+                      <%= activePrescriptionsCount %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= t.dash.activePrescSub %>
+                    </small>
+                  </div>
+                  <i class="fas fa-pills fa-2x opacity-50 mt-1" style="color:#6f42c1;"></i>
+                </div>
+              </div>
+              <div class="card-footer py-1" style="background:rgba(111,66,193,.08);"></div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #dc3545;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Factures ouvertes" : "Open Bills" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#dc3545;font-size:2.2rem;">
+                      <%= typeof openBillsCount !== "undefined" ? openBillsCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "En attente de paiement" : "Awaiting payment" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-file-invoice-dollar fa-2x opacity-50 mt-1" style="color:#dc3545;"></i>
+                </div>
+              </div>
+              <a href="/billing/worklist"
+                class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(220,53,69,.08);">
+                <%= locale==="fr" ? "Voir la file" : "View billing worklist" %> &rarr;
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <%/* Admin billing stats — same as billing clerk */%>
+        <div class="row g-3 mb-4">
+          <div class="col-md-4">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #198754;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Paiements auj." : "Payments today" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#198754;font-size:2.2rem;">
+                      <%= typeof allPaidTodayCount !== "undefined" ? allPaidTodayCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Tous caissiers" : "All cashiers" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-check-circle fa-2x opacity-50 mt-1" style="color:#198754;"></i>
+                </div>
+              </div>
+              <a href="/billing/sales-report" class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(25,135,84,.08);">
+                <%= locale==="fr" ? "Rapport" : "Report" %> &rarr;
+              </a>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #fd7e14;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Impayees auj." : "Unpaid today" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#fd7e14;font-size:2.2rem;">
+                      <%= typeof todayUnpaidCount !== "undefined" ? todayUnpaidCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Nouvelles impayees" : "New unpaid bills" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-exclamation-circle fa-2x opacity-50 mt-1" style="color:#fd7e14;"></i>
+                </div>
+              </div>
+              <div class="card-footer py-1" style="background:rgba(253,126,20,.08);"></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card text-white bg-dark shadow-sm h-100">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <div style="font-size:.75rem;opacity:.8;"><%= t.dash.totalPatients %></div>
+                    <h3 class="mb-0 fw-bold"><%= totalPatientsCount %></h3>
+                  </div>
+                  <i class="fas fa-users fa-2x opacity-50"></i>
+                </div>
+                <small style="font-size:.72rem;opacity:.75;"><%= t.dash.totalPatSub %></small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <%/* System stats */%>
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-server me-1"></i><%= t.dash.systemStats %>
+        </h6>
+        <div class="row g-3 mb-4">
+          <div class="col-md-4">
+            <div class="card text-white bg-primary shadow-sm">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <div style="font-size:.75rem;opacity:.8;"><%= t.dash.activeUsers %></div>
+                    <h3 class="mb-0 fw-bold"><%= connectedUsersCount %></h3>
+                  </div>
+                  <i class="fas fa-users-cog fa-2x opacity-50"></i>
+                </div>
+                <small style="font-size:.72rem;opacity:.75;"><%= t.dash.activeUsersSub %></small>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card text-white bg-secondary shadow-sm">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <div style="font-size:.75rem;opacity:.8;"><%= t.dash.facilities %></div>
+                    <h3 class="mb-0 fw-bold"><%= facilitiesCount %></h3>
+                  </div>
+                  <i class="fas fa-hospital fa-2x opacity-50"></i>
+                </div>
+                <small style="font-size:.72rem;opacity:.75;"><%= t.dash.facilitiesSub %></small>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card shadow-sm">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Prescriptions actives" : "Active Prescriptions" %></div>
+                    <h3 class="mb-0 fw-bold" style="color:#6f42c1;"><%= activePrescriptionsCount %></h3>
+                  </div>
+                  <i class="fas fa-pills fa-2x opacity-50" style="color:#6f42c1;"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <%/* Quick actions */%>
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-bolt me-1"></i><%= t.dash.quickActions %>
+        </h6>
+        <div class="row g-2 mb-4">
+          <div class="col-md-3">
+            <a href="/encounters/worklist" class="quick-action-btn btn btn-warning w-100 shadow-sm">
+              <i class="fas fa-stethoscope fa-2x"></i>
+              <span><%= locale==="fr" ? "File consultations" : "Worklist" %></span>
+            </a>
+          </div>
+          <div class="col-md-3">
+            <a href="/patients/create" class="quick-action-btn btn btn-primary w-100 shadow-sm">
+              <i class="fas fa-user-plus fa-2x"></i>
+              <span><%= t.dash.addPatient %></span>
+            </a>
+          </div>
+          <div class="col-md-3">
+            <a href="/patients/list" class="quick-action-btn btn btn-outline-primary w-100 shadow-sm">
+              <i class="fas fa-users fa-2x"></i>
+              <span><%= locale==="fr"?"Dossiers":"Records" %></span>
+            </a>
+          </div>
+          <div class="col-md-3">
+            <a href="/billing/worklist" class="quick-action-btn btn btn-outline-danger w-100 shadow-sm">
+              <i class="fas fa-file-invoice-dollar fa-2x"></i>
+              <span><%= locale==="fr"?"Facturation":"Billing" %></span>
+            </a>
+          </div>
+        </div>
+
+        <%/* 7-day combined sales + unpaid chart — billing clerk and admin only */%>
+        <% if ((isBillingStaff || isAdmin || isAppAdmin) &&
+               typeof unpaidLast7 !== "undefined" && unpaidLast7.length > 0) { %>
+          <div class="card shadow-sm mb-4">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+              <span class="fw-bold" style="font-size:.82rem;">
+                <i class="fas fa-chart-bar me-2 text-primary"></i>
+                <%= locale==="fr"
+                  ? "Ventes et factures payees (mois en cours)"
+                  : "Daily Collections & Paid Bills (current month)" %>
+              </span>
+              <div style="font-size:.70rem;color:#6c757d;">
+                <span class="me-3">
+                  <span style="display:inline-block;width:10px;height:10px;
+                    background:rgba(13,110,253,.6);border-radius:2px;vertical-align:middle;"></span>
+                  &nbsp;<%= locale==="fr" ? "Encaisse (FCFA)" : "Collected (FCFA)" %>
+                </span>
+                <span>
+                  <span style="display:inline-block;width:14px;height:3px;
+                    background:#198754;vertical-align:middle;border-radius:2px;"></span>
+                  &nbsp;<%= locale==="fr" ? "Factures payees (nb)" : "Paid bills (count)" %>
+                </span>
+              </div>
+            </div>
+            <div class="card-body py-3" style="height:200px;position:relative;">
+              <canvas id="salesUnpaidChartAdmin"></canvas>
+            </div>
+          </div>
+          <script>
+          (function() {
+            var labels  = [<% unpaidLast7.forEach(function(d,i) {
+              var p = d.date.split("-"); var lbl = p[1]+"-"+p[2];
+            %>"<%= lbl %>"<% if(i<unpaidLast7.length-1){%>,<%} }); %>];
+            var sales   = [<% if(typeof salesLast7!=="undefined"){
+              salesLast7.forEach(function(d,i){
+            %><%= Math.round(d.total) %><%if(i<salesLast7.length-1){%>,<%}})}; %>];
+            var unpaid  = [<% unpaidLast7.forEach(function(d,i){
+              %><%= d.count %><%if(i<unpaidLast7.length-1){%>,<%}}); %>];
+            var ctx = document.getElementById('salesUnpaidChartAdmin');
+            if (!ctx) return;
+            new Chart(ctx, {
+              data: {
+                labels: labels,
+                datasets: [
+                  {
+                    type: 'bar',
+                    label: "<%= locale==="fr"?"Encaisse (FCFA)":"Collected (FCFA)" %>",
+                    data:  sales,
+                    backgroundColor: 'rgba(13,110,253,.55)',
+                    borderColor: '#0d6efd',
+                    borderWidth: 1,
+                    yAxisID: 'ySales',
+                    order: 2,
+                  },
+                  {
+                    type: 'line',
+                    label: "<%= locale==="fr"?"Factures payees":"Paid bills" %>",
+                    data:  unpaid,
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25,135,84,.12)',
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#198754',
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'yUnpaid',
+                    order: 1,
+                  }
+                ]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      label: function(ctx) {
+                        if (ctx.dataset.yAxisID === 'ySales') {
+                          return ' ' + Math.round(ctx.parsed.y).toLocaleString('fr-FR') + ' FCFA';
+                        }
+                        return ' ' + ctx.parsed.y +
+                          " <%= locale==="fr"?"facture(s) payee(s)":"paid bill(s)" %>";
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  ySales: {
+                    type: 'linear', position: 'left',
+                    beginAtZero: true,
+                    ticks: {
+                      font: { size: 10 },
+                      callback: function(v) {
+                        return v >= 1000
+                          ? (v/1000).toLocaleString('fr-FR') + 'k'
+                          : v.toLocaleString('fr-FR');
+                      }
+                    },
+                    grid: { color: 'rgba(0,0,0,.04)' },
+                  },
+                  yUnpaid: {
+                    type: 'linear', position: 'right',
+                    beginAtZero: true,
+                    ticks: { font: { size: 10 }, stepSize: 1 },
+                    grid: { drawOnChartArea: false },
+                  },
+                  x: { ticks: { font: { size: 10 } } }
+                }
+              }
+            });
+          })();
+          </script>
+        <% } %>
+
+        <%/* Recent activity accordion */%>
+        <div class="accordion" id="activityAccordion">
+          <div class="accordion-item border-0 shadow-sm">
+            <h2 class="accordion-header" id="activityHeading">
+              <button class="accordion-button collapsed py-2" type="button"
+                data-bs-toggle="collapse" data-bs-target="#activityCollapse"
+                aria-expanded="false" aria-controls="activityCollapse"
+                style="font-size:.78rem;font-weight:700;text-transform:uppercase;
+                       letter-spacing:.08em;color:#6c757d;background:#fff;">
+                <i class="fas fa-history me-2"></i>
+                <%= t.dash.recentActivity %>
+                <% if (typeof recentActivity !== "undefined" && recentActivity.length > 0) { %>
+                  <span class="badge bg-secondary ms-2" style="font-size:.65rem;">
+                    <%= recentActivity.length %>
+                  </span>
+                <% } %>
+              </button>
+            </h2>
+            <div id="activityCollapse" class="accordion-collapse collapse"
+              aria-labelledby="activityHeading" data-bs-parent="#activityAccordion">
+              <div class="accordion-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover mb-0" style="font-size:.80rem;">
+                    <thead class="table-light">
+                      <tr>
+                        <th class="ps-3"><%= t.dash.actUser %></th>
+                        <th><%= t.dash.actAction %></th>
+                        <th><%= t.dash.actIp %></th>
+                        <th class="pe-3"><%= t.dash.actDate %></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% if (typeof recentActivity !== "undefined" && recentActivity.length > 0) { %>
+                        <% recentActivity.forEach(function(log) { %>
+                          <tr>
+                            <td class="ps-3"><strong><%= log.username %></strong></td>
+                            <td>
+                              <%
+                                var note = log.lognote || "";
+                                var nl = note.toLowerCase();
+                                var bc = "bg-secondary";
+                                if (nl.includes("connexion") || nl.includes("login"))         bc = "bg-success";
+                                else if (nl.includes("deconnexion") || nl.includes("logout")) bc = "bg-secondary";
+                                else if (nl.includes("cree") || nl.includes("created") ||
+                                         nl.includes("enregistre") || nl.includes("admitted")) bc = "bg-primary";
+                                else if (nl.includes("mis a jour") || nl.includes("updated") ||
+                                         nl.includes("activated") || nl.includes("transferred")) bc = "bg-info text-dark";
+                                else if (nl.includes("discharged") || nl.includes("closed"))  bc = "bg-secondary";
+                                else if (nl.includes("erreur") || nl.includes("error") ||
+                                         nl.includes("failed"))                                bc = "bg-danger";
+                              %>
+                              <span class="badge <%= bc %> me-1" style="font-size:.6rem;">&nbsp;</span>
+                              <small><%= note.length > 70 ? note.substring(0,70) + "..." : note %></small>
+                            </td>
+                            <td><small class="text-muted"><%= log.ip %></small></td>
+                            <td class="pe-3">
+                              <small class="text-muted">
+                                <%= new Date(log.datetime).toLocaleString(
+                                    locale==="fr" ? "fr-FR" : "en-GB",
+                                    { day:"2-digit", month:"2-digit", year:"numeric",
+                                      hour:"2-digit", minute:"2-digit" }) %>
+                              </small>
+                            </td>
+                          </tr>
+                        <% }); %>
+                      <% } else { %>
+                        <tr>
+                          <td colspan="4" class="text-center text-muted py-4">
+                            <i class="fas fa-history me-2"></i><%= t.dash.noActivity %>
+                          </td>
+                        </tr>
+                      <% } %>
+                    </tbody>
+                  </table>
+                </div>
+                <% if (typeof recentActivity !== "undefined" && recentActivity.length > 0) { %>
+                  <div class="text-end px-3 py-2 border-top">
+                    <a href="/logs" class="btn btn-sm btn-outline-secondary">
+                      <i class="fas fa-list me-1"></i><%= t.dash.viewAllLogs %>
+                    </a>
+                  </div>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <%/* ══════════════════════════════════════════════════════════
+           PHARMACY AGENT / PHARMACY MANAGER DASHBOARD
+      ══════════════════════════════════════════════════════════ */%>
+      <% } else if (isPharmacyOnly) { %>
+
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-prescription-bottle-medical me-1"></i>
+          <%= locale==="fr" ? "Activite pharmacie" : "Pharmacy Overview" %>
+        </h6>
+        <div class="row g-3 mb-4">
+          <div class="col-md-4 col-sm-6">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #fd7e14;">
+              <div class="card-body py-3">
+                <div class="text-muted" style="font-size:.72rem;text-transform:uppercase;"><%= locale==="fr"?"En attente":"Pending Dispense" %></div>
+                <div class="fw-bold" style="font-size:1.6rem;"><%= pharmacyPendingCount %></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #1a9e72;">
+              <div class="card-body py-3">
+                <div class="text-muted" style="font-size:.72rem;text-transform:uppercase;"><%= locale==="fr"?"Distribue aujourd'hui":"Dispensed Today" %></div>
+                <div class="fw-bold" style="font-size:1.6rem;"><%= pharmacyTodayCount %></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #0d6efd;">
+              <div class="card-body py-3">
+                <div class="text-muted" style="font-size:.72rem;text-transform:uppercase;"><%= locale==="fr"?"Ce mois":"This Month" %></div>
+                <div class="fw-bold" style="font-size:1.6rem;"><%= pharmacyMonthCount %></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #ffc107;">
+              <div class="card-body py-3">
+                <div class="text-muted" style="font-size:.72rem;text-transform:uppercase;"><%= locale==="fr"?"Stock bas":"Low Stock" %></div>
+                <div class="fw-bold" style="font-size:1.6rem;"><%= pharmacyLowStockCount %></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #dc3545;">
+              <div class="card-body py-3">
+                <div class="text-muted" style="font-size:.72rem;text-transform:uppercase;"><%= locale==="fr"?"Rupture":"Out of Stock" %></div>
+                <div class="fw-bold" style="font-size:1.6rem;"><%= pharmacyOutOfStockCount %></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap mb-4">
+          <a href="/pharmacy/dispense" class="btn btn-sm" style="background:#fd7e14;color:#fff;">
+            <i class="fas fa-hand-holding-medical me-1"></i><%= locale==="fr"?"File de distribution":"Dispensing Queue" %>
+          </a>
+          <a href="/pharmacy/stock" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-boxes me-1"></i><%= locale==="fr"?"Stock pharmacie":"Pharmacy Stock" %>
+          </a>
+          <a href="/pharmacy" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-chart-line me-1"></i><%= locale==="fr"?"Tableau de bord pharmacie":"Full Pharmacy Dashboard" %>
+          </a>
+        </div>
+
+        <%- include("partials/pending_dispense_table", {
+              pharmacyPendingList: pharmacyPendingList,
+              locale: locale
+            }) %>
+
+      <%/* ══════════════════════════════════════════════════════════
+           CLINICAL DASHBOARD (Doctor, Nurse, Receptionist)
+      ══════════════════════════════════════════════════════════ */%>
+      <% } else { %>
+
+        <%/* Encounter queue + prescriptions + open bills */%>
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-stethoscope me-1"></i>
+          <%= locale==="fr" ? "File des consultations" : "Consultation Queue" %>
+        </h6>
+        <div class="row g-3 mb-4">
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #ffc107;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "File Département" : "Dept. Queue" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#ffc107;font-size:2.2rem;">
+                      <%= typeof pendingEncountersCount !== "undefined" ? pendingEncountersCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "En attente / Actifs" : "Pending / Active" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-users fa-2x text-warning opacity-50 mt-1"></i>
+                </div>
+              </div>
+              <a href="/encounters/worklist?tab=dept"
+                class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(255,193,7,.1);">
+                <%= locale==="fr" ? "Voir la file" : "View worklist" %> &rarr;
+              </a>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #0d6efd;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Mes patients" : "My Patients" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#0d6efd;font-size:2.2rem;">
+                      <%= typeof myEncountersCount !== "undefined" ? myEncountersCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "Assignés à moi" : "Assigned to me" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-user-md fa-2x text-primary opacity-50 mt-1"></i>
+                </div>
+              </div>
+              <a href="/encounters/worklist?tab=mine"
+                class="card-footer text-center py-1 text-decoration-none text-muted"
+                style="font-size:.72rem;background:rgba(13,110,253,.08);">
+                <%= locale==="fr" ? "Mes consultations" : "My encounters" %> &rarr;
+              </a>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #6f42c1;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= t.dash.activePrescript %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#6f42c1;font-size:2.2rem;">
+                      <%= activePrescriptionsCount %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= t.dash.activePrescSub %>
+                    </small>
+                  </div>
+                  <i class="fas fa-pills fa-2x opacity-50 mt-1" style="color:#6f42c1;"></i>
+                </div>
+              </div>
+              <div class="card-footer py-1" style="background:rgba(111,66,193,.08);"></div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm h-100" style="border-left:4px solid #dc3545;">
+              <div class="card-body py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="lbl"><%= locale==="fr" ? "Factures ouvertes" : "Open Bills" %></div>
+                    <h2 class="mb-0 fw-bold" style="color:#dc3545;font-size:2.2rem;">
+                      <%= typeof openBillsCount !== "undefined" ? openBillsCount : 0 %>
+                    </h2>
+                    <small class="text-muted" style="font-size:.72rem;">
+                      <%= locale==="fr" ? "En attente" : "Awaiting payment" %>
+                    </small>
+                  </div>
+                  <i class="fas fa-file-invoice-dollar fa-2x opacity-50 mt-1" style="color:#dc3545;"></i>
+                </div>
+              </div>
+              <div class="card-footer py-1" style="background:rgba(220,53,69,.08);"></div>
+            </div>
+          </div>
+        </div>
+
+        <%/* Incoming referrals -- strictly Doctor/Nurse (canSeeReferrals),
+             deliberately narrower than this whole branch (which also
+             includes Receptionist/registration). See §2.5 of
+             MULTI_FACILITY_IMPLEMENTATION_PLAN.md. */%>
+        <% if (typeof canSeeReferrals !== "undefined" && canSeeReferrals) { %>
+          <div class="mb-4">
+            <%- include("partials/incoming_referrals_table", {
+                  incomingReferralsList: typeof incomingReferralsList !== "undefined" ? incomingReferralsList : [],
+                  locale: locale,
+                  csrfToken: csrfToken
+                }) %>
+          </div>
+        <% } %>
+
+        <%/* Quick actions */%>
+        <h6 class="fw-bold text-uppercase text-muted mb-2" style="font-size:.72rem;letter-spacing:.08em;">
+          <i class="fas fa-bolt me-1"></i><%= t.dash.quickActions %>
+        </h6>
+        <div class="row g-2 mb-4">
+          <div class="col-md-3">
+            <a href="/encounters/worklist" class="quick-action-btn btn btn-warning w-100 shadow-sm">
+              <i class="fas fa-stethoscope fa-2x"></i>
+              <span><%= locale==="fr" ? "File consultations" : "Worklist" %></span>
+            </a>
+          </div>
+          <% if (hasPermission("Patient.Create.PatientRecord")) { %>
+            <div class="col-md-3">
+              <a href="/patients/create" class="quick-action-btn btn btn-primary w-100 shadow-sm">
+                <i class="fas fa-user-plus fa-2x"></i>
+                <span><%= t.dash.addPatient %></span>
+              </a>
+            </div>
+          <% } %>
+          <% if (hasAnyPermission(["Patient.Read.PatientRecord","Patient.Create.PatientRecord"])) { %>
+            <div class="col-md-3">
+              <a href="/patients/list" class="quick-action-btn btn btn-outline-primary w-100 shadow-sm">
+                <i class="fas fa-users fa-2x"></i>
+                <span><%= locale==="fr"?"Dossiers":"Records" %></span>
+              </a>
+            </div>
+          <% } %>
+          <% if (hasPermission("Pharmacy.Create.Prescription")) { %>
+            <div class="col-md-3">
+              <a href="/patients/prescriptions" class="quick-action-btn btn btn-outline-secondary w-100 shadow-sm">
+                <i class="fas fa-pills fa-2x"></i>
+                <span><%= t.dash.createPrescript %></span>
+              </a>
+            </div>
+          <% } %>
+        </div>
+
+      <% } %>
+
+    </div><%/* end col-md-9 */%>
+  </div><%/* end row */%>
+</div>
+
+<style>
+  
+  .card { background-color: #fff !important; }
+  .list-group-item { font-size:.88rem; }
+  .list-group-item:hover { background-color:#e9ecef; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase;
+         letter-spacing:.06em; color:#6c757d; }
+  .quick-action-btn {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px; padding: 18px 12px; line-height: 1.2;
+  }
+  .quick-action-btn i    { display: block; }
+  .quick-action-btn span { font-size: .82rem; display: block; text-align: center; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<%- include("partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

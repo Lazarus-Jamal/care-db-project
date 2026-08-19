@@ -1,0 +1,231 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .ph-header { background:linear-gradient(135deg,#1a9e72 0%,#157a58 100%); color:#fff; border-radius:.5rem .5rem 0 0; }
+  .ph-tab-active   { background:#1a9e72 !important; color:#fff !important; border-color:#1a9e72 !important; }
+  .ph-tab-inactive { background:#e8f5f0; color:#1a9e72; border:1px solid #b2dfce; }
+  .ph-tab-inactive:hover { background:#d1ece3; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6; padding:14px 16px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+  .stat-val { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  .table-xs td,.table-xs th { padding:5px 9px; font-size:.79rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stock-ok   { display:inline-block; padding:2px 7px; border-radius:10px; background:#d1ece3; color:#0a3622; font-size:.62rem; font-weight:700; }
+  .stock-low  { display:inline-block; padding:2px 7px; border-radius:10px; background:#fff3cd; color:#856404; font-size:.62rem; font-weight:700; }
+  .stock-out  { display:inline-block; padding:2px 7px; border-radius:10px; background:#f8d7da; color:#842029; font-size:.62rem; font-weight:700; }
+  .badge-med { background:#1a9e72; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  .badge-sup { background:#0d6efd; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+</style><style>
+  .item-card { border:1px solid #dee2e6; border-radius:.5rem; padding:12px 14px; margin-bottom:10px; background:#fff; }
+  .item-card.dispensed { border-color:#b2dfce; background:#f8fffe; opacity:.7; }
+  .item-card.insufficient { border-color:#f5c6cb; background:#fff8f8; }
+</style>
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:920px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/pharmacy/dispense"><%= locale==="fr"?"File de distribution":"Dispensing Queue" %></a></li>
+      <li class="breadcrumb-item active fw-bold">#<%= billNo %></li>
+    </ol>
+  </nav>
+
+  <% if (success) { %>
+    <div class="alert py-2 mb-3 alert-dismissible" style="background:#d1ece3;border:1px solid #b2dfce;font-size:.82rem;">
+      <i class="fas fa-check-circle me-2" style="color:#1a9e72;"></i>
+      <%= locale==="fr"?"Distribution enregistree.":"Dispensing recorded." %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+    <%/* Patient info */%>
+    <div class="col-lg-4">
+      <div class="card shadow-sm mb-3">
+        <div class="ph-header px-3 py-2">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-user me-2"></i><%= locale==="fr"?"Patient":"Patient" %>
+          </span>
+        </div>
+        <div class="card-body py-2 px-3">
+          <% if (patient) { %>
+            <div class="fw-bold" style="font-size:.90rem;"><%= patient.name_first %> <%= patient.name_last %></div>
+            <div class="text-muted" style="font-size:.76rem;">
+              <i class="fas fa-id-card me-1"></i><%= patient.hospital_file_nr %>
+            </div>
+            <% if (patient.date_birth) { %>
+              <div class="text-muted" style="font-size:.74rem;">
+                <i class="fas fa-birthday-cake me-1"></i>
+                <%= new Date(patient.date_birth).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+              </div>
+            <% } %>
+          <% } else { %>
+            <div class="text-muted" style="font-size:.80rem;"><%= locale==="fr"?"Patient inconnu":"Unknown patient" %></div>
+          <% } %>
+          <hr class="my-2">
+          <div class="d-flex justify-content-between" style="font-size:.76rem;">
+            <span class="text-muted"><%= locale==="fr"?"N° Facture":"Bill No." %></span>
+            <span class="fw-bold">#<%= billNo %></span>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:.76rem;">
+            <span class="text-muted"><%= locale==="fr"?"Articles":"Items" %></span>
+            <span class="fw-bold"><%= items.length %></span>
+          </div>
+        </div>
+      </div>
+
+      <%/* Dispense all button */%>
+      <% if (items.length > 0) { %>
+        <div class="card shadow-sm" style="border:2px solid #1a9e72;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2" style="color:#1a9e72;">
+              <i class="fas fa-bolt me-1"></i>
+              <%= locale==="fr"?"Distribution groupee":"Bulk Dispense" %>
+            </div>
+            <p style="font-size:.76rem;color:#6c757d;margin-bottom:8px;">
+              <%= locale==="fr"
+                ?"Distribue tous les articles disponibles en une seule action."
+                :"Dispense all available items in one action." %>
+            </p>
+            <button class="btn btn-sm w-100 fw-bold" style="background:#1a9e72;color:#fff;" onclick="dispenseAll()">
+              <i class="fas fa-check-double me-1"></i>
+              <%= locale==="fr"?"Tout distribuer":"Dispense All" %>
+              (<%= items.length %>)
+            </button>
+          </div>
+        </div>
+      <% } %>
+    </div>
+
+    <%/* Items */%>
+    <div class="col-lg-8">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0 fw-bold" style="color:#157a58;">
+          <i class="fas fa-pills me-2"></i>
+          <%= locale==="fr"?"Articles a distribuer":"Items to Dispense" %>
+        </h6>
+      </div>
+
+      <% if (!items || items.length === 0) { %>
+        <div class="card shadow-sm">
+          <div class="card-body text-center text-muted py-4">
+            <i class="fas fa-check-circle fa-2x mb-2 d-block" style="color:#1a9e72;opacity:.5;"></i>
+            <%= locale==="fr"?"Tous les articles ont ete distribues.":"All items have been dispensed." %>
+          </div>
+        </div>
+      <% } else { items.forEach(function(item) {
+        var insufficient = item.current_stock !== null && item.current_stock < item.qty_to_dispense;
+        var noStock      = item.current_stock === 0;
+      %>
+        <div class="item-card <%= insufficient ? "insufficient" : "" %>" id="itemCard_<%= item.id %>">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <div class="fw-bold" style="font-size:.82rem;"><%= item.article %></div>
+              <span class="badge-<%= item.billtype === "MED" ? "med" : "sup" %>"><%= item.billtype %></span>
+            </div>
+            <div class="text-end">
+              <% if (item.current_stock === null) { %>
+                <span class="stock-out">N/A</span>
+              <% } else if (noStock) { %>
+                <span class="stock-out"><%= locale==="fr"?"Rupture":"Out of stock" %></span>
+              <% } else if (insufficient) { %>
+                <span class="stock-low"><%= locale==="fr"?"Stock:":"Stock:" %> <%= item.current_stock %></span>
+              <% } else { %>
+                <span class="stock-ok"><%= locale==="fr"?"Stock:":"Stock:" %> <%= item.current_stock %></span>
+              <% } %>
+            </div>
+          </div>
+          <div class="d-flex gap-3 align-items-center">
+            <div>
+              <span class="lbl"><%= locale==="fr"?"Qte prescrite":"Prescribed" %></span>
+              <div class="fw-bold" style="font-size:.86rem;"><%= item.qty_to_dispense %></div>
+            </div>
+            <div style="flex:1;">
+              <label class="lbl" for="qty_<%= item.id %>"><%= locale==="fr"?"Qte a distribuer":"Qty to dispense" %></label>
+              <input type="number" id="qty_<%= item.id %>" class="form-control form-control-sm"
+                value="<%= item.qty_to_dispense %>"
+                min="1" max="<%= item.current_stock || item.qty_to_dispense %>"
+                style="width:90px;" <%= noStock ? "disabled" : "" %>>
+            </div>
+            <div>
+              <label class="lbl">&nbsp;</label>
+              <div>
+                <% if (noStock) { %>
+                  <button class="btn btn-xs btn-outline-danger" disabled>
+                    <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Rupture":"No stock" %>
+                  </button>
+                <% } else { %>
+                  <button class="btn btn-xs fw-bold" style="background:#1a9e72;color:#fff;"
+                    onclick="dispenseItem(<%= item.id %>)">
+                    <i class="fas fa-check me-1"></i><%= locale==="fr"?"Distribuer":"Dispense" %>
+                  </button>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% }); } %>
+    </div>
+  </div>
+</div></div>
+
+<script>
+var _csrf  = '<%= csrfToken %>';
+var _bill  = <%= billNo %>;
+var locale = '<%= locale %>';
+
+function dispenseItem(billItemId) {
+  var qty = parseInt(document.getElementById('qty_'+billItemId).value, 10);
+  if (isNaN(qty) || qty <= 0) { alert(locale==='fr'?'Quantite invalide.':'Invalid quantity.'); return; }
+  fetch('/pharmacy/dispense/item/'+billItemId+'?_csrf='+encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ qty_dispensed: qty }),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok) {
+      var card = document.getElementById('itemCard_'+billItemId);
+      if (card) {
+        card.classList.add('dispensed');
+        card.innerHTML = '<div class="d-flex align-items-center gap-2">'
+          + '<i class="fas fa-check-circle" style="color:#1a9e72;font-size:1.2rem;"></i>'
+          + '<div><div class="fw-bold" style="font-size:.80rem;">'+(locale==='fr'?'Distribue':'Dispensed')+'</div>'
+          + '<div class="text-muted" style="font-size:.72rem;">'+d.qty_dispensed+' '+(locale==='fr'?'unites':'units')+'</div></div></div>';
+      }
+    } else {
+      alert(d.error || 'Error');
+    }
+  });
+}
+
+function dispenseAll() {
+  if (!confirm(locale==='fr'?'Distribuer tous les articles disponibles ?':'Dispense all available items?')) return;
+  fetch('/pharmacy/dispense/'+_bill+'/all?_csrf='+encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok) {
+      var msg = (locale==='fr'?'Distribue: ':'Dispensed: ')+d.dispensed+(locale==='fr'?' article(s)':' item(s)');
+      if (d.skipped > 0) msg += ' — '+(locale==='fr'?'Omis (stock insuffisant): ':'Skipped (low stock): ')+d.skipped;
+      alert(msg);
+      window.location.reload();
+    } else { alert(d.error || 'Error'); }
+  });
+}
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+

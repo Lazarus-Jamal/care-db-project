@@ -1,0 +1,127 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card     { background: #fff !important; }
+  .lbl      { font-size: .68rem; font-weight: 700; text-transform: uppercase;
+              letter-spacing: .06em; color: #6c757d; }
+  .req      { color: #dc3545; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:680px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse"><i class="fas fa-warehouse me-1"></i><%= locale==="fr"?"Entrepôt":"Warehouse" %></a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/suppliers"><%= locale==="fr"?"Fournisseurs":"Suppliers" %></a></li>
+      <li class="breadcrumb-item active fw-bold">
+        <%= supplier ? (locale==="fr"?"Modifier":"Edit") : (locale==="fr"?"Nouveau":"New") %>
+      </li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <i class="fas fa-exclamation-circle me-2"></i>
+      <% errors.forEach(function(e){ %><div><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-2 fw-bold" style="font-size:.88rem;">
+      <i class="fas fa-truck me-2 text-success"></i>
+      <%= supplier ? (locale==="fr" ? "Modifier le fournisseur" : "Edit Supplier") : (locale==="fr" ? "Nouveau fournisseur" : "New Supplier") %>
+    </div>
+    <div class="card-body">
+
+      <form method="POST"
+        action="<%= supplier && supplier.supplier_id ? "/warehouse/suppliers/" + supplier.supplier_id + "/edit" : "/warehouse/suppliers/new" %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+        <div class="mb-3">
+          <label class="lbl"><%= locale==="fr" ? "Nom du fournisseur" : "Supplier Name" %> <span class="req">*</span></label>
+          <input type="text" name="name" class="form-control form-control-sm"
+            value="<%= supplier ? (supplier.name || "") : "" %>"
+            required maxlength="255"
+            placeholder="<%= locale==="fr" ? "ex. Pharma Plus Cameroun" : "e.g. MedSupply Cameroon Ltd" %>">
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr" ? "Personne de contact" : "Contact Person" %></label>
+            <input type="text" name="contact_person" class="form-control form-control-sm"
+              value="<%= supplier ? (supplier.contact_person || "") : "" %>"
+              maxlength="100">
+          </div>
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr" ? "Téléphone" : "Phone" %></label>
+            <input type="text" name="phone" class="form-control form-control-sm"
+              value="<%= supplier ? (supplier.phone || "") : "" %>"
+              maxlength="30" placeholder="+237 6XX XXX XXX">
+          </div>
+        </div>
+
+        <div class="row g-3 mt-0">
+          <div class="col-md-6">
+            <label class="lbl">Email</label>
+            <input type="email" name="email" class="form-control form-control-sm"
+              value="<%= supplier ? (supplier.email || "") : "" %>"
+              maxlength="100">
+          </div>
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr" ? "N° Taxe / Registre" : "Tax / Registration No." %></label>
+            <input type="text" name="tax_id" class="form-control form-control-sm"
+              value="<%= supplier ? (supplier.tax_id || "") : "" %>"
+              maxlength="50">
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="lbl"><%= locale==="fr" ? "Adresse" : "Address" %></label>
+          <textarea name="address" class="form-control form-control-sm" rows="2"
+            maxlength="500"><%= supplier ? (supplier.address || "") : "" %></textarea>
+        </div>
+
+        <div class="mt-3">
+          <label class="lbl"><%= locale==="fr" ? "Conditions de paiement" : "Payment Terms" %></label>
+          <input type="text" name="payment_terms" class="form-control form-control-sm"
+            value="<%= supplier ? (supplier.payment_terms || "") : "" %>"
+            maxlength="100"
+            placeholder="<%= locale==="fr" ? "ex. Net 30, COD, 50% avance" : "e.g. Net 30, COD, 50% advance" %>">
+        </div>
+
+        <div class="mt-3">
+          <label class="lbl"><%= locale==="fr" ? "Notes internes" : "Internal Notes" %></label>
+          <textarea name="notes" class="form-control form-control-sm" rows="2"
+            maxlength="1000"><%= supplier ? (supplier.notes || "") : "" %></textarea>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fas fa-save me-1"></i>
+            <%= supplier && supplier.supplier_id
+              ? (locale==="fr" ? "Enregistrer" : "Save Changes")
+              : (locale==="fr" ? "Créer le fournisseur" : "Create Supplier") %>
+          </button>
+          <a href="/warehouse/suppliers" class="btn btn-outline-secondary btn-sm">
+            <%= locale==="fr" ? "Annuler" : "Cancel" %>
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

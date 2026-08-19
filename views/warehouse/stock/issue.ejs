@@ -1,0 +1,205 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req { color:#dc3545; }
+  .item-row { background:#fff; border:1px solid #dee2e6; border-radius:.4rem; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .item-row .remove-btn { flex-shrink:0; margin-left:auto; }
+  .stock-count { font-size:.70rem; color:#198754; font-weight:700; }
+</style>
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:900px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse">Warehouse</a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/stock"><%= locale==="fr"?"Stock":"Stock" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Émission Pharmacie":"Issue to Pharmacy" %></li>
+    </ol>
+  </nav>
+
+  <% if (typeof success !== "undefined" && success) { %>
+    <div class="alert alert-success py-2 mb-3 alert-dismissible" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= locale==="fr"?"Émission enregistrée:":"Issue recorded:" %> <strong><%= success.split("&")[0] %></strong>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <% if (typeof warning !== "undefined" && warning) { %>
+    <div class="alert alert-warning py-2 mb-3 alert-dismissible" style="font-size:.82rem;">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong><%= locale==="fr"?"Stock insuffisant:":"Insufficient stock:" %></strong>
+      <%= locale==="fr"?"Certains articles ont ete emis en quantite inferieure a la demande.":"Some items were issued in smaller quantities than requested." %>
+    </div>
+  <% } %>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/warehouse/stock/issue" id="issueForm">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="row g-3">
+      <%/* LEFT: Issue info */%>
+      <div class="col-lg-4">
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-pills me-2 text-success"></i><%= locale==="fr"?"Émission Pharmacie":"Pharmacy Issue" %>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"N° de réquisition pharmacie":"Pharmacy Requisition Ref." %></label>
+              <input type="text" name="reference_number" class="form-control form-control-sm"
+                placeholder="ex: PRX-2026-001" maxlength="50">
+              <div class="form-text" style="font-size:.70rem;"><%= locale==="fr"?"Référence manuelle de la demande pharmacie.":"Manual pharmacy request reference for traceability." %></div>
+            </div>
+            <div class="mb-3">
+              <label class="lbl">Notes</label>
+              <textarea name="notes" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+            </div>
+            <div class="alert alert-info py-2" style="font-size:.76rem;">
+              <i class="fas fa-info-circle me-1"></i>
+              <%= locale==="fr"
+                ? "Le système utilise la méthode FEFO (premier périmé, premier sorti) pour sélectionner les lots."
+                : "The system uses FEFO (First Expiry, First Out) to automatically select batches." %>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-plus-circle me-2 text-success"></i><%= locale==="fr"?"Ajouter un produit":"Add Product" %>
+          </div>
+          <div class="card-body" style="font-size:.82rem;">
+            <div class="mb-2">
+              <label class="lbl"><%= locale==="fr"?"Produit":"Product" %></label>
+              <select id="addProductSel" class="form-select form-select-sm">
+                <option value="">-- <%= locale==="fr"?"Choisir":"Select" %> --</option>
+                <% products.forEach(function(p) { %>
+                  <option value="<%= p.product_id %>"
+                    data-name="<%= p.name %>" data-code="<%= p.item_code %>"
+                    data-unit="<%= p.unit_of_measure %>" data-stock="<%= p.current_stock %>">
+                    <%= p.item_code %> — <%= p.name %> (<%= p.current_stock %> <%= p.unit_of_measure %>)
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+            <div class="mb-2">
+              <label class="lbl"><%= locale==="fr"?"Quantité demandée":"Qty Requested" %> <span class="req">*</span></label>
+              <input type="number" id="addQty" class="form-control form-control-sm" min="1" value="1">
+            </div>
+            <button type="button" id="addItemBtn" class="btn btn-success btn-sm w-100">
+              <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Ajouter":"Add" %>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <%/* RIGHT: Items */%>
+      <div class="col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-bold" style="font-size:.85rem;">
+              <i class="fas fa-list me-2 text-primary"></i>
+              <%= locale==="fr"?"Produits à émettre":"Products to Issue" %>
+              <span class="badge bg-secondary ms-1" id="itemCount">0</span>
+            </span>
+          </div>
+          <div class="card-body p-3" id="itemsContainer">
+            <div class="text-center text-muted py-4" id="emptyMsg" style="font-size:.82rem;">
+              <i class="fas fa-inbox fa-2x mb-2 d-block opacity-25"></i>
+              <%= locale==="fr"?"Ajoutez des produits depuis le panneau gauche.":"Add products from the left panel." %>
+            </div>
+          </div>
+          <div class="card-footer d-flex justify-content-between">
+            <a href="/warehouse/stock" class="btn btn-outline-secondary btn-sm"><%= locale==="fr"?"Annuler":"Cancel" %></a>
+            <button type="submit" class="btn btn-success btn-sm" id="submitBtn">
+              <i class="fas fa-check me-1"></i><%= locale==="fr"?"Confirmer l\"émission":"Confirm Issue" %>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+
+</div></div>
+
+<script>
+var _locale  = '<%= locale %>';
+var usedIds  = new Set();
+var itemIdx  = 0;
+
+function updateCount() {
+  var rows = document.querySelectorAll('#itemsContainer .item-row');
+  document.getElementById('itemCount').textContent = rows.length;
+  var empty = document.getElementById('emptyMsg');
+  if (empty) empty.style.display = rows.length ? 'none' : '';
+}
+
+function removeItem(idx, pid) {
+  var row = document.getElementById('irow-' + idx);
+  if (row) row.remove();
+  usedIds.delete(pid);
+  var opt = document.querySelector('#addProductSel option[value="' + pid + '"]');
+  if (opt) opt.hidden = false;
+  updateCount();
+}
+
+document.getElementById('addItemBtn').addEventListener('click', function() {
+  var sel  = document.getElementById('addProductSel');
+  var pid  = parseInt(sel.value);
+  if (!pid || usedIds.has(pid)) return;
+  var opt   = sel.options[sel.selectedIndex];
+  var name  = opt.dataset.name;
+  var code  = opt.dataset.code;
+  var unit  = opt.dataset.unit;
+  var stock = parseInt(opt.dataset.stock) || 0;
+  var qty   = parseInt(document.getElementById('addQty').value) || 1;
+  var idx   = itemIdx++;
+
+  var html =
+    '<div class="item-row" id="irow-' + idx + '">' +
+      '<input type="hidden" name="items[' + idx + '][product_id]" value="' + pid + '">' +
+      '<div style="flex:1;min-width:160px;">' +
+        '<div class="fw-bold" style="font-size:.82rem;">' + name + '</div>' +
+        '<div class="text-muted" style="font-size:.70rem;"><code>' + code + '</code> &bull; ' + unit + '</div>' +
+        '<div class="stock-count">' + (_locale==='fr'?'Stock: ':'Stock: ') + stock + ' ' + unit + '</div>' +
+      '</div>' +
+      '<div style="width:130px;">' +
+        '<div class="lbl">' + (_locale==='fr'?'Qté demandée':'Qty Requested') + '</div>' +
+        '<input type="number" name="items[' + idx + '][quantity_requested]" class="form-control form-control-sm" value="' + qty + '" min="1" max="' + stock + '" required>' +
+      '</div>' +
+      '<button type="button" class="btn btn-xs btn-outline-danger remove-btn" onclick="removeItem(' + idx + ',' + pid + ')">' +
+        '<i class="fas fa-times"></i>' +
+      '</button>' +
+    '</div>';
+
+  var empty = document.getElementById('emptyMsg');
+  if (empty) empty.style.display = 'none';
+  document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+  usedIds.add(pid);
+  opt.hidden = true;
+  sel.value  = '';
+  document.getElementById('addQty').value = 1;
+  updateCount();
+});
+
+updateCount();
+</script>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,220 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "finances", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req { color:#dc3545; }
+  .drop-zone { border:2px dashed #adb5bd; border-radius:.5rem; padding:24px; text-align:center;
+               cursor:pointer; transition:border-color .2s; background:#fafafa; }
+  .drop-zone:hover,.drop-zone.drag-over { border-color:#0d6efd; background:#f0f4ff; }
+  .preview-img { width:80px; height:80px; object-fit:cover; border-radius:.3rem;
+                 border:1px solid #dee2e6; margin:4px; cursor:pointer; }
+</style>
+<div class="fin-page"><div class="container-fluid px-3 pt-2" style="max-width:860px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/finances/reimbursements"><%= locale==="fr"?"Remboursements":"Reimbursements" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Nouvelle demande":"New Request" %></li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/finances/reimbursements/new?_csrf=<%= encodeURIComponent(csrfToken) %>"
+        enctype="multipart/form-data" id="reimbForm">
+    <%/* _csrf in URL so csurf can read it before multer consumes the multipart body */%>
+
+    <div class="row g-3">
+
+      <%/* LEFT: Details */%>
+      <div class="col-lg-5">
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-file-invoice-dollar me-2 text-success"></i>
+            <%= locale==="fr"?"Informations de la demande":"Request Details" %>
+          </div>
+          <div class="card-body">
+
+            <%/* Toggle: PO-backed or Direct */%>
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Type d\"achat":"Purchase Type" %> <span class="req">*</span></label>
+              <div class="d-flex gap-2">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="purchase_type"
+                    id="type_po" value="po" checked onchange="toggleType()">
+                  <label class="form-check-label" for="type_po" style="font-size:.82rem;">
+                    <%= locale==="fr"?"Lier a un bon de commande":"Link to PO" %>
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="purchase_type"
+                    id="type_direct" value="direct" onchange="toggleType()">
+                  <label class="form-check-label" for="type_direct" style="font-size:.82rem;">
+                    <%= locale==="fr"?"Achat direct":"Direct Purchase" %>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <%/* PO selector */%>
+            <div id="po_section" class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Bon de commande":"Purchase Order" %></label>
+              <select name="po_id" id="po_id" class="form-select form-select-sm"
+                      onchange="prefillAmount()">
+                <option value="">-- <%= locale==="fr"?"Choisir":"Select PO" %> --</option>
+                <% eligiblePos.forEach(function(po) { %>
+                  <option value="<%= po.po_id %>"
+                    data-amount="<%= po.total_amount %>"
+                    <%= prefilledPo && prefilledPo.po_id == po.po_id ? "selected" : "" %>>
+                    <%= po.po_number %>
+                    <% if (po.supplier) { %> — <%= po.supplier.name %><% } %>
+                    (<%= fmtFCFA(po.total_amount) %>)
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+
+            <%/* Direct purchase description */%>
+            <div id="direct_section" class="mb-3" style="display:none;">
+              <label class="lbl">
+                <%= locale==="fr"?"Description de l\"achat":"Purchase Description" %>
+                <span class="req">*</span>
+              </label>
+              <textarea name="purchase_description" class="form-control form-control-sm"
+                rows="3" maxlength="500"
+                placeholder="<%= locale==="fr"?"Ex: Achat urgent de fournitures médicales au marché local...":"e.g. Emergency medical supplies purchased at local market..." %>"></textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Montant demandé (FCFA)":"Amount Requested (FCFA)" %> <span class="req">*</span></label>
+              <input type="number" name="amount" id="amount_field"
+                class="form-control form-control-sm" step="0.01" min="1"
+                value="<%= prefilledPo ? prefilledPo.total_amount : "" %>" required>
+            </div>
+
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Motif de la demande":"Reason for Request" %></label>
+              <textarea name="reason" class="form-control form-control-sm" rows="2" maxlength="500"
+                placeholder="<%= locale==="fr"?"Expliquer pourquoi ce remboursement est nécessaire...":"Explain why this reimbursement is needed..." %>"></textarea>
+            </div>
+
+            <div class="mb-0">
+              <label class="lbl">Notes</label>
+              <textarea name="notes" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <a href="/finances/reimbursements" class="btn btn-outline-secondary btn-sm">
+            <%= locale==="fr"?"Annuler":"Cancel" %>
+          </a>
+          <button type="submit" class="btn btn-success btn-sm flex-fill">
+            <i class="fas fa-paper-plane me-1"></i>
+            <%= locale==="fr"?"Soumettre la demande":"Submit Request" %>
+          </button>
+        </div>
+      </div>
+
+      <%/* RIGHT: Receipt uploads */%>
+      <div class="col-lg-7">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-receipt me-2 text-warning"></i>
+            <%= locale==="fr"?"Justificatifs (reçus, photos)":"Supporting Documents (receipts, photos)" %>
+            <span class="badge bg-secondary ms-1">max 5</span>
+          </div>
+          <div class="card-body">
+            <div class="drop-zone" id="dropZone" onclick="document.getElementById('receiptInput').click()">
+              <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2 d-block"></i>
+              <div style="font-size:.82rem;color:#6c757d;">
+                <%= locale==="fr"?"Cliquez ou glissez vos reçus ici":"Click or drag receipts here" %><br>
+                <small>JPEG, PNG, WebP — max 5 MB par fichier</small>
+              </div>
+            </div>
+            <input type="file" id="receiptInput" name="receipts" multiple accept="image/*"
+              class="d-none" onchange="previewFiles(this.files)">
+
+            <div id="previewContainer" class="mt-3 d-flex flex-wrap gap-2"></div>
+
+            <div class="alert alert-info py-2 mt-3" style="font-size:.76rem;">
+              <i class="fas fa-info-circle me-1"></i>
+              <%= locale==="fr"
+                ? "Joignez les reçus, factures ou photos des articles achetés. Vous pouvez aussi ajouter des documents après la soumission."
+                : "Attach receipts, invoices or photos of purchased items. You can also add documents after submission." %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </form>
+
+</div></div>
+
+<script>
+function toggleType() {
+  var isPo = document.getElementById('type_po').checked;
+  document.getElementById('po_section').style.display     = isPo ? '' : 'none';
+  document.getElementById('direct_section').style.display = isPo ? 'none' : '';
+  if (!isPo) document.getElementById('po_id').value = '';
+}
+
+function prefillAmount() {
+  var sel = document.getElementById('po_id');
+  var opt = sel.options[sel.selectedIndex];
+  if (opt && opt.dataset.amount) {
+    document.getElementById('amount_field').value = opt.dataset.amount;
+  }
+}
+
+function previewFiles(fileList) {
+  var container = document.getElementById('previewContainer');
+  container.innerHTML = '';
+  Array.from(fileList).slice(0, 5).forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = document.createElement('img');
+      img.src = e.target.result;
+      img.className = 'preview-img';
+      img.title = file.name;
+      img.onclick = function() { window.open(e.target.result); };
+      container.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+var dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', function() { this.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', function(e) {
+  e.preventDefault(); this.classList.remove('drag-over');
+  var input = document.getElementById('receiptInput');
+  input.files = e.dataTransfer.files;
+  previewFiles(e.dataTransfer.files);
+});
+
+// Pre-fill if PO was passed
+<% if (prefilledPo) { %>
+  prefillAmount();
+<% } %>
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+

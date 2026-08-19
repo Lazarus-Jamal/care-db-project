@@ -1,0 +1,67 @@
+<%- include("../partials/header") %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background: #fff !important; }
+</style>
+<%- include("../partials/navbar") %>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">Ajouter une Prescription</h4>
+                    <div class="d-flex align-items-center">
+                        <label for="date_reg" class="form-label mb-0 me-2">Date:</label>
+                        <input type="text" class="form-control form-control-sm" id="date_reg" value="<%= new Date().toLocaleString() %>" disabled style="width: auto;">
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="flex-shrink-0 me-4">
+                            <% if (patient.photo_filename) { %>
+                                <img src="/patients/photos/<%= patient.photo_filename %>" alt="Photo du patient" class="img-thumbnail rounded-circle" style="width: 150px; height: 150px; object-fit: cover;">
+                            <% } else { %>
+                                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" style="width: 150px; height: 150px;">
+                                    <span class="text-muted">Pas de photo</span>
+                                </div>
+                            <% } %>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h4 class="mb-0">Patient: <%= patient.name_first %> <%= patient.name_last %></h4>
+                            <p class="text-muted">ID du Patient: **<%= patient.pid %>**</p>
+                            <p class="text-muted">Date de naissance: <%= new Date(patient.date_birth).toLocaleDateString() %></p>
+                            <p class="text-muted">TÃ©lÃ©phone: <%= patient.cellphone_1_nr %></p>
+                        </div>
+                    </div>
+
+                    <form action="/patients/prescriptions/add" method="POST">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <input type="hidden" name="pid" value="<%= patient.pid %>">
+                        
+                        <% if (success) { %>
+                            <div class="alert alert-success mt-3" role="alert">Prescription ajoutÃ©e avec succÃ¨s!</div>
+                        <% } %>
+
+                        <div class="mb-3">
+                            <label for="prescriptionDetails" class="form-label">DÃ©tails de la Prescription:</label>
+                            <textarea class="form-control" id="prescriptionDetails" name="prescriptionDetails" rows="5" placeholder="Entrez les dÃ©tails de la prescription ici..." required></textarea>
+                        </div>
+                        <div class="d-flex justify-content-end mt-3">
+                            <button type="submit" class="btn btn-success">Enregistrer la Prescription</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+

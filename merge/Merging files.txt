@@ -1,0 +1,16 @@
+#merging files
+
+# Run from: C:\Users\Public\Projects\care-db-project
+$output = "views_merged.txt"
+$viewsPath = ".\views"
+$result = @()
+
+Get-ChildItem -Path $viewsPath -Recurse -Filter "*.ejs" | Sort-Object FullName | ForEach-Object {
+    $relativePath = $_.FullName.Replace((Get-Location).Path + "\", "")
+    $result += "// File: $relativePath"
+    $result += Get-Content $_.FullName -Raw
+    $result += ""
+}
+
+$result | Out-File -FilePath $output -Encoding UTF8
+Write-Host "Done: $((Get-ChildItem $viewsPath -Recurse -Filter '*.ejs').Count) views merged into $output"

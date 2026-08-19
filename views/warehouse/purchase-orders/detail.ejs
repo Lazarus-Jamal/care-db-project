@@ -1,0 +1,562 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card       { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs     { padding:2px 7px; font-size:.70rem; }
+  .status-pill{ display:inline-block; padding:3px 10px; border-radius:20px;
+                font-size:.68rem; font-weight:700; text-transform:uppercase;
+                letter-spacing:.05em; }
+  .s-draft           { background:#e9ecef; color:#495057; }
+  .s-pending_director{ background:#fff3cd; color:#856404; }
+  .s-pending_finance { background:#cfe2ff; color:#084298; }
+  .s-approved        { background:#d1e7dd; color:#0a3622; }
+  .s-sent            { background:#d0d3f8; color:#1a1f8c; }
+  .s-partial         { background:#fde8d8; color:#7a3200; }
+  .s-received        { background:#d1e7dd; color:#0a3622; }
+  .s-closed          { background:#dee2e6; color:#6c757d; }
+  .s-cancelled       { background:#f8d7da; color:#842029; }
+  .timeline-step { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:.78rem; }
+  .ts-dot  { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .ts-done { background:#198754; }
+  .ts-wait { background:#dee2e6; }
+  .ts-curr { background:#0d6efd; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <%/* Breadcrumb */%>
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse"><i class="fas fa-warehouse me-1"></i><%= locale==="fr"?"Entrepôt":"Warehouse" %></a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/purchase-orders"><%= locale==="fr"?"Commandes":"Orders" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= po.po_number %></li>
+    </ol>
+  </nav>
+
+  <% if (success === "created") { %>
+    <div class="alert alert-success alert-dismissible py-2 mb-3" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= locale==="fr" ? "Bon de commande créé avec succès." : "Purchase order created successfully." %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+  <% if (success === "received") { %>
+    <div class="alert alert-success alert-dismissible py-2 mb-3" style="font-size:.82rem;">
+      <i class="fas fa-truck-loading me-2"></i>
+      <%= locale==="fr" ? "Livraison enregistrée. Le stock a été mis à jour." : "Delivery recorded. Stock has been updated." %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: PO info + workflow ── */%>
+    <div class="col-lg-4">
+
+      <%/* PO Header card */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.88rem;"><%= po.po_number %></span>
+          <span class="status-pill s-<%= po.status %>">
+            <%
+              var sLabels = {
+                draft:"Draft", pending_director:"Pending Director",
+                pending_finance:"Pending Finance", approved:"Approved",
+                sent:"Sent", partial:"Partial", received:"Received",
+                closed:"Closed", cancelled:"Cancelled"
+              };
+              if (locale==="fr") Object.assign(sLabels, {
+                draft:"Brouillon", pending_director:"Att. Directeur",
+                pending_finance:"Att. Finance", approved:"Approuvee",
+                sent:"Envoyee", partial:"Partielle", received:"Recue",
+                closed:"Cloturee", cancelled:"Annulee"
+              });
+            %>
+            <%= sLabels[po.status] || po.status %>
+          </span>
+        </div>
+        <div class="card-body" style="font-size:.82rem;">
+          <div class="mb-1">
+            <span class="text-muted"><%= locale==="fr"?"Fournisseur:":"Supplier:" %></span>
+            <strong><%= po.supplier ? po.supplier.name : "—" %></strong>
+          </div>
+          <div class="mb-1">
+            <% if (po.rfq) { %>
+            <div class="mb-1">
+              <span class="text-muted"><%= locale==="fr"?"Généré depuis:":"Generated from:" %></span>
+              <a href="/warehouse/rfq/<%= po.rfq.rfq_id %>" class="fw-bold text-info text-decoration-none">
+                <i class="fas fa-file-alt me-1"></i><%= po.rfq.rfq_number %>
+              </a>
+            </div>
+            <% } %>
+            <span class="text-muted"><%= locale==="fr"?"Créé par:":"Created by:" %></span>
+            <%= po.created_by %>
+          </div>
+          <div class="mb-1">
+            <span class="text-muted"><%= locale==="fr"?"Date création:":"Created:" %></span>
+            <%= new Date(po.create_time).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+          </div>
+          <% if (po.expected_delivery_date) { %>
+            <div class="mb-1">
+              <span class="text-muted"><%= locale==="fr"?"Livraison prévue:":"Expected delivery:" %></span>
+              <%= new Date(po.expected_delivery_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+            </div>
+          <% } %>
+          <div class="border-top mt-2 pt-2 d-flex justify-content-between">
+            <span class="text-muted">Total:</span>
+            <strong class="text-primary" style="font-size:.95rem;"><%= fmtFCFA(po.total_amount) %></strong>
+          </div>
+          <% if (po.notes) { %>
+            <div class="border-top mt-2 pt-2 text-muted" style="font-size:.76rem;">
+              <i class="fas fa-sticky-note me-1"></i><%= po.notes %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <%/* Approval timeline */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+          <i class="fas fa-stream me-2 text-primary"></i>
+          <%= locale==="fr"?"Suivi d\"approbation":"Approval Timeline" %>
+        </div>
+        <div class="card-body py-2 px-3">
+          <%
+            var steps = ["draft","pending_manager","pending_director","pending_finance","approved","sent","received"];
+            var statusOrder = { draft:0, pending_manager:1, pending_director:2, pending_finance:3, approved:4, sent:5, partial:5, received:6, closed:6, cancelled:-1 };
+            var curIdx = statusOrder[po.status] !== undefined ? statusOrder[po.status] : 0;
+            var stepLabels = locale==="fr"
+              ? ["Brouillon","Att. Manager","Att. Directeur","Att. Finance","Approuvee","Envoyee","Recue"]
+              : ["Draft","Pending Manager","Pending Director","Pending Finance","Approved","Sent","Received"];
+          %>
+          <% steps.forEach(function(s, idx) { %>
+            <%
+              var isDone = curIdx > idx;
+              var isCurr = curIdx === idx;
+              var dotClass = isDone ? "ts-done" : isCurr ? "ts-curr" : "ts-wait";
+            %>
+            <div class="timeline-step">
+              <div class="ts-dot <%= dotClass %>"></div>
+              <span class="<%= isDone ? "text-success" : isCurr ? "text-primary fw-bold" : "text-muted" %>">
+                <%= stepLabels[idx] %>
+              </span>
+              <% if (s === "pending_director" && po.director_approved_by) { %>
+                <small class="text-muted ms-auto"><%= po.director_approved_by %></small>
+              <% } %>
+              <% if (s === "pending_finance" && po.finance_approved_by) { %>
+                <small class="text-muted ms-auto"><%= po.finance_approved_by %></small>
+              <% } %>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+
+      <%/* Action buttons */%>
+      <div class="card shadow-sm">
+        <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+          <i class="fas fa-bolt me-2 text-warning"></i>
+          Actions
+        </div>
+        <div class="card-body py-2 d-flex flex-column gap-2">
+
+          <% if (po.status === "draft" &&
+                typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+            <button class="btn btn-sm btn-primary" onclick="submitPo()">
+              <i class="fas fa-paper-plane me-1"></i>
+              <%= locale==="fr"?"Soumettre pour approbation":"Submit for Approval" %>
+            </button>
+          <% } %>
+
+          <% if (po.status === "pending_manager" &&
+                typeof hasPermission !== "undefined" && hasPermission("Warehouse.Approve.Manager")) { %>
+            <button class="btn btn-sm btn-success" onclick="approvePo('manager')">
+              <i class="fas fa-check me-1"></i>
+              <%= locale==="fr"?"Approuver (Manager)":"Approve (Manager)" %>
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="rejectPo()">
+              <i class="fas fa-times me-1"></i>
+              <%= locale==="fr"?"Rejeter":"Reject" %>
+            </button>
+          <% } %>
+
+          <% if (po.status === "pending_director" &&
+                typeof hasPermission !== "undefined" && hasPermission("Warehouse.Approve.Director")) { %>
+            <button class="btn btn-sm btn-success" onclick="approvePo('director')">
+              <i class="fas fa-check me-1"></i>
+              <%= locale==="fr"?"Approuver (Directeur)":"Approve (Director)" %>
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="rejectPo()">
+              <i class="fas fa-times me-1"></i>
+              <%= locale==="fr"?"Rejeter":"Reject" %>
+            </button>
+          <% } %>
+
+          <% if (po.status === "pending_finance" &&
+                typeof hasPermission !== "undefined" && hasPermission("Warehouse.Approve.Finance")) { %>
+            <button class="btn btn-sm btn-success" onclick="approvePo('finance')">
+              <i class="fas fa-check me-1"></i>
+              <%= locale==="fr"?"Approuver (Finance)":"Approve (Finance)" %>
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="rejectPo()">
+              <i class="fas fa-times me-1"></i>
+              <%= locale==="fr"?"Rejeter":"Reject" %>
+            </button>
+          <% } %>
+
+          <% if (po.status === "approved" &&
+                typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+            <button class="btn btn-sm btn-info text-white" onclick="markSent()">
+              <i class="fas fa-check-double me-1"></i>
+              <%= locale==="fr"?"Marquer comme envoyée":"Mark as Sent" %>
+            </button>
+            <a href="/warehouse/purchase-orders/<%= po.po_id %>/print" target="_blank"
+              class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-print me-1"></i>
+              <%= locale==="fr"?"Imprimer le bon de commande":"Print PO Document" %>
+            </a>
+          <% } %>
+
+          <% if (po.status === "sent") { %>
+            <a href="/warehouse/purchase-orders/<%= po.po_id %>/print" target="_blank"
+              class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-print me-1"></i>
+              <%= locale==="fr"?"Imprimer":"Print PO" %>
+            </a>
+          <% } %>
+
+          <% if (["sent","partial"].includes(po.status) &&
+                typeof hasPermission !== "undefined" &&
+                hasAnyPermission(["Warehouse.Receive.Delivery","Admin.FullAccess"]) ) { %>
+            <a href="/warehouse/purchase-orders/<%= po.po_id %>/receive"
+              class="btn btn-sm btn-success">
+              <i class="fas fa-truck-loading me-1"></i>
+              <%= locale==="fr"?"Réceptionner la livraison":"Receive Delivery" %>
+            </a>
+          <% } %>
+
+          <% if (["partial","received"].includes(po.status) &&
+                typeof hasPermission !== "undefined" && hasPermission("Warehouse.Approve.Manager")) { %>
+            <button class="btn btn-sm btn-outline-secondary" onclick="closePo()">
+              <i class="fas fa-archive me-1"></i>
+              <%= locale==="fr"?"Clôturer la commande":"Close PO" %>
+            </button>
+          <% } %>
+
+          <% if (!["received","closed","cancelled"].includes(po.status) &&
+                typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+            <button class="btn btn-sm btn-outline-danger" onclick="cancelPo()">
+              <i class="fas fa-ban me-1"></i>
+              <%= locale==="fr"?"Annuler la commande":"Cancel PO" %>
+            </button>
+          <% } %>
+
+        </div>
+      </div>
+
+    </div>
+
+    <%/* ── RIGHT: Line items ── */%>
+    <div class="col-lg-8">
+
+      <div class="card shadow-sm">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.88rem;">
+            <i class="fas fa-list me-2 text-primary"></i>
+            <%= locale==="fr"?"Lignes de commande":"Order Lines" %>
+            <span class="badge bg-secondary ms-1"><%= po.items ? po.items.length : 0 %></span>
+          </span>
+        </div>
+
+        <%/* Items table */%>
+        <div class="card-body p-0">
+          <% if (!po.items || po.items.length === 0) { %>
+            <div class="text-center text-muted py-4" style="font-size:.82rem;">
+              <%= locale==="fr"?"Aucun article.":"No items." %>
+            </div>
+          <% } else { %>
+            <table class="table table-xs table-hover align-middle mb-0">
+              <thead class="table-dark">
+                <tr>
+                  <th><%= locale==="fr"?"Produit":"Product" %></th>
+                  <th class="text-center"><%= locale==="fr"?"Commandé":"Ordered" %></th>
+                  <th class="text-center"><%= locale==="fr"?"Reçu":"Received" %></th>
+                  <th class="text-end"><%= locale==="fr"?"Prix unit.":"Unit Price" %></th>
+                  <th class="text-end">Total</th>
+                  <th class="text-center"><%= locale==="fr"?"Statut":"Status" %></th>
+                  <% if (po.status === "draft") { %><th></th><% } %>
+                </tr>
+              </thead>
+              <tbody>
+                <% po.items.forEach(function(item) { %>
+                  <tr>
+                    <td>
+                      <div class="fw-bold" style="font-size:.80rem;"><%= item.product ? item.product.name : "#" + item.product_id %></div>
+                      <% if (item.product) { %>
+                        <div class="text-muted" style="font-size:.68rem;">
+                          <code><%= item.product.item_code %></code>
+                          &bull; <%= item.product.unit_of_measure %>
+                        </div>
+                      <% } %>
+                    </td>
+                    <td class="text-center"><%= item.quantity_ordered %></td>
+                    <td class="text-center">
+                      <% if (item.quantity_received > 0) { %>
+                        <span class="text-success fw-bold"><%= item.quantity_received %></span>
+                      <% } else { %>
+                        <span class="text-muted">0</span>
+                      <% } %>
+                    </td>
+                    <td class="text-end"><%= fmtFCFA(item.unit_price) %></td>
+                    <td class="text-end fw-bold"><%= fmtFCFA(item.total_price) %></td>
+                    <td class="text-center">
+                      <%
+                        var iClass = { pending:"bg-secondary", partial:"bg-warning text-dark",
+                                       received:"bg-success", cancelled:"bg-danger" };
+                        var iLabel = locale==="fr"
+                          ? { pending:"En attente", partial:"Partiel", received:"Recu", cancelled:"Annule" }
+                          : { pending:"Pending", partial:"Partial", received:"Received", cancelled:"Cancelled" };
+                      %>
+                      <span class="badge <%= iClass[item.status] || "bg-secondary" %>" style="font-size:.60rem;">
+                        <%= iLabel[item.status] || item.status %>
+                      </span>
+                    </td>
+                    <% if (po.status === "draft") { %>
+                      <td>
+                        <button class="btn btn-xs btn-outline-danger"
+                          onclick="removeItem(<%= po.po_id %>, <%= item.item_id %>)"
+                          title="<%= locale==="fr"?"Supprimer":"Remove" %>">
+                          <i class="fas fa-trash"></i>
+                        </button>
+                      </td>
+                    <% } %>
+                  </tr>
+                <% }); %>
+              </tbody>
+              <tfoot class="table-light">
+                <tr>
+                  <td colspan="<%= po.status === "draft" ? 4 : 3 %>" class="text-end fw-bold">Total:</td>
+                  <td class="text-end fw-bold text-primary"><%= fmtFCFA(po.total_amount) %></td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          <% } %>
+        </div>
+
+        <%/* Add item inline — draft only */%>
+        <% if (po.status === "draft" && typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+          <div class="card-footer" style="font-size:.82rem;">
+            <div class="fw-bold mb-2" style="font-size:.80rem;">
+              <i class="fas fa-plus-circle me-1 text-success"></i>
+              <%= locale==="fr"?"Ajouter un produit":"Add a product" %>
+            </div>
+            <div class="row g-2 align-items-end">
+              <div class="col-md-5">
+                <select id="addItemSel" class="form-select form-select-sm">
+                  <option value="">-- <%= locale==="fr"?"Choisir":"Select" %> --</option>
+                  <% availableProducts.forEach(function(p) { %>
+                    <option value="<%= p.product_id %>"
+                      data-unit="<%= p.unit_of_measure %>">
+                      <%= p.item_code %> — <%= p.name %>
+                    </option>
+                  <% }); %>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <input type="number" id="addItemQty" class="form-control form-control-sm"
+                  min="1" value="1" placeholder="<%= locale==="fr"?"Qté":"Qty" %>">
+              </div>
+              <div class="col-md-3">
+                <input type="number" id="addItemPrice" class="form-control form-control-sm"
+                  min="0" step="0.01" value="0"
+                  placeholder="<%= locale==="fr"?"Prix unitaire":"Unit price" %> FCFA">
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-success btn-sm w-100" onclick="addItemToPo()">
+                  <i class="fas fa-plus"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        <% } %>
+
+      </div>
+    </div>
+
+    <%/* ── Delivery History ── */%>
+    <% if (po.deliveries && po.deliveries.length > 0) { %>
+      <div class="col-lg-8 offset-lg-4">
+        <div class="card shadow-sm mt-0">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-truck-loading me-2 text-info"></i>
+            <%= locale==="fr"?"Livraisons reçues":"Deliveries Received" %>
+            <span class="badge bg-secondary ms-1"><%= po.deliveries.length %></span>
+          </div>
+          <div class="card-body p-0">
+            <table class="table mb-0" style="font-size:.80rem;">
+              <thead class="table-dark"><tr>
+                <th>#</th>
+                <th><%= locale==="fr"?"Ref. BL":"Delivery Ref." %></th>
+                <th><%= locale==="fr"?"Recu par":"Received by" %></th>
+                <th><%= locale==="fr"?"Date":"Date" %></th>
+                <th class="text-center">Statut</th>
+                <th></th>
+              </tr></thead>
+              <tbody>
+                <% po.deliveries.forEach(function(d) { %>
+                  <%
+                    var dLabel = { pending_qc:"Att. QC", qc_passed:"QC OK", qc_partial:"QC Partiel",
+                      qc_failed:"QC Echoue", shelved:"Range", shelved_partial:"Range partiel" };
+                    var dBadge = { pending_qc:"bg-warning text-dark", qc_passed:"bg-success",
+                      qc_partial:"bg-info", qc_failed:"bg-danger", shelved:"bg-primary",
+                      shelved_partial:"bg-secondary" };
+                  %>
+                  <tr>
+                    <td class="text-muted">#<%= d.delivery_id %></td>
+                    <td><%= d.delivery_ref || "—" %></td>
+                    <td class="text-muted"><%= d.received_by %></td>
+                    <td class="text-muted" style="font-size:.74rem;"><%= new Date(d.received_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+                    <td class="text-center">
+                      <span class="badge <%= dBadge[d.status]||"bg-secondary" %>" style="font-size:.60rem;">
+                        <%= dLabel[d.status]||d.status %>
+                      </span>
+                    </td>
+                    <td>
+                      <a href="/warehouse/deliveries/<%= d.delivery_id %>" class="btn btn-xs btn-outline-secondary" style="padding:2px 7px;font-size:.70rem;">
+                        <i class="fas fa-eye"></i>
+                      </a>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    <% } %>
+
+  </div>
+
+</div>
+</div>
+
+<script>
+var _csrf   = '<%= csrfToken %>';
+var _locale = '<%= locale %>';
+var _poId   = <%= po.po_id %>;
+
+function apiPost(url, body) {
+  return fetch(url + '?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).then(function(r){ return r.json(); });
+}
+
+function submitPo() {
+  if (!confirm(_locale==='fr' ? 'Soumettre pour approbation du Directeur ?' : 'Submit for Director approval?')) return;
+  apiPost('/warehouse/purchase-orders/' + _poId + '/submit')
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function approvePo(level) {
+  var msg = _locale==='fr' ? 'Confirmer l\'approbation ?' : 'Confirm approval?';
+  if (!confirm(msg)) return;
+  apiPost('/warehouse/purchase-orders/' + _poId + '/approve/' + level)
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function rejectPo() {
+  var reason = prompt(_locale==='fr' ? 'Raison du rejet (optionnel):' : 'Reason for rejection (optional):');
+  if (reason === null) return;
+  apiPost('/warehouse/purchase-orders/' + _poId + '/reject', { reason: reason })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function markSent() {
+  if (!confirm(_locale==='fr' ? 'Confirmer l\'envoi au fournisseur ?' : 'Confirm this PO has been sent to the supplier?')) return;
+  apiPost('/warehouse/purchase-orders/' + _poId + '/send')
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function cancelPo() {
+  var reason = prompt(_locale==='fr' ? 'Raison de l\'annulation:' : 'Reason for cancellation:');
+  if (reason === null) return;
+  apiPost('/warehouse/purchase-orders/' + _poId + '/cancel', { reason: reason })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function closePo() {
+  var reason = prompt(_locale==='fr' ? 'Raison de la clôture (ex: fournisseur ne peut livrer le reste):' : 'Reason for closing (e.g. vendor cannot fulfil remainder):');
+  if (reason === null) return;
+  apiPost('/warehouse/purchase-orders/' + _poId + '/close', { reason: reason })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function removeItem(poId, itemId) {
+  if (!confirm(_locale==='fr' ? 'Supprimer cet article ?' : 'Remove this item?')) return;
+  fetch('/warehouse/purchase-orders/' + poId + '/items/' + itemId + '?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'DELETE',
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function addItemToPo() {
+  var sel   = document.getElementById('addItemSel');
+  var pid   = parseInt(sel.value);
+  if (!pid) { alert(_locale==='fr' ? 'Choisir un produit.' : 'Select a product.'); return; }
+  var qty   = parseInt(document.getElementById('addItemQty').value)    || 1;
+  var price = parseFloat(document.getElementById('addItemPrice').value) || 0;
+
+  fetch('/warehouse/purchase-orders/' + _poId + '/items?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: pid, quantity_ordered: qty, unit_price: price }),
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+// Fetch preferred price on product select (add item section)
+var addItemSel = document.getElementById('addItemSel');
+if (addItemSel) {
+  addItemSel.addEventListener('change', function() {
+    var pid = parseInt(this.value);
+    if (!pid) return;
+    fetch('/warehouse/purchase-orders/product/' + pid + '/price?_csrf=' + encodeURIComponent(_csrf))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          document.getElementById('addItemPrice').value = d.unit_price || 0;
+          if (d.reorder_quantity > 0) document.getElementById('addItemQty').value = d.reorder_quantity;
+        }
+      }).catch(function(){});
+  });
+}
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

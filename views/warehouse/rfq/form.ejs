@@ -1,0 +1,241 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card     { background:#fff !important; }
+  .lbl      { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req      { color:#dc3545; }
+  .item-row { background:#fff; border:1px solid #dee2e6; border-radius:.4rem; padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .item-row .remove-btn { flex-shrink:0; margin-left:auto; }
+  .sup-chip { display:inline-flex; align-items:center; gap:6px; background:#e9ecef; border-radius:20px;
+              padding:3px 10px; font-size:.78rem; margin:3px; }
+  .sup-chip button { background:none; border:none; padding:0; font-size:.75rem; color:#dc3545; cursor:pointer; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:960px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse"><i class="fas fa-warehouse me-1"></i><%= locale==="fr"?"Entrepôt":"Warehouse" %></a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/rfq">RFQ</a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Nouvelle":"New" %></li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/warehouse/rfq/new" id="rfqForm">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="row g-3">
+
+      <%/* ── LEFT: Header + Suppliers ── */%>
+      <div class="col-lg-4">
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-file-alt me-2 text-info"></i>
+            <%= locale==="fr"?"Détails RFQ":"RFQ Details" %>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Notes / Spécifications":"Notes / Specifications" %></label>
+              <textarea name="notes" class="form-control form-control-sm" rows="3"
+                maxlength="1000"><%= rfq ? (rfq.notes||"") : "" %></textarea>
+            </div>
+          </div>
+        </div>
+
+        <%/* Supplier selection */%>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-truck me-2 text-success"></i>
+            <%= locale==="fr"?"Fournisseurs à consulter":"Suppliers to Consult" %> <span class="req">*</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted mb-2" style="font-size:.76rem;">
+              <%= locale==="fr"?"Sélectionnez les fournisseurs à qui envoyer cette RFQ.":"Select suppliers to receive this RFQ." %>
+            </p>
+            <div id="selectedSuppliers" class="mb-2"></div>
+            <select id="supplierSel" class="form-select form-select-sm mb-2">
+              <option value="">-- <%= locale==="fr"?"Ajouter un fournisseur":"Add a supplier" %> --</option>
+              <% suppliers.forEach(function(s) { %>
+                <option value="<%= s.supplier_id %>" data-name="<%= s.name %>"><%= s.name %></option>
+              <% }); %>
+            </select>
+            <div id="supplierInputs"></div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm" style="border-left:4px solid #0dcaf0;">
+          <div class="card-body py-2 px-3" style="font-size:.76rem;">
+            <i class="fas fa-info-circle me-1 text-info"></i>
+            <%= locale==="fr"
+              ? "Une RFQ sera imprimée pour chaque fournisseur sélectionné. Les réponses seront saisies dans la RFQ pour comparaison."
+              : "A separate printable RFQ document will be generated per supplier. Responses are entered for side-by-side comparison." %>
+          </div>
+        </div>
+      </div>
+
+      <%/* ── RIGHT: Products ── */%>
+      <div class="col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-bold" style="font-size:.85rem;">
+              <i class="fas fa-boxes me-2 text-primary"></i>
+              <%= locale==="fr"?"Produits demandés":"Products Requested" %>
+              <span class="badge bg-secondary ms-1" id="itemCount">0</span>
+            </span>
+          </div>
+          <div class="card-body p-3" id="itemsContainer">
+            <div class="text-center text-muted py-3" id="emptyMsg" style="font-size:.82rem;">
+              <i class="fas fa-inbox fa-2x mb-2 d-block opacity-25"></i>
+              <%= locale==="fr"?"Ajoutez des produits ci-dessous.":"Add products below." %>
+            </div>
+          </div>
+          <div class="card-footer" style="font-size:.82rem;">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-7">
+                <label class="lbl"><%= locale==="fr"?"Produit":"Product" %></label>
+                <select id="addProductSel" class="form-select form-select-sm">
+                  <option value="">-- <%= locale==="fr"?"Choisir":"Select" %> --</option>
+                  <% allProducts.forEach(function(p) { %>
+                    <option value="<%= p.product_id %>"
+                      data-name="<%= p.name %>" data-code="<%= p.item_code %>"
+                      data-unit="<%= p.unit_of_measure %>">
+                      <%= p.item_code %> — <%= p.name %>
+                    </option>
+                  <% }); %>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="lbl"><%= locale==="fr"?"Quantité demandée":"Qty Requested" %></label>
+                <input type="number" id="addQty" class="form-control form-control-sm" min="1" value="1">
+              </div>
+              <div class="col-md-2">
+                <button type="button" class="btn btn-success btn-sm w-100" id="addProductBtn">
+                  <i class="fas fa-plus"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer d-flex justify-content-between">
+            <a href="/warehouse/rfq" class="btn btn-outline-secondary btn-sm"><%= locale==="fr"?"Annuler":"Cancel" %></a>
+            <button type="submit" class="btn btn-info btn-sm text-white">
+              <i class="fas fa-save me-1"></i>
+              <%= locale==="fr"?"Créer la demande de cotation":"Create RFQ" %>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </form>
+
+</div>
+</div>
+
+<script>
+var _locale = '<%= locale %>';
+var usedIds = new Set();
+var supplierIds = new Set();
+
+function updateCount() {
+  var rows = document.querySelectorAll('#itemsContainer .item-row');
+  document.getElementById('itemCount').textContent = rows.length;
+  var empty = document.getElementById('emptyMsg');
+  if (empty) empty.style.display = rows.length ? 'none' : '';
+}
+
+function removeItem(pid) {
+  var row = document.getElementById('item-row-' + pid);
+  if (row) row.remove();
+  usedIds.delete(pid);
+  var opt = document.querySelector('#addProductSel option[value="' + pid + '"]');
+  if (opt) opt.hidden = false;
+  updateCount();
+}
+
+document.getElementById('addProductBtn').addEventListener('click', function() {
+  var sel  = document.getElementById('addProductSel');
+  var pid  = parseInt(sel.value);
+  if (!pid || usedIds.has(pid)) return;
+  var opt  = sel.options[sel.selectedIndex];
+  var name = opt.dataset.name;
+  var code = opt.dataset.code;
+  var unit = opt.dataset.unit;
+  var qty  = parseInt(document.getElementById('addQty').value) || 1;
+
+  var html =
+    '<div class="item-row" id="item-row-' + pid + '">' +
+      '<input type="hidden" name="product_ids[]" value="' + pid + '">' +
+      '<div style="flex:1;min-width:160px;">' +
+        '<div class="fw-bold" style="font-size:.82rem;">' + name + '</div>' +
+        '<div class="text-muted" style="font-size:.70rem;"><code>' + code + '</code> &bull; ' + unit + '</div>' +
+      '</div>' +
+      '<div style="width:130px;">' +
+        '<div class="lbl">' + (_locale==='fr'?'Qté demandée':'Qty Requested') + '</div>' +
+        '<input type="number" name="quantities[]" class="form-control form-control-sm" value="' + qty + '" min="1" required>' +
+      '</div>' +
+      '<button type="button" class="btn btn-xs btn-outline-danger remove-btn" onclick="removeItem(' + pid + ')">' +
+        '<i class="fas fa-times"></i>' +
+      '</button>' +
+    '</div>';
+
+  var empty = document.getElementById('emptyMsg');
+  if (empty) empty.style.display = 'none';
+  document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+  usedIds.add(pid);
+  opt.hidden = true;
+  sel.value = '';
+  document.getElementById('addQty').value = 1;
+  updateCount();
+});
+
+// Supplier chips
+document.getElementById('supplierSel').addEventListener('change', function() {
+  var sid  = parseInt(this.value);
+  var name = this.options[this.selectedIndex].dataset.name;
+  if (!sid || supplierIds.has(sid)) { this.value = ''; return; }
+  supplierIds.add(sid);
+  this.value = '';
+
+  // Add hidden input
+  var inp = document.createElement('input');
+  inp.type = 'hidden'; inp.name = 'supplier_ids[]'; inp.value = sid; inp.id = 'sinp-' + sid;
+  document.getElementById('supplierInputs').appendChild(inp);
+
+  // Add chip
+  var chip = document.createElement('span');
+  chip.className = 'sup-chip'; chip.id = 'schip-' + sid;
+  chip.innerHTML = '<i class="fas fa-truck"></i>' + name +
+    '<button type="button" onclick="removeSupplier(' + sid + ')">&times;</button>';
+  document.getElementById('selectedSuppliers').appendChild(chip);
+});
+
+function removeSupplier(sid) {
+  supplierIds.delete(sid);
+  var chip = document.getElementById('schip-' + sid);
+  var inp  = document.getElementById('sinp-' + sid);
+  if (chip) chip.remove();
+  if (inp)  inp.remove();
+}
+
+updateCount();
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+

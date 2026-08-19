@@ -1,0 +1,219 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card       { background: #fff !important; }
+  .table-xs td, .table-xs th { padding: 5px 8px; }
+  .low-stock  { border-left: 3px solid #dc3545; }
+  .ok-stock   { border-left: 3px solid #198754; }
+  .btn-xs     { padding: 2px 7px; font-size: .70rem; }
+  .search-wrap { max-width: 340px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-boxes me-2 text-primary"></i>
+        <%= locale==="fr" ? "Catalogue produits" : "Product Catalogue" %>
+      </h5>
+      <small class="text-muted">
+        <%= totalCount %> <%= locale==="fr" ? "produit(s)" : "product(s)" %>
+      </small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+        <a href="/warehouse/products/new" class="btn btn-sm btn-success">
+          <i class="fas fa-plus me-1"></i>
+          <%= locale==="fr" ? "Nouveau produit" : "New Product" %>
+        </a>
+      <% } %>
+      <a href="/warehouse" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>
+        <%= locale==="fr" ? "Tableau de bord" : "Dashboard" %>
+      </a>
+    </div>
+  </div>
+
+  <%/* ── Filters ── */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+      <form method="GET" action="/warehouse/products" class="d-flex align-items-end gap-2 flex-wrap">
+        <div class="search-wrap">
+          <input type="text" name="search" class="form-control form-control-sm"
+            placeholder="<%= locale==="fr" ? "Chercher par nom, code..." : "Search name, code..." %>"
+            value="<%= search || "" %>">
+        </div>
+        <div>
+          <select name="category_id" class="form-select form-select-sm" style="min-width:180px;">
+            <option value="">-- <%= locale==="fr" ? "Toutes catégories" : "All Categories" %> --</option>
+            <% categories.forEach(function(c) { %>
+              <option value="<%= c.category_id %>"
+                <%= catId === c.category_id ? "selected" : "" %>>
+                <%= c.parent_id ? "&nbsp;&nbsp;↳ " : "" %><%= c.name %>
+              </option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" name="low_stock" value="1"
+            id="chkLow" <%= showLow ? "checked" : "" %>>
+          <label class="form-check-label" for="chkLow" style="font-size:.82rem;">
+            <%= locale==="fr" ? "Stock bas seulement" : "Low stock only" %>
+          </label>
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="fas fa-search"></i>
+        </button>
+        <a href="/warehouse/products" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-undo"></i>
+        </a>
+      </form>
+    </div>
+  </div>
+
+  <%/* ── Success flash ── */%>
+  <% if (typeof success !== "undefined" && success) { %>
+    <div class="alert alert-success alert-dismissible py-2 mb-3" role="alert" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= success === "1" ? (locale==="fr" ? "Produit cree." : "Product created.") : (locale==="fr" ? "Produit mis a jour." : "Product updated.") %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <%/* ── Table ── */%>
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!products || products.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-boxes fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr" ? "Aucun produit trouvé." : "No products found." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0" style="font-size:.80rem;">
+            <thead class="table-dark">
+              <tr>
+                <th><%= locale==="fr" ? "Code" : "Code" %></th>
+                <th><%= locale==="fr" ? "Nom du produit" : "Product Name" %></th>
+                <th><%= locale==="fr" ? "Catégorie" : "Category" %></th>
+                <th><%= locale==="fr" ? "Unité" : "Unit" %></th>
+                <th class="text-center"><%= locale==="fr" ? "Stock actuel" : "Current Stock" %></th>
+                <th class="text-center"><%= locale==="fr" ? "Seuil réappro." : "Reorder Level" %></th>
+                <th class="text-center"><%= locale==="fr" ? "Statut" : "Status" %></th>
+                <th class="text-center"><%= locale==="fr" ? "Actions" : "Actions" %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% products.forEach(function(p) { %>
+                <%
+                  var isLow = p.current_stock <= p.reorder_level;
+                  var rowClass = isLow ? "low-stock" : "ok-stock";
+                %>
+                <tr class="<%= rowClass %>">
+                  <td>
+                    <code style="font-size:.74rem;"><%= p.item_code %></code>
+                  </td>
+                  <td>
+                    <div class="fw-bold"><%= p.name %></div>
+                    <% if (p.generic_name) { %>
+                      <div class="text-muted" style="font-size:.70rem;"><%= p.generic_name %></div>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (p.category) { %>
+                      <span class="badge bg-light text-dark border" style="font-size:.65rem;">
+                        <%= p.category.name %>
+                      </span>
+                    <% } %>
+                  </td>
+                  <td class="text-muted" style="font-size:.76rem;"><%= p.unit_of_measure %></td>
+                  <td class="text-center">
+                    <span class="badge <%= isLow ? "bg-danger" : "bg-success" %>">
+                      <%= p.current_stock %>
+                    </span>
+                  </td>
+                  <td class="text-center text-muted"><%= p.reorder_level %></td>
+                  <td class="text-center">
+                    <% if (isLow && p.reorder_level > 0) { %>
+                      <span class="badge bg-danger" style="font-size:.60rem;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        <%= locale==="fr" ? "Stock bas" : "Low Stock" %>
+                      </span>
+                    <% } else { %>
+                      <span class="badge bg-success" style="font-size:.60rem;">OK</span>
+                    <% } %>
+                  </td>
+                  <td class="text-center">
+                    <div class="d-flex justify-content-center gap-1">
+                      <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+                        <a href="/warehouse/products/<%= p.product_id %>/edit"
+                          class="btn btn-xs btn-outline-secondary"
+                          title="<%= locale==="fr" ? "Modifier" : "Edit" %>">
+                          <i class="fas fa-edit"></i>
+                        </a>
+                        <% if (isLow) { %>
+                          <a href="/warehouse/purchase-orders/new?product_id=<%= p.product_id %>"
+                            class="btn btn-xs btn-outline-warning"
+                            title="<%= locale==="fr" ? "Commander" : "Create PO" %>">
+                            <i class="fas fa-cart-plus"></i>
+                          </a>
+                        <% } %>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+
+        <%/* Pagination */%>
+        <% if (totalPages > 1) { %>
+          <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+            <small class="text-muted">
+              <%= locale==="fr" ? "Page" : "Page" %> <%= currentPage %> / <%= totalPages %>
+            </small>
+            <div class="d-flex gap-1">
+              <% if (currentPage > 1) { %>
+                <a href="?page=<%= currentPage-1 %>&search=<%= search||"" %>&category_id=<%= catId||"" %><%= showLow?"&low_stock=1":"" %>"
+                  class="btn btn-xs btn-outline-secondary">‹</a>
+              <% } %>
+              <% if (currentPage < totalPages) { %>
+                <a href="?page=<%= currentPage+1 %>&search=<%= search||"" %>&category_id=<%= catId||"" %><%= showLow?"&low_stock=1":"" %>"
+                  class="btn btn-xs btn-outline-secondary">›</a>
+              <% } %>
+            </div>
+          </div>
+        <% } %>
+
+      <% } %>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

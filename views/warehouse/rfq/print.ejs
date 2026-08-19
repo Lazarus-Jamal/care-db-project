@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title><%= rfq.rfq_number %> — <%= supplier.name %></title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Arial,sans-serif; font-size:11pt; color:#222; background:#fff; padding:24px 32px; }
+    .header { display:flex; justify-content:space-between; border-bottom:2px solid #222;
+              padding-bottom:14px; margin-bottom:18px; }
+    .hospital { font-size:15pt; font-weight:700; }
+    .rfq-ref  { text-align:right; }
+    .rfq-num  { font-size:14pt; font-weight:700; color:#0d6efd; }
+    .doc-type { font-size:9pt; text-transform:uppercase; color:#888; }
+    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+    .info-box  { border:1px solid #dee2e6; border-radius:4px; padding:10px 14px; }
+    .info-row  { display:flex; justify-content:space-between; padding:2px 0; font-size:10pt; }
+    .info-row span:first-child { color:#666; }
+    table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+    thead tr { background:#0d6efd; color:#fff; }
+    thead th { padding:7px 10px; font-size:9pt; text-align:left; }
+    .tr { text-align:right; }
+    tbody tr { border-bottom:1px solid #e9ecef; }
+    tbody tr:nth-child(even) { background:#f8f9fa; }
+    tbody td { padding:6px 10px; font-size:10pt; }
+    .response-col { border-left:2px dashed #dee2e6; background:#fffde7; }
+    .footer-note { margin-top:20px; font-size:8pt; color:#888; text-align:center;
+                   border-top:1px solid #dee2e6; padding-top:8px; }
+    .sig-section { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:20px; }
+    .sig-box { border:1px solid #dee2e6; border-radius:4px; padding:12px 14px; }
+    .sig-box .title { font-size:9pt; font-weight:700; text-transform:uppercase; color:#888; margin-bottom:20px; }
+    .sig-line { border-top:1px solid #222; padding-top:4px; font-size:8pt; color:#888; }
+    @media print { .no-print { display:none !important; } body { padding:0; } }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <%- include("../../partials/documentHeader", { facility: typeof facility !== "undefined" ? facility : null }) %>
+    <div class="rfq-ref">
+      <div class="doc-type">DEMANDE DE COTATION / REQUEST FOR QUOTATION</div>
+      <div class="rfq-num"><%= rfq.rfq_number %></div>
+      <div style="font-size:9pt;color:#666;margin-top:4px;">
+        Date: <%= new Date(printDate).toLocaleDateString("fr-FR") %>
+      </div>
+      <% if (rfq.expiry_date) { %>
+        <div style="font-size:9pt;color:#dc3545;margin-top:2px;">
+          Expiration / Expiry: <%= new Date(rfq.expiry_date).toLocaleDateString("fr-FR") %>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:6px;">Fournisseur / Supplier</div>
+      <div class="info-row"><span>Nom / Name:</span><span><strong><%= supplier.name %></strong></span></div>
+      <% if (supplier.contact_person) { %>
+        <div class="info-row"><span>Contact:</span><span><%= supplier.contact_person %></span></div>
+      <% } %>
+      <% if (supplier.email) { %>
+        <div class="info-row"><span>Email:</span><span><%= supplier.email %></span></div>
+      <% } %>
+    </div>
+    <div class="info-box">
+      <div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:6px;">Détails / Details</div>
+      <div class="info-row"><span>RFQ N°:</span><span><%= rfq.rfq_number %></span></div>
+      <div class="info-row"><span>Date:</span><span><%= new Date(printDate).toLocaleDateString("fr-FR") %></span></div>
+      <% if (rfq.notes) { %>
+        <div class="info-row"><span>Notes:</span><span style="font-size:9pt;"><%= rfq.notes %></span></div>
+      <% } %>
+    </div>
+  </div>
+
+  <div style="font-size:9pt;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:6px;">
+    Articles / Items — Veuillez indiquer vos prix et disponibilités / Please indicate your prices and availability
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:5%;">#</th>
+        <th style="width:12%;">Code</th>
+        <th style="width:33%;">Désignation / Description</th>
+        <th style="width:10%;">Unité / Unit</th>
+        <th class="tr" style="width:8%;">Qté / Qty</th>
+        <th class="tr response-col" style="width:14%;">Prix unit. FCFA<br><small style="font-size:8pt;">(Votre offre)</small></th>
+        <th class="tr response-col" style="width:8%;">Qté dispo<br><small style="font-size:8pt;">(Disponible)</small></th>
+        <th class="tr response-col" style="width:10%;">Délai (jours)<br><small style="font-size:8pt;">(Livraison)</small></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% rfq.items.forEach(function(item, idx) { %>
+        <tr>
+          <td><%= idx + 1 %></td>
+          <td><code style="font-size:9pt;"><%= item.product ? item.product.item_code : "—" %></code></td>
+          <td><%= item.product ? item.product.name : "—" %></td>
+          <td style="font-size:9pt;color:#666;"><%= item.product ? item.product.unit_of_measure : "—" %></td>
+          <td class="tr"><%= item.quantity_requested %></td>
+          <td class="response-col" style="min-height:24px;">&nbsp;</td>
+          <td class="response-col">&nbsp;</td>
+          <td class="response-col">&nbsp;</td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <div style="font-size:9pt;border:1px solid #dee2e6;border-radius:4px;padding:8px 12px;margin-bottom:16px;background:#fffde7;">
+    <strong>Conditions générales / Terms:</strong>
+    Veuillez retourner cette cotation avant la date d'expiration indiquée. / Please return this quotation before the expiry date shown above.
+    Les prix doivent inclure la TVA le cas échéant. / Prices must include VAT where applicable.
+  </div>
+
+  <div class="sig-section">
+    <div class="sig-box">
+      <div class="title">Signature Fournisseur / Supplier Signature</div>
+      <div class="sig-line">Nom / Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Cachet / Stamp</div>
+    </div>
+    <div class="sig-box">
+      <div class="title">Pour l'hôpital / For the hospital</div>
+      <% if (rfq.approved_by) { %>
+        <div style="font-size:10pt;font-weight:600;"><%= rfq.approved_by %></div>
+      <% } else { %>
+        <div class="sig-line">Nom / Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date</div>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Généré par Oseel Care HMIS — <%= rfq.rfq_number %> — <%= supplier.name %>
+  </div>
+
+  <div class="no-print" style="text-align:center;margin-top:20px;">
+    <button onclick="window.print()" style="padding:8px 24px;font-size:11pt;">Imprimer / Print</button>
+    <button onclick="window.close()" style="padding:8px 16px;font-size:11pt;margin-left:8px;">Fermer / Close</button>
+  </div>
+
+</body>
+</html>
+
+
+
+

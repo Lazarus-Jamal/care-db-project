@@ -1,0 +1,2155 @@
+// File: c:\oseelccare\config\database.js
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASSWORD,
+  {
+    host: process.env.DB_HOST,
+    dialect: 'mysql',
+    logging: false,
+  }
+);
+
+module.exports = sequelize;
+
+
+// File: c:\oseelccare\controllers\adminFacilityController.js
+// controllers/adminFacilityController.js
+const { care_facilities, care_staff, care_person } = require('../models');
+const logActivity = require('../utils/activityLogger');
+const { validationResult } = require('express-validator');
+const { Op, Sequelize } = require('sequelize');
+
+// GET: Render the facility creation form
+exports.getCreateFacilityForm = async (req, res) => {
+    try {
+        const staff = await care_staff.findAll({
+            attributes: ['nr', 'job_function_title'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'},'name_last', 'ASC']],
+        });
+        
+        const mainFacilities = await care_facilities.findAll({
+            where: { 
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                type: 'Hospital' // <-- Added this filter
+            },
+            order: [['name', 'ASC']],
+        });
+
+        res.render('facilities/create', {
+            title: 'Create Facility',
+            user: req.user,
+            staff,
+            mainFacilities, // <-- Changed the variable name for clarity
+            errors: [],
+            success: req.query.success === '1',
+            activePage: 'admin-facilities-create',
+            csrfToken: req.csrfToken(),
+            name: '', code: '', type: '', address: '', city: '', region: '', country: '', latitude: '', longitude: '',
+            facility_type: '',
+            parent_id: '',
+            director_id: '',
+            head_nurse_id: '',
+            finance_officer_id: '',
+        });
+    } catch (error) {
+        console.error('Error fetching data for create facility form:', error);
+        res.status(500).send('Error loading page.');
+    }
+};
+
+// POST: Handle facility creation
+exports.createFacility = async (req, res) => {
+    const {
+        name, code, type, facility_type, parent_id,
+        director_id, head_nurse_id, finance_officer_id,
+        address, city, region, country, latitude, longitude
+    } = req.body;
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'},'name_last', 'ASC']],});
+        const mainFacilities = await care_facilities.findAll({ // <-- Updated this query
+            where: { 
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                type: 'Hospital'
+            },
+            order: [['name', 'ASC']],
+        });
+        return res.status(400).render('facilities/create', {
+            title: 'Create Facility',
+            user: req.user,
+            staff,
+            mainFacilities,
+            errors: errors.array().map(e => e.msg),
+            success: false,
+            activePage: 'admin-facilities-create',
+            csrfToken: req.csrfToken(),
+            name, code, type, address, city, region, country, latitude, longitude,
+            facility_type,
+            parent_id,
+            director_id,
+            head_nurse_id,
+            finance_officer_id,
+        });
+    }
+
+    try {
+        let finalParentId = null;
+        if (facility_type === 'satellite') {
+            finalParentId = parent_id;
+        }
+
+        const newFacility = await care_facilities.create({
+            name,
+            code,
+            type,
+            parent_id: finalParentId,
+            director_id: director_id || null,
+            head_nurse_id: head_nurse_id || null,
+            finance_officer_id: finance_officer_id || null,
+            address,
+            city,
+            region,
+            country,
+            latitude,
+            longitude,
+        });
+
+        if (facility_type === 'main') {
+            await newFacility.update({ parent_id: newFacility.id });
+        }
+
+        const lognote = `Admin '${req.user.username}' successfully created new facility '${name}' (type: ${facility_type})`;
+        await logActivity(req, lognote, true, 'admin-facilities-create');
+
+        res.redirect('/admin/facilities/create?success=1');
+    } catch (error) {
+        console.error('Facility creation failed:', error);
+        const errorMessages = ['An error occurred while creating the facility.'];
+        const lognote = `Admin '${req.user.username}' failed to create facility '${name}': ${error.message}`;
+        await logActivity(req, lognote, false, 'admin-facilities-create');
+        
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'},'name_last', 'ASC']],
+         });
+
+        const mainFacilities = await care_facilities.findAll({ // <-- Updated this query
+            where: { 
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                type: 'Hospital'
+            },
+            order: [['name', 'ASC']],
+        });
+
+        res.status(500).render('facilities/create', {
+            title: 'Create Facility',
+            user: req.user,
+            staff,
+            mainFacilities,
+            errors: errorMessages,
+            success: false,
+            activePage: 'admin-facilities-create',
+            csrfToken: req.csrfToken(),
+            name, code, type, address, city, region, country, latitude, longitude,
+            facility_type,
+            parent_id,
+            director_id,
+            head_nurse_id,
+            finance_officer_id,
+        });
+    }
+};
+
+// GET: Update Facility Form
+exports.getUpdateFacilityForm = async (req, res) => {
+    try {
+        const { facility_id, success } = req.query;
+        
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        let facility = null;
+        let staff = [];
+        let mainFacilities = [];
+        const errors = [];
+        let csrfToken = req.csrfToken(); 
+
+        if (facility_id) {
+            facility = await care_facilities.findByPk(facility_id);
+            if (!facility) {
+                errors.push('Facility not found.');
+            } else {
+                staff = await care_staff.findAll({
+                    attributes: ['nr', 'job_function_title', 'pid'],
+                    include: [{
+                        model: care_person,
+                        as: 'person',
+                        attributes: ['name_last', 'name_first']
+                    }],
+                    order: [[{model: care_person, as: 'person'}, 'name_last', 'ASC']],
+                });
+                mainFacilities = await care_facilities.findAll({
+                    where: {
+                        parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                        id: { [Op.ne]: facility_id },
+                        type: 'Hospital' // <-- Added this filter
+                    },
+                    order: [['name', 'ASC']],
+                });
+            }
+        }
+        
+        res.render('facilities/updateFacility', {
+            title: 'Update Facility',
+            user: req.user,
+            facilities: allFacilities, 
+            facility, 
+            staff,
+            mainFacilities,
+            errors,
+            success: success === '1',
+            activePage: 'admin-facilities-update',
+            csrfToken,
+        });
+    } catch (error) {
+        console.error('Error fetching data for update facility form:', error);
+        res.status(500).send('Error loading page.');
+    }
+};
+
+// POST: Handle facility update
+exports.updateFacility = async (req, res) => {
+    const {
+        facility_id, name, code, type, facility_type, parent_id,
+        director_id, head_nurse_id, finance_officer_id,
+        address, city, region, country, latitude, longitude
+    } = req.body;
+
+    const facilityToUpdate = await care_facilities.findByPk(facility_id);
+    if (!facilityToUpdate) {
+        return res.status(404).send('Facility not found.');
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }], 
+            order: [[{model: care_person, as: 'person'}, 'name_last', 'ASC']],
+        });
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        const mainFacilities = await care_facilities.findAll({
+            where: {
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                id: { [Op.ne]: facility_id },
+                type: 'Hospital' // <-- Added this filter
+            },
+            order: [['name', 'ASC']],
+        });
+        return res.status(400).render('facilities/updateFacility', {
+            title: 'Update Facility',
+            user: req.user,
+            facilities: allFacilities,
+            facility: facilityToUpdate,
+            staff,
+            mainFacilities,
+            errors: errors.array().map(e => e.msg),
+            success: false,
+            activePage: 'admin-facilities-update',
+            csrfToken: req.csrfToken(),
+        });
+    }
+
+    try {
+        let finalParentId = null;
+        if (facility_type === 'main') {
+            finalParentId = facilityToUpdate.id;
+        } else if (facility_type === 'satellite') {
+            finalParentId = parent_id;
+        }
+
+        await facilityToUpdate.update({
+            name,
+            code,
+            type,
+            parent_id: finalParentId,
+            director_id: director_id || null,
+            head_nurse_id: head_nurse_id || null,
+            finance_officer_id: finance_officer_id || null,
+            address,
+            city,
+            region,
+            country,
+            latitude,
+            longitude,
+        });
+
+        const lognote = `Admin '${req.user.username}' successfully updated facility '${name}' (ID: ${facility_id})`;
+        await logActivity(req, lognote, true, 'admin-facilities-update');
+
+        res.redirect(`/admin/facilities/update?success=1&facility_id=${facility_id}`);
+    } catch (error) {
+        console.error('Facility update failed:', error);
+        let errorMessage = 'An error occurred while updating the facility.';
+        if (error.name === 'SequelizeValidationError') {
+            errorMessage = error.errors.map(e => e.message).join(', ');
+        }
+        
+        const lognote = `Admin '${req.user.username}' failed to update facility '${name}': ${errorMessage}`;
+        await logActivity(req, lognote, false, 'admin-facilities-update');
+
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'}, 'name_last', 'ASC']],
+        });
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        const mainFacilities = await care_facilities.findAll({
+            where: {
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                id: { [Op.ne]: facility_id },
+                type: 'Hospital'
+            },
+            order: [['name', 'ASC']],
+        });
+
+        res.status(500).render('facilities/updateFacility', {
+            title: 'Update Facility',
+            user: req.user,
+            facilities: allFacilities,
+            facility: facilityToUpdate,
+            staff,
+            mainFacilities,
+            errors: [errorMessage],
+            success: false,
+            activePage: 'admin-facilities-update',
+            csrfToken: req.csrfToken(),
+        });
+    }
+};
+// GET: Render the main facilities management form (with filtering options)
+exports.getFacilitiesManagement = async (req, res) => {
+    try {
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        res.render('facilities/listFacilities', {
+            title: 'Gérer les Etablissements',
+            user: req.user,
+            facilities: allFacilities,
+            activePage: 'admin-facilities-list',
+            csrfToken: req.csrfToken(),
+        });
+    } catch (error) {
+        console.error('Error fetching facilities for management page:', error);
+        res.status(500).send('Error loading page.');
+    }
+};
+
+// File: c:\oseelccare\controllers\authController.js
+// controllers/authController.js
+const { User, care_user_roles, care_staff, care_person, care_facilities } = require('../models');
+const bcrypt = require('bcrypt');
+const logActivity = require('../utils/activityLogger');
+const { validationResult } = require('express-validator');
+
+const activeUsers = require('../index').activeUsers; // Import the activeUsers Set
+
+// --- Login Logic ---
+exports.login = async (req, res) => {
+    const { username, password, localTime } = req.body;
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+        return res.status(400).render('auth/login', {
+            error: errors.array().map(e => e.msg).join(', ')
+        });
+    }
+
+    try {
+        const user = await User.findOne({
+            where: { username },
+            include: [
+                { model: care_user_roles, as: 'userRole' },
+                {
+                    model: care_staff,
+                    as: 'staff',
+                    include: [
+                        { model: care_person, as: 'person' },
+                        { model: care_facilities, as: 'facility' }
+                    ]
+                }
+            ],
+        });
+
+        const loginSuccess = user && await bcrypt.compare(password, user.password_hash);
+        let loginErrors = [];
+
+        if (!loginSuccess) {
+            loginErrors.push('Identifiants invalides');
+        } else {
+            if (user.userRole && user.userRole.role_name !== 'System Administrator') {
+                const serverTime = new Date();
+                const clientTime = new Date(localTime);
+                const timeDifferenceMs = Math.abs(serverTime.getTime() - clientTime.getTime());
+                const maxAllowedDiffMs = 3 * 60 * 1000;
+
+                if (timeDifferenceMs > maxAllowedDiffMs) {
+                    loginErrors.push('Décalage horaire détecté. Veuillez synchroniser l\'heure de votre machine avec celle du serveur.');
+                }
+            }
+        }
+        
+        if (loginErrors.length > 0) {
+            await logActivity(req, `Échec de connexion pour l'utilisateur '${username}': ${loginErrors.join(' ')}`, false, '/auth/login', null);
+            return res.status(401).render('auth/login', {
+                title: 'Connexion',
+                user: null,
+                activePage: 'login',
+                error: loginErrors.join(', '),
+                username,
+                csrfToken: req.csrfToken(),
+            });
+        }
+        
+        // Update last_login timestamp
+        await User.update({ last_login: new Date() }, { where: { user_id: user.user_id } });
+
+        // User authenticated successfully
+        const userForSession = {
+            user_id: user.user_id,
+            username: user.username,
+            firstName: user.staff?.person?.name_first || '',
+            lastName: user.staff?.person?.name_last || '',
+            roleName: user.userRole?.role_name || '',
+            permissions: user.userRole?.permission ? JSON.parse(user.userRole.permission) : [],
+            facility: {
+                id: user.staff?.facility?.id || null,
+                name: user.staff?.facility?.name || 'Unknown Facility',
+            },
+            // FIX: Add the isAdmin flag from the database
+            isAdmin: user.is_admin === 1,
+            // FIX: You also need an isAppAdmin property if you have a role for that
+            isAppAdmin: user.userRole?.role_name === 'System Administrator'
+        };
+
+        const lognote = `Connexion réussie pour l'utilisateur '${username}'`;
+        await logActivity(req, lognote, true, '/auth/login', user.user_id, user.username);
+        
+        // Store the complete user object in the session
+        req.session.user = userForSession;
+        req.session.authenticated = true;
+        
+        activeUsers.add(user.user_id);
+
+        res.redirect('/');
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        await logActivity(req, `Échec de connexion: ${error.message}`, false, '/auth/login', null);
+        res.status(500).render('auth/login', { 
+            title: 'Connexion',
+            user: null,
+            activePage: 'login',
+            error: 'An unexpected error occurred.',
+            username: req.body.username || '',
+            csrfToken: req.csrfToken(), 
+        });
+    }
+};
+
+// --- Logout Logic ---
+exports.logout = (req, res) => {
+    // Log the logout activity
+    if (req.session.user) {
+        activeUsers.delete(req.session.user.user_id); // Remove the user from activeUsers set
+        const lognote = `Déconnexion réussie pour l'utilisateur '${req.session.user.username}'`;
+        logActivity(req, lognote, true, '/auth/logout', req.session.user.user_id, req.session.user.username);
+    }
+
+    // Destroy the session
+    req.session.destroy(err => {
+        if (err) {
+            console.error('Logout error:', err);
+            return res.status(500).send('Could not log out.');
+        }
+        // Redirect to the login page
+        res.clearCookie('connect.sid'); // Clears the session ID cookie
+        res.redirect('/auth/login');
+    });
+};
+
+/**
+ * Controller function for user registration (Admin only).
+ */
+exports.register = async (req, res) => {
+    const { username, password, role_id, person_id, facility_id, dept_nr } = req.body;
+    const createdBy = req.user.username; // Get the username of the logged-in admin
+    const createdId = req.user.user_id; // Get the user ID of the logged-in admin
+
+    // Start a transaction to ensure all operations succeed or fail together
+    const t = await User.sequelize.transaction();
+
+    try {
+        // 1. Get the facility code and count existing staff to generate a new staff number
+        const facility = await care_facilities.findByPk(facility_id, { transaction: t });
+        if (!facility) {
+            throw new Error('Facility not found.');
+        }
+
+        const staffCount = await care_staff.count({
+            where: { facility_id },
+            transaction: t
+        });
+        
+        // Generate the new staff number (e.g., 'HPN' + padded incremented count)
+        const nextStaffNumber = staffCount + 1;
+        const paddedStaffNumber = String(nextStaffNumber).padStart(3, '0');
+        const short_id = `${facility.code}${paddedStaffNumber}`;
+
+        // 2. Check for an existing staff record and create it if it doesn't exist
+        const [staffRecord, staffCreated] = await care_staff.findOrCreate({
+            where: { pid: person_id },
+            defaults: {
+                short_id: short_id,
+                job_type_nr: 0, // Default value
+                facility_id: facility_id,
+                dept_nr: dept_nr || null, // Allow null if not provided
+                status: 1, // '1' for active staff
+                job_function_title: 'Staff Member', // Default title
+            },
+            transaction: t
+        });
+        
+        // If the staff record already existed, ensure its fields are updated
+        if (!staffCreated) {
+            await staffRecord.update({
+                short_id: short_id,
+                facility_id: facility_id,
+                dept_nr: dept_nr || null,
+                status: 1,
+            }, { transaction: t });
+        }
+
+        // 3. Hash the password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // 4. Create the user record with all required fields
+        const newUser = await User.create({
+            username,
+            password_hash: hashedPassword,
+            role_id,
+            pid: person_id,
+            is_admin: role_id === 1 ? 1 : 0,
+            dept_nr: dept_nr,
+            staff_nr: staffRecord.nr, // Use the primary key from the care_staff table
+            facility_id: facility_id,
+            created_by: createdId, // Logged-in user's user_id
+        }, { transaction: t });
+
+        // Commit the transaction
+        await t.commit();
+
+        // Log the successful registration
+        await logActivity(req, `Admin '${createdBy}' created new user '${newUser.username}'`, true, 'authController.js');
+
+        res.redirect('/admin/users/create?success=1');
+    } catch (error) {
+        // If any operation fails, roll back the transaction
+        await t.rollback();
+        console.error('Error during user and staff creation:', error);
+
+        // Log the failure
+        await logActivity(req, `Admin '${createdBy}' failed to create user '${username}' due to error: ${error.message}`, false, 'authController.js');
+
+        // Render the registration form with the error message
+        res.status(500).send('Registration failed: ' + error.message);
+    }
+};
+
+/**
+ * Controller function to fetch user's facility and role based on username.
+ */
+exports.getUserFacilityAndRole = async (req, res) => {
+    const { username } = req.body;
+    try {
+        const user = await User.findOne({
+            where: { username },
+            include: [
+                { model: care_staff, as: 'staff', include: [{ model: care_facilities, as: 'facility' }] },
+                { model: care_user_roles, as: 'userRole' }
+            ],
+        });
+
+        if (!user) {
+            return res.json({ success: false, message: 'Utilisateur non trouvé.' });
+        }
+        
+        let facilityName;
+        let roleName = user.userRole?.role_name || 'Pas de rôle';
+
+        // Check for 'System Administrator' role first
+        if (roleName === 'System Administrator') {
+            facilityName = 'Accès à l\'ensemble du système';
+        } else if (user.staff?.facility) {
+            // Then check for a facility assigned to the staff member
+            facilityName = user.staff.facility.name;
+        } else {
+            // Fallback if no facility is found
+            facilityName = 'Non assigné';
+        }
+
+        res.json({
+            success: true,
+            facilityName: facilityName,
+            roleName: roleName
+        });
+    } catch (error) {
+        console.error('Sequelize Error in getUserFacilityAndRole:', error);
+        res.status(500).json({ success: false, message: 'Erreur du serveur' });
+    }
+};
+
+/**
+ * Controller function to get server time.
+ */
+exports.getServerTime = (req, res) => {
+    res.json({ serverTime: new Date() });
+};
+
+
+// File: c:\oseelccare\controllers\dashboardController.js
+// controllers/dashboardController.js
+const { activeUsers } = require('../index');
+
+exports.getDashboard = (req, res) => {
+    try {
+        const connectedUsersCount = activeUsers.size;
+
+        res.render('index', {
+            title: 'Tableau de bord',
+            connectedUsersCount,
+            //csrfToken: req.csrfToken(),
+        });
+    } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        res.status(500).send('Error fetching dashboard data');
+    }
+};
+
+// File: c:\oseelccare\controllers\patientController.js
+// controllers/patientController.js
+const { care_person } = require('../models');
+const logActivity = require('../utils/activityLogger');
+
+// GET function to render the patient registration form
+exports.createPatientForm = async (req, res) => {
+    res.render('patients/createPatient', {
+        title: 'Enregistrement Patient',
+        user: req.user,
+        errors: [],
+        success: req.query.success === '1',
+        activePage: 'patients/create',
+        csrfToken: req.csrfToken() // Explicitly pass the CSRF token
+    });
+};
+
+// POST function to handle patient registration
+exports.createPatient = async (req, res) => {
+    const {
+        name_last, name_first, date_birth, profession, sex, blood_group,
+        rhesus, civil_status, addr_str, addr_zip, cellphone_1_nr
+    } = req.body;
+
+    const createdBy = req.user.username;
+    const createdId = req.user.user_id;
+    const logSource = 'patientController.js';
+
+    try {
+        // Basic validation
+        if (!name_last || !name_first || !date_birth || !sex) {
+            const errors = ['Veuillez remplir les champs obligatoires: Nom, Prénoms, Date de naissance, et Sexe.'];
+            await logActivity(req, `Échec de l'enregistrement du patient: Champs obligatoires manquants.`, false, logSource, createdId, createdBy);
+            return res.render('patients/createPatient', {
+                title: 'Enregistrement Patient',
+                user: req.user,
+                errors,
+                success: null,
+                activePage: 'patients/create',
+                csrfToken: req.csrfToken() // Explicitly pass the CSRF token on error
+            });
+        }
+
+        const full_blood_group = `${blood_group}${rhesus || ''}`;
+
+        const newPatient = await care_person.create({
+            hospital_file_nr: `HFN-${Date.now()}`,
+            date_reg: new Date(),
+            name_last,
+            name_first,
+            date_birth: new Date(date_birth),
+            title: profession,
+            sex,
+            blood_group: full_blood_group,
+            civil_status,
+            addr_str,
+            addr_zip,
+            cellphone_1_nr,
+            create_id: createdId,
+            create_time: new Date(),
+            status: 'active'
+        });
+
+        const logNote = `Nouveau patient enregistré: ${name_first} ${name_last} (PID: ${newPatient.pid})`;
+        await logActivity(req, logNote, true, logSource, createdId, createdBy);
+
+        res.redirect('/patients/create?success=1');
+
+    } catch (error) {
+        console.error('Error creating patient:', error);
+        const errors = ['Une erreur est survenue lors de l\'enregistrement du patient.'];
+        const errorLogNote = `Échec de l'enregistrement du patient: ${error.message}`;
+
+        await logActivity(req, errorLogNote, false, logSource, createdId, createdBy);
+
+        res.render('patients/createPatient', {
+            title: 'Enregistrement Patient',
+            user: req.user,
+            errors,
+            success: null,
+            activePage: 'patients/create',
+            csrfToken: req.csrfToken() // Explicitly pass the CSRF token on error
+        });
+    }
+};
+
+// File: c:\oseelccare\controllers\staffController.js
+const { Op } = require('sequelize');
+const { care_staff, care_person } = require('../models');
+
+// This is your original function to fetch a complete staff list for display.
+exports.listStaffWithPersonInfo = async (req, res) => {
+    try {
+        const staffList = await care_staff.findAll({
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_first', 'name_last', 'email', 'sex', 'date_birth']
+            }],
+            attributes: ['nr', 'job_function_title', 'pid', 'date_join', 'status']
+        });
+
+        res.render('staff/list', {
+            staffList,
+            title: 'Staff Directory'
+        });
+    } catch (error) {
+        console.error('Error fetching staff list:', error);
+        res.status(500).send('Failed to load staff list');
+    }
+};
+
+// NEW: This function handles the dynamic personnel search from the frontend.
+// It queries the database for a small, filtered list of people.
+exports.listPersonnel = async (req, res) => {
+    const { query } = req.query;
+
+    if (!query) {
+        return res.json([]); // Return an empty array if no search query is provided.
+    }
+
+    try {
+        const personnel = await care_person.findAll({
+            where: {
+                [Op.or]: [
+                    { name_first: { [Op.like]: `%${query}%` } },
+                    { name_last: { [Op.like]: `%${query}%` } }
+                ]
+            },
+            attributes: ['pid', 'name_first', 'name_last', 'email'],
+            limit: 20 // Limit the number of results to keep the response small and fast.
+        });
+
+        res.json(personnel);
+    } catch (error) {
+        console.error('Error searching for personnel:', error);
+        res.status(500).json({ error: 'Failed to search for personnel' });
+    }
+};
+
+// File: c:\oseelccare\controllers\userController.js
+// controllers/userController.js
+const bcrypt = require('bcryptjs');
+const logActivity = require('../utils/activityLogger');
+const { User, care_user_roles, care_department, care_staff, care_person, care_facilities } = require('../models');
+const user = require('../models/user');
+
+exports.updateUser = async (req, res) => {
+  const { user_id, username, email, password, role_id, dept_nr, facility_id, staff_nr } = req.body;
+  
+  try {
+      const userToUpdate = await User.findByPk(user_id, {
+      include: [{ model: care_staff, as: 'staff' }]
+      });
+
+    // Check if the user exists
+    if (!userToUpdate) {
+      const lognote = `Admin '${req.user.username}' failed to update user '${username}': User ID not found.`;
+      await logActivity(req, lognote, false, '/admin/users/update/edit');
+      return res.status(404).send('User not found.');
+    }
+
+    userToUpdate.username = username;
+    userToUpdate.email = email;
+    userToUpdate.role_id = role_id;
+    userToUpdate.dept_nr = dept_nr || null;
+    userToUpdate.facility_id = facility_id;
+    userToUpdate.staff_nr = staff_nr || null; // Added this line to update staff_nr
+//console.log(userToUpdate);
+    if (password) {
+      userToUpdate.password_hash = await bcrypt.hash(password, 10);
+    }
+    
+    await userToUpdate.save();
+    
+    const lognote = `Admin '${req.user.username}' successfully updated user '${username}'.`;
+    await logActivity(req, lognote, true, '/admin/users/update/edit');
+
+    res.redirect(`/admin/users/update?success=1&user_id=${user_id}`);
+
+  } catch (error) {
+    console.error('Error updating user:', error);
+    let errorMessage = 'Failed to update user.';
+    if (error.name === 'SequelizeValidationError') {
+      errorMessage = error.errors.map(e => e.message).join(', ');
+    } else if (error.name === 'SequelizeUniqueConstraintError') {
+      errorMessage = 'A user with this username or email already exists.';
+    }
+    
+    const lognote = `Admin '${req.user.username}' failed to update user '${username}': ${errorMessage}`;
+    await logActivity(req, lognote, false, '/admin/users/update/edit');
+
+    const users = await User.findAll({ 
+      order: [['username', 'ASC']],
+      include: [{ model: care_user_roles, as: 'userRole' }]
+    });
+    const roles = await care_user_roles.findAll();
+    const departments = await care_department.findAll({ where: { is_inactive: false } });
+    const facilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+    const userToEdit = await User.findByPk(user_id);
+
+    res.status(500).render('users/updateUser', {
+      title: 'Update Account',
+      users,
+      userToEdit,
+      roles,
+      departments,
+      facilities,
+      errors: [errorMessage],
+      success: false,
+      user: req.user,
+      activePage: 'admin-update-user'
+    });
+  }
+};
+
+// File: c:\oseelccare\index.js
+// index.js (Main Application File)
+
+const express = require('express');
+const path = require('path');
+const dotenv = require('dotenv');
+const session = require('express-session');
+const SequelizeStore = require('connect-session-sequelize')(session.Store);
+const sequelize = require('./config/database');
+const csurf = require('csurf');
+const cookieParser = require('cookie-parser');
+
+// Define the global activeUsers set to track connected users.
+// Export the activeUsers set for use in other modules.
+const activeUsers = new Set();
+exports.activeUsers = activeUsers;
+
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const staffRoutes = require('./routes/staff');
+const testRoutes = require('./routes/test');
+const logRoutes = require('./routes/logs');
+const authMiddleware = require('./middleware/authMiddleware');
+const permissionsMiddleware = require('./middleware/permissionsMiddleware');
+const patientRoutes = require('./routes/patient');
+const models = require('./models');
+const dashboardController = require('./controllers/dashboardController');
+
+dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Static files
+app.use(express.static(path.join(process.cwd(), 'public')));
+app.use('/bootstrap', express.static(path.join(process.cwd(), 'node_modules/bootstrap')));
+app.use('/@fortawesome', express.static(path.join(process.cwd(), 'node_modules/@fortawesome')));
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Use cookie-parser before the session middleware
+app.use(cookieParser(process.env.SESSION_SECRET || 'a_very_secure_secret_key'));
+
+// Configure the Sequelize session store
+const sessionStore = new SequelizeStore({
+    db: sequelize,
+    tableName: 'care_sessions',
+});
+
+// Configure and use the express-session middleware
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'a_very_secure_secret_key',
+    resave: false,
+    saveUninitialized: false,
+    store: sessionStore,
+    cookie: {
+        maxAge: 3600000,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production'
+    }
+}));
+
+// Use csurf
+app.use(csurf());
+
+// Automatically set activePage based on path
+app.use((req, res, next) => {
+    // res.locals.user = req.user || null;
+    const pathSegment = req.path.split('/')[1];
+    res.locals.activePage = pathSegment || 'home';
+    res.locals.csrfToken = req.csrfToken();
+    next();
+});
+
+// View engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(process.cwd(), 'views'));
+
+// Test DB connection
+sequelize.authenticate()
+    .then(() => console.log('✅ Database connected...'))
+    .catch(err => console.error('❌ DB connection error:', err));
+
+// FIRST, sync the session store.
+// This is critical to prevent the 'Multiple primary key' error.
+sessionStore.sync({ alter: true })
+    .then(() => {
+        console.log('✅ Session store synced...');
+        // THEN, sync the rest of the application's models.
+        return sequelize.sync();
+    })
+    .then(() => {
+        console.log('✅ All other models synced...');
+    })
+    .catch(err => console.error('❌ Model sync error:', err));
+
+
+// Routes that do not require authentication (e.g., login, registration)
+app.use('/auth', authRoutes);
+app.get('/login', (req, res) => res.redirect('/auth/login'));
+app.get('/logout', (req, res) => res.redirect('/auth/logout'));
+
+// Consolidated middleware for all protected routes
+app.use(authMiddleware, permissionsMiddleware);
+
+// Use the dashboardController for the root route
+app.get('/', dashboardController.getDashboard);
+
+// Routes that require authentication and permissions
+app.use('/admin', adminRoutes);
+app.use('/staff', staffRoutes);
+app.use('/patients', patientRoutes);
+app.use('/logs', logRoutes);
+
+// Global error handler for CSRF errors
+app.use((err, req, res, next) => {
+    if (err.code !== 'EBADCSRFTOKEN') {
+        return next(err);
+    }
+    console.error('❌ CSRF token error:', err.message);
+    res.status(403).send('CSRF token is invalid or missing.');
+});
+
+app.listen(PORT, () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
+});
+
+
+
+// File: c:\oseelccare\middleware\authMiddleware.js
+// middleware/authMiddleware.js
+const { User, care_user_roles, care_facilities, care_staff, care_person } = require('../models');
+
+/**
+ * Middleware to handle user authentication and data population.
+ */
+const authMiddleware = async (req, res, next) => {
+    // Check if the user is authenticated from the session
+    if (req.session && req.session.user && req.session.user.user_id) { // Ensure user_id exists
+        try {
+            // Use Sequelize's findByPk method to find a record by its primary key
+            const user = await User.findByPk(req.session.user.user_id, { // Use user_id from session
+                include: [
+                    { 
+                        model: care_staff, as: 'staff', 
+                        include: [
+                            { model: care_person, as: 'person'}, {model: care_facilities, as: 'facility'}
+                        ] 
+                    },
+                    { model: care_user_roles, as: 'userRole' }
+                ]
+            });
+
+            if (!user) {
+                // If the user document is no longer in the database, clear the session and redirect.
+                req.session.destroy();
+                return res.redirect('/auth/login');
+            }
+            
+            // Expose the user object to all views via res.locals
+            // res.locals.user = user;
+            
+            // Now, create the simplified session object for isAdmin, isAppAdmin checks
+            const userForSession = {
+                user_id: user.user_id,
+                username: user.username,
+                firstName: user.staff?.person?.name_first || '',
+                lastName: user.staff?.person?.name_last || '',
+                roleName: user.userRole?.role_name || '',
+                permissions: user.userRole?.permission ? JSON.parse(user.userRole.permission) : [],
+                facility: {
+                    id: user.staff?.facility?.id || null,
+                    name: user.staff?.facility?.name || 'Unknown Facility',
+                },
+                isAdmin: user.is_admin === 1,
+                isAppAdmin: user.userRole?.role_name === 'System Administrator'
+            };
+            
+            // Set req.user to this simplified session object for other middleware
+            res.locals.user = userForSession;
+            req.user = userForSession;
+
+            // Continue to the next middleware or route handler
+            next();
+        } catch (err) {
+            console.error('Error fetching user data in authMiddleware:', err);
+            req.session.destroy();
+            res.redirect('/auth/login');
+        }
+    } else {
+        // No user in session, or session is incomplete
+        res.redirect('/auth/login');
+    }
+};
+
+module.exports = authMiddleware;
+
+// File: c:\oseelccare\middleware\facilityValidator.js
+// middleware/facilityValidator.js
+const { body, validationResult } = require('express-validator');
+const logActivity = require('../utils/activityLogger');
+const { care_facilities, care_staff } = require('../models');
+const { Op, Sequelize } = require('sequelize'); // Make sure Sequelize is imported here
+
+// A function to prepare the data for rendering the error page for creation
+const renderCreateErrorPage = async (req, res, errors) => {
+    const staff = await care_staff.findAll({
+        attributes: ['nr', 'job_function_title'],
+        order: [['job_function_title', 'ASC']],
+    });
+    
+    const facilities = await care_facilities.findAll({
+        where: { parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') } },
+        order: [['name', 'ASC']],
+    });
+
+    const lognote = `Admin '${req.user.username}' failed to create facility: ${errors.join(', ')}`;
+    await logActivity(req, lognote, false, 'admin-facilities-create');
+    
+    return res.render('facilities/create', {
+        title: 'Create Facility',
+        user: req.user,
+        staff,
+        facilities,
+        success: false,
+        errors,
+        activePage: 'admin-facilities-create',
+        csrfToken: req.csrfToken(),
+        // Repopulate form fields with submitted data on error
+        name: req.body.name,
+        code: req.body.code,
+        type: req.body.type,
+        address: req.body.address,
+        city: req.body.city,
+        region: req.body.region,
+        latitude: req.body.latitude,
+        longitude: req.body.longitude,
+        facility_type: req.body.facility_type,
+        parent_id: req.body.parent_id,
+    });
+};
+
+// A function to prepare the data for rendering the error page for updates
+const renderUpdateErrorPage = async (req, res, errors, facilityToUpdate) => {
+    const staff = await care_staff.findAll({ attributes: ['nr', 'job_function_title'] });
+    const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+    const mainFacilities = await care_facilities.findAll({
+        where: {
+            parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+            id: { [Op.ne]: req.body.facility_id }
+        },
+        order: [['name', 'ASC']],
+    });
+    
+    const lognote = `Admin '${req.user.username}' failed to update facility: ${errors.join(', ')}`;
+    await logActivity(req, lognote, false, 'admin-facilities-update');
+
+    return res.status(400).render('facilities/updateFacility', {
+        title: 'Update Facility',
+        user: req.user,
+        facilities: allFacilities,
+        facility: facilityToUpdate,
+        staff,
+        mainFacilities,
+        errors,
+        success: false,
+        activePage: 'admin-facilities-update',
+        csrfToken: req.csrfToken(),
+    });
+};
+
+const facilityValidator = [
+    body('name')
+        .trim()
+        .escape()
+        .notEmpty().withMessage('Facility Name is required.')
+        .custom(async (value, { req }) => {
+            const whereCondition = { name: value };
+            if (req.body.facility_id) {
+                whereCondition.id = { [Op.ne]: req.body.facility_id };
+            }
+            const existingFacility = await care_facilities.findOne({
+                where: whereCondition
+            });
+            if (existingFacility) {
+                throw new Error('A facility with this name already exists.');
+            }
+        }),
+
+    body('code')
+        .trim()
+        .escape()
+        .notEmpty().withMessage('Facility Code is required.')
+        .isAlphanumeric().withMessage('Facility Code must be alphanumeric.')
+        .custom(async (value, { req }) => {
+            const whereCondition = { code: value };
+            if (req.body.facility_id) {
+                whereCondition.id = { [Op.ne]: req.body.facility_id };
+            }
+            const existingFacility = await care_facilities.findOne({
+                where: whereCondition
+            });
+            if (existingFacility) {
+                throw new Error('A facility with this code already exists.');
+            }
+        }),
+    
+    body('type')
+        .trim()
+        .escape()
+        .notEmpty().withMessage('Facility Type is required.'),
+    
+    body('facility_type')
+        .trim()
+        .escape()
+        .notEmpty().withMessage('Facility Type (Main/Satellite) is required.'),
+
+    body('parent_id')
+        .custom(async (value, { req }) => {
+            if (req.body.facility_type === 'satellite') {
+                if (!value) {
+                    throw new Error('A parent facility must be selected for a satellite facility.');
+                }
+                const parentFacility = await care_facilities.findByPk(value);
+                if (!parentFacility) {
+                    throw new Error('Invalid parent facility selected.');
+                }
+            }
+        }),
+    
+    async (req, res, next) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            const errorMessages = errors.array().map(e => e.msg);
+            const facilityToUpdate = req.body.facility_id ? await care_facilities.findByPk(req.body.facility_id) : null;
+            if (facilityToUpdate) {
+                return renderUpdateErrorPage(req, res, errorMessages, facilityToUpdate);
+            }
+            return renderCreateErrorPage(req, res, errorMessages);
+        }
+        next();
+    }
+];
+
+module.exports = facilityValidator;
+
+
+// File: c:\oseelccare\middleware\isAdminMiddleware.js
+// middleware/isAdminMiddleware.js
+const logActivity = require('../utils/activityLogger');
+
+/**
+ * Middleware to check if the user has the necessary administrative permissions.
+ * This is an updated version that checks for a set of permissions rather than a single one,
+ * allowing for more granular control over what an "admin" can do.
+ * * The middleware checks for permissions related to managing users, roles, and facilities.
+ * This allows both a "System Administrator" (with full access) and a more
+ * restricted "Application Administrator" (with a subset of these permissions) to pass.
+ */
+module.exports = async (req, res, next) => {
+  // Define an array of permissions that grant administrative access.
+  // We check for any of these to determine if a user is an admin.
+  // This can be expanded as needed to include other admin-related tasks.
+  const requiredAdminPermissions = [
+    'Admin.Create.User',
+    'Admin.Update.User',
+    'Admin.Assign.Role',
+    'Admin.Create.Role',
+    'Admin.Audit.Logs',
+    'Admin.Create.Facility',
+    'Admin.Update.Facility',
+    'Admin.Manage.Users', // The original permission
+    'Admin.Manage.ServicesConfig',
+    'Admin.Manage.PharmacyConfig',
+    'Admin.Manage.LabConfig',
+    // ... add any other relevant permissions for admin-level access here
+  ];
+
+  // Check if the user is authenticated and has permissions.
+  // We use .some() to check if the user's permissions array contains at least one
+  // of the required administrative permissions.
+  const hasAdminPermission = req.user && req.user.permissions && req.user.permissions.some(permission =>
+    requiredAdminPermissions.includes(permission)
+  );
+
+  if (hasAdminPermission) {
+    // If the user has at least one required permission, grant access.
+    return next();
+  }
+
+  // Log the denied access attempt for auditing.
+  const lognote = `Access denied for '${req.user?.username}' to '${req.originalUrl}': Insufficient privileges.`;
+  await logActivity(req, lognote, false, 'isAdminMiddleware.js');
+
+  // If no required permission is found, deny access.
+  // Use a status code of 403 (Forbidden) for unauthorized access.
+  return res.status(403).send('Access denied: Insufficient privileges.');
+};
+
+
+
+// File: c:\oseelccare\middleware\permissionsMiddleware.js
+const user = require("../models/user");
+
+/**
+ * Middleware to make user and permission-based helper functions available to all EJS templates.
+ * This middleware should be used after your authentication middleware has attached the user object to the request (e.g., req.user).
+ */
+function permissionsMiddleware(req, res, next) {
+    res.locals.user = req.user || null;
+    // Check for a single, specific permission.
+    // Grants full access if the user has the 'Admin.FullAccess' permission.
+    if (res.locals.user && res.locals.user.roleName){
+
+        res.locals.isAdmin = res.locals.user.roleName === 'System Administrator';
+
+        const userPermissions = res.locals.user.permissions || [];
+
+        // Check if the user has a specific permission.
+        res.locals.hasPermission = function(permissionName) {
+            return userPermissions.includes('Admin.FullAccess') || userPermissions.includes(permissionName);
+        };
+
+        // Check if the user has at least one permission from a given list.
+        res.locals.hasAnyPermission = function(permissionNames) {
+            if (userPermissions.includes ('Admin.FullAccess')) {
+                return true;
+            }
+            return permissionNames.some(p => userPermissions.includes(p));
+        };
+      
+        // A flag to check if the user is an application administrator (can manage users, facilities, etc.)
+        res.locals.isAppAdmin = res.locals.hasAnyPermission([
+            'Admin.Create.User',
+            'Admin.Update.User',
+            'Admin.Create.Facility',
+            'Admin.Update.Facility',
+            'Admin.Manage.CashierConfig',
+            'Admin.Manage.PharmacyShelves',
+            'Admin.Manage.WarehouseShelves',
+            'Admin.Manage.LabConfig',
+            'Admin.Manage.ServicesConfig',
+            'Admin.Manage.HospitalizationRooms'
+        ]);
+
+        // //debug
+        // console.log('Permissions middleware executed:', {
+        //     user: res.locals.user, 
+        //     // userPermissions: userPermissions,
+        //     isAdmin: res.locals.isAdmin,
+        //     isAppAdmin: res.locals.isAppAdmin
+        // });
+    } else {
+        res.locals.hasPermission = () => false;
+        res.locals.hasAnyPermission = () => false;
+        res.locals.isAdmin = false;
+        res.locals.isAppAdmin = false;7 
+    }
+    // Continue to the next middleware or route handler
+
+    next();
+}
+
+module.exports = permissionsMiddleware;
+
+// File: c:\oseelccare\middleware\registrationValidator.js
+
+// middleware/registrationValidator.js
+const { body, validationResult } = require('express-validator');
+const logActivity = require('../utils/activityLogger');
+const { User, care_user_roles, care_facilities, care_department, care_person } = require('../models');
+
+const renderErrorPage = async (req, res, errors) => {
+  const [roles, facilities, departments] = await Promise.all([
+    care_user_roles.findAll(),
+    care_facilities.findAll({ order: [['name', 'ASC']] }),
+    care_department.findAll({ where: { is_inactive: false }, order: [['name_formal', 'ASC']] })
+  ]);
+
+  try {
+    const lognote = `Admin '${req.user.username}' failed to create user '${req.body.username}': ${errors.join(', ')}`;
+    await logActivity(req, lognote, false, '/admin/users/create');
+  } catch (logError) {
+    console.error('Failed to log failed registration attempt:', logError);
+  }
+
+  return res.render('users/register', {
+    title: 'Register User',
+    roles,
+    facilities,
+    departments,
+    care_person: [], // Pass an empty array as the frontend handles the search
+    success: false,
+    errors,
+    user: req.user,
+    activePage: 'admin-users-create'
+  });
+};
+
+const registrationValidator = [
+  body('username')
+    .trim()
+    .escape()
+    .notEmpty().withMessage('Username is required.')
+    .isLength({ min: 4, max: 255 }).withMessage('Username must be between 4 and 255 characters.')
+    .isAlphanumeric().withMessage('Username must be alphanumeric.')
+    .custom(async (value) => {
+      const existingUser = await User.findOne({ where: { username: value } });
+      if (existingUser) {
+        throw new Error('Username already exists.');
+      }
+    }),
+
+  body('password')
+    .notEmpty().withMessage('Password is required.')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
+
+  body('role_id')
+    .escape()
+    .notEmpty().withMessage('Role is required.')
+    .isInt().withMessage('Invalid role ID.'),
+
+  body('person_id')
+    .escape()
+    .notEmpty().withMessage('Personnel is required.')
+    .isInt().withMessage('Invalid personnel ID.')
+    .custom(async (value) => {
+      const person = await care_person.findByPk(value);
+      if (!person) {
+        throw new Error('Selected personnel not found.');
+      }
+    }),
+
+  body('facility_id')
+    .escape()
+    .notEmpty().withMessage('Facility is required.')
+    .isInt().withMessage('Invalid facility ID.')
+    .custom(async (value) => {
+      const facility = await care_facilities.findByPk(value);
+      if (!facility) {
+        throw new Error('Selected facility not found.');
+      }
+    }),
+
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const errorMessages = errors.array().map(e => e.msg);
+      return renderErrorPage(req, res, errorMessages);
+    }
+    
+    next();
+  }
+];
+
+module.exports = registrationValidator;
+
+
+
+// File: c:\oseelccare\middleware\userUpdateValidator.js
+// middleware/userUpdateValidator.js
+const { body, validationResult } = require('express-validator');
+const logActivity = require('../utils/activityLogger');
+const { User, care_user_roles, care_department, care_facilities, care_staff } = require('../models');
+
+const renderErrorPage = async (req, res, errors) => {
+  const users = await User.findAll({
+    order: [['username', 'ASC']],
+    include: [{ model: care_user_roles, as: 'userRole' }]
+  });
+  const roles = await care_user_roles.findAll();
+  const departments = await care_department.findAll({ where: { is_inactive: false } });
+  const facilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+  const userToEdit = await User.findByPk(req.body.user_id);
+  
+  // Log the failed update attempt
+  const lognote = `Admin '${req.user.username}' failed to update user '${req.body.username}': ${errors.join(', ')}`;
+  await logActivity(req, lognote, false, '/admin/users/update/edit');
+
+  return res.render('users/updateUser', {
+    title: 'Update Account',
+    users,
+    userToEdit,
+    roles,
+    departments,
+    facilities,
+    errors,
+    success: false,
+    user: req.user,
+    activePage: 'admin-update-user'
+  });
+};
+
+const userUpdateValidator = [
+  body('user_id')
+    .escape()
+    .notEmpty().withMessage('User ID is required.')
+    .isInt().withMessage('Invalid user ID.'),
+    
+  body('username')
+    .trim()
+    .escape()
+    .notEmpty().withMessage('Username is required.'),
+
+  body('email')
+    .trim()
+    .escape()
+    .optional({ checkFalsy: true })
+    .isEmail().withMessage('Invalid email address.'),
+    
+  body('password')
+    .optional({ checkFalsy: true })
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
+    
+  body('role_id')
+    .escape()
+    .notEmpty().withMessage('Role is required.'),
+    
+  body('dept_nr')
+    .escape()
+    .optional({ checkFalsy: true }),
+
+  body('facility_id')
+    .escape()
+    .notEmpty().withMessage('Facility is required.'),
+
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const errorMessages = errors.array().map(e => e.msg);
+      return renderErrorPage(req, res, errorMessages);
+    }
+    next();
+  }
+];
+
+module.exports = userUpdateValidator;
+
+// File: c:\oseelccare\models\care_accesslog.js
+// models/care_accesslog.js
+module.exports = (sequelize, DataTypes) => {
+  return sequelize.define('care_accesslog', {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    datetime: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+    ip: {
+      type: DataTypes.STRING(45),
+      allowNull: false,
+    },
+    lognote: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    userid: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    username: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    thisfile: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    fileforward: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    login_success: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+  }, {
+    tableName: 'care_accesslog',
+    timestamps: false,
+  });
+};
+
+
+// File: c:\oseelccare\models\care_department.js
+module.exports = (sequelize, DataTypes) => {
+  const care_department = sequelize.define('care_department', {
+    nr: {
+      type: DataTypes.MEDIUMINT.UNSIGNED,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    id: {
+      type: DataTypes.STRING(60),
+      allowNull: false,
+    },
+    type: {
+      type: DataTypes.STRING(25),
+      allowNull: false,
+    },
+    name_formal: {
+      type: DataTypes.STRING(60),
+      allowNull: false,
+    },
+    name_short: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    name_alternate: {
+      type: DataTypes.STRING(225),
+      allowNull: true,
+    },
+    LD_var: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    admit_inpatient: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    admit_outpatient: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    has_oncall_doc: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    has_oncall_nurse: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    does_surgery: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    this_institution: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    is_sub_dept: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    parent_dept_nr: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      defaultValue: 0,
+    },
+    work_hours: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    consult_hours: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    is_inactive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    sort_order: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      defaultValue: 0,
+    },
+    address: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    sig_line: {
+      type: DataTypes.STRING(60),
+      allowNull: true,
+    },
+    sig_stamp: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    logo_mime_type: {
+      type: DataTypes.STRING(5),
+      allowNull: true,
+    },
+    status: {
+      type: DataTypes.STRING(25),
+      allowNull: false,
+    },
+    history: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    modify_id: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    modify_time: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    create_id: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    create_time: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    is_pharmacy: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+    },
+    pharma_dept_nr: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      defaultValue: 0,
+    },
+  }, {
+    tableName: 'care_department',
+    timestamps: false,
+  });
+
+    // FIXED: Added the associate method to handle relationships
+  care_department.associate = (models) => {
+    // A care_department can have many Users
+    care_department.hasMany(models.User, {
+      foreignKey: 'dept_nr',
+      sourceKey: 'nr', // Add sourceKey to explicitly link to the primary key of this model
+      as: 'users',
+    });
+
+    // A care_department can have many care_staff members
+    care_department.hasMany(models.care_staff, {
+      foreignKey: 'dept_nr',
+      sourceKey: 'nr', // Add sourceKey to explicitly link to the primary key of this model
+      as: 'staff_members',
+    });
+  };
+  
+  return care_department;
+};
+
+
+// File: c:\oseelccare\models\care_facilities.js
+module.exports = (sequelize, DataTypes) => {
+  const care_facilities = sequelize.define('care_facilities', {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    name: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    code: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      unique: true,
+    },
+    type: {
+      type: DataTypes.ENUM('Hospital', 'Health Center', 'Clinic'),
+      allowNull: false,
+    },
+    parent_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    director_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    head_nurse_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    finance_officer_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    address: DataTypes.TEXT,
+    city: DataTypes.STRING(100),
+    region: DataTypes.STRING(100),
+    country: {
+      type: DataTypes.STRING(100),
+      defaultValue: 'Cameroon',
+    },
+    latitude: DataTypes.DECIMAL(10, 8),
+    longitude: DataTypes.DECIMAL(11, 8),
+    created_at: {
+      type: DataTypes.DATE(3),
+      defaultValue: DataTypes.NOW,
+    },
+    updated_at: {
+      type: DataTypes.DATE(3),
+      defaultValue: DataTypes.NOW,
+    },
+  }, {
+    tableName: 'care_facilities',
+    timestamps: false,
+    underscored: true,
+  });
+
+  care_facilities.associate = (models) => {
+    care_facilities.belongsTo(models.care_facilities, {
+      foreignKey: 'parent_id',
+      as: 'parentFacility',
+    });
+
+    care_facilities.hasMany(models.care_staff, {
+      foreignKey: 'facility_id',
+      as: 'staff',
+    });
+    
+    care_facilities.belongsTo(models.care_staff, {
+      foreignKey: 'director_id',
+      targetKey: 'nr',
+      as: 'director',
+    });
+    care_facilities.belongsTo(models.care_staff, {
+      foreignKey: 'head_nurse_id',
+      targetKey: 'nr',
+      as: 'headNurse',
+    });
+    care_facilities.belongsTo(models.care_staff, {
+      foreignKey: 'finance_officer_id',
+      targetKey: 'nr',
+      as: 'financeOfficer',
+    });
+
+    care_facilities.hasMany(models.User, {
+      foreignKey: 'facility_id',
+      as: 'users',
+    });
+  };
+
+  return care_facilities;
+};
+
+// File: c:\oseelccare\models\care_person.js
+
+module.exports = (sequelize, DataTypes) => {
+  const care_person = sequelize.define('care_person', {
+    pid: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    hospital_file_nr: DataTypes.STRING(50),
+    date_reg: DataTypes.DATE,
+    name_first: DataTypes.STRING(60),
+    name_2: DataTypes.STRING(60),
+    name_3: DataTypes.STRING(60),
+    name_middle: DataTypes.STRING(60),
+    name_last: DataTypes.STRING(60),
+    name_maiden: DataTypes.STRING(60),
+    name_others: DataTypes.TEXT,
+    date_birth: DataTypes.DATEONLY,
+    blood_group: DataTypes.STRING(2),
+    addr_str: DataTypes.STRING(60),
+    addr_str_nr: DataTypes.STRING(10),
+    addr_zip: DataTypes.STRING(15),
+    addr_citytown_nr: DataTypes.INTEGER.UNSIGNED,
+    addr_is_valid: DataTypes.TINYINT,
+    citizenship: DataTypes.STRING(35),
+    phone_1_code: DataTypes.STRING(15),
+    phone_1_nr: DataTypes.STRING(35),
+    phone_2_code: DataTypes.STRING(15),
+    phone_2_nr: DataTypes.STRING(35),
+    cellphone_1_nr: DataTypes.STRING(35),
+    cellphone_2_nr: DataTypes.STRING(35),
+    fax: DataTypes.STRING(35),
+    email: DataTypes.STRING(60),
+    civil_status: DataTypes.STRING(35),
+    sex: DataTypes.STRING(1),
+    title: DataTypes.STRING(25),
+    photo: DataTypes.BLOB,
+    photo_filename: DataTypes.STRING(60),
+    ethnic_orig: DataTypes.INTEGER.UNSIGNED,
+    org_id: DataTypes.STRING(60),
+    sss_nr: DataTypes.STRING(60),
+    nat_id_nr: DataTypes.STRING(60),
+    religion: DataTypes.STRING(125),
+    mother_pid: DataTypes.INTEGER.UNSIGNED,
+    father_pid: DataTypes.INTEGER.UNSIGNED,
+    contact_person: DataTypes.STRING(255),
+    contact_pid: DataTypes.INTEGER.UNSIGNED,
+    contact_relation: DataTypes.STRING(25),
+    death_date: DataTypes.DATEONLY,
+    death_encounter_nr: DataTypes.INTEGER.UNSIGNED,
+    death_cause: DataTypes.STRING(255),
+    death_cause_code: DataTypes.STRING(15),
+    date_update: DataTypes.DATE,
+    status: DataTypes.STRING(20),
+    history: DataTypes.TEXT,
+    modify_id: DataTypes.STRING(35),
+    modify_time: DataTypes.DATE,
+    create_id: DataTypes.STRING(35),
+    create_time: DataTypes.DATE,
+    relative_name_first: DataTypes.STRING(60),
+    relative_name_last: DataTypes.STRING(60),
+    relative_phone: DataTypes.STRING(35)
+  }, {
+    tableName: 'care_person',
+    timestamps: false
+  });
+
+  return care_person;
+};
+
+
+// File: c:\oseelccare\models\care_staff.js
+// models/care_staff.js
+module.exports = (sequelize, DataTypes) => {
+    const care_staff = sequelize.define('care_staff', {
+        nr: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        short_id: {
+            type: DataTypes.STRING(10),
+            allowNull: true,
+        },
+        pid: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            allowNull: false,
+            // The `primaryKey: true` in the DB schema is for a composite key,
+            // but for Sequelize, we primarily use `nr` as the main key.
+            // The `pid` is better defined as a foreign key with a unique constraint.
+            unique: true, 
+        },
+        job_type_nr: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0,
+        },
+        facility_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true, // Based on ON DELETE SET NULL constraint
+        },
+        dept_nr: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            allowNull: true, // Based on ON DELETE SET NULL constraint
+        },
+        // The following fields were missing and have been added
+        job_function_title: {
+            type: DataTypes.STRING(60),
+            allowNull: true,
+        },
+        date_join: {
+            type: DataTypes.DATEONLY,
+            allowNull: true,
+        },
+        // ... include any other missing fields here
+        status: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+        },
+        // etc.
+    }, {
+        tableName: 'care_staff',
+        timestamps: false,
+    });
+
+    care_staff.associate = (models) => {
+        care_staff.belongsTo(models.care_person, {
+            foreignKey: 'pid',
+            targetKey: 'pid',
+            as: 'person',
+        });
+
+        care_staff.belongsTo(models.care_facilities, {
+            foreignKey: 'facility_id',
+            targetKey: 'id',
+            as: 'facility',
+        });
+        
+        care_staff.belongsTo(models.care_department, {
+            foreignKey: 'dept_nr',
+            targetKey: 'nr',
+            as: 'department',
+        });
+    };
+
+    return care_staff;
+};
+
+
+
+// File: c:\oseelccare\models\care_user_roles.js
+module.exports = (sequelize, DataTypes) => {
+  const care_user_roles = sequelize.define('care_user_roles', {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+      comment: 'Unique identifier for each role',
+    },
+    role_name: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      defaultValue: 'no_name',
+      unique: true, // This maps to the UNIQUE KEY `role_name` in your schema
+      comment: 'Name of the role (e.g., admin, doctor)',
+    },
+    permission: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Permissions for the role (e.g., JSON or comma-separated list)',
+    },
+    history: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Optional change history or notes',
+    },
+    modify_id: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+      comment: 'User ID who last modified the role',
+    },
+    modify_time: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      comment: 'Last modification timestamp',
+    },
+    create_id: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+      comment: 'User ID who created the role',
+    },
+    create_time: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      comment: 'Creation timestamp',
+    },
+  }, {
+    tableName: 'care_users_roles',
+    timestamps: false, // We're handling these columns manually with create_time/modify_time
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_0900_ai_ci',
+  });
+
+  return care_user_roles;
+};
+
+// File: c:\oseelccare\models\index.js
+// models/index.js
+const { Sequelize, DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
+const path = require('path');
+const fs = require('fs');
+
+const db = {};
+db.Sequelize = Sequelize;
+db.sequelize = sequelize;
+
+// Dynamically load all model files in this directory
+const modelDir = __dirname;
+fs.readdirSync(modelDir)
+  .filter(file => (file.indexOf('.') !== 0) && (file !== path.basename(__filename)) && (file.slice(-3) === '.js'))
+  .forEach(file => {
+    const model = require(path.join(modelDir, file))(sequelize, DataTypes);
+    db[model.name] = model;
+  });
+
+// Call associate() on all models that define it
+Object.keys(db).forEach(modelName => {
+  if (db[modelName].associate) {
+    db[modelName].associate(db);
+  }
+});
+
+module.exports = db;
+
+// File: c:\oseelccare\models\user.js
+// models/user.js
+module.exports = (sequelize, DataTypes) => {
+  const User = sequelize.define('User', {
+    user_id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      primaryKey: true,
+      autoIncrement: true,
+      allowNull: false
+    },
+    username: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true
+    },
+    email: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
+    password_hash: {
+      type: DataTypes.STRING(255),
+      allowNull: false
+    },
+    role_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    dept_nr: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    staff_nr: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    facility_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    created_by: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    last_login: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true // FIXED: Changed default value to true
+    }
+  }, {
+    tableName: 'care_users',
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at'
+  });
+
+  User.associate = (models) => {
+    User.belongsTo(models.care_user_roles, {
+      foreignKey: 'role_id',
+      as: 'userRole'
+    });
+
+    // FIXED: Added targetKey for a robust association
+    User.belongsTo(models.care_department, {
+      foreignKey: 'dept_nr',
+      targetKey: 'nr',
+      as: 'department'
+    });
+
+    User.belongsTo(models.care_staff, {
+      foreignKey: 'staff_nr',
+      as: 'staff'
+    });
+
+    User.belongsTo(models.care_facilities, {
+      foreignKey: 'facility_id',
+      as: 'facility'
+    });
+
+        // Add this association to link User to care_person
+    User.belongsTo(models.care_person, {
+      foreignKey: 'pid',      // The foreign key in the 'care_users' table
+      targetKey: 'pid',     // The primary key in the 'care_person' table
+      as: 'personData'      // The alias used in authMiddleware.js
+    });
+    
+  };
+
+  return User;
+};

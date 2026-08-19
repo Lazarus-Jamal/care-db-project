@@ -1,0 +1,330 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card         { background: #fff !important; }
+  .stat-card    { border-radius: .5rem; padding: 18px 20px; }
+  .stat-icon    { font-size: 2rem; opacity: .18; }
+  .stat-val     { font-size: 2rem; font-weight: 700; line-height: 1; }
+  .stat-lbl     { font-size: .72rem; text-transform: uppercase;
+                  letter-spacing: .06em; color: #6c757d; margin-top: 4px; }
+  .low-badge    { font-size: .62rem; }
+  .table-xs td, .table-xs th { padding: 5px 8px; font-size: .80rem; }
+  .status-draft     { border-left: 3px solid #6c757d; }
+  .status-low       { border-left: 3px solid #dc3545; }
+  .expiry-warn      { background: #fff9e6; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <%/* ── Stock lock warning ── */%>
+  <% if (typeof stockLocked !== "undefined" && stockLocked) { %>
+    <div class="alert alert-warning py-2 mb-3 d-flex align-items-center gap-2" style="font-size:.82rem;">
+      <i class="fas fa-lock text-warning fa-lg"></i>
+      <span>
+        <strong><%= locale==="fr"?"Mouvements de stock verrouillés":"Stock movements locked" %></strong>
+        &mdash;
+        <%= locale==="fr"?"Inventaire en cours:":"Active inventory count:" %>
+        <a href="/warehouse/inventory-counts" class="fw-bold"><%= stockLocked %></a>.
+        <%= locale==="fr"?"Les réceptions et livraisons sont suspendues jusqu\"a approbation.":"Receiving and issuing are suspended until the count is approved." %>
+      </span>
+    </div>
+  <% } %>
+
+  <%/* ── Page header ── */%>
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-warehouse me-2 text-primary"></i>
+        <%= locale==="fr" ? "Tableau de bord — Entrepôt" : "Warehouse Dashboard" %>
+      </h5>
+      <small class="text-muted">
+        <%= locale==="fr" ? "Vue d\"ensemble du stock et des opérations" : "Stock overview and operations" %>
+      </small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+        <a href="/warehouse/products/new" class="btn btn-sm btn-success">
+          <i class="fas fa-plus me-1"></i>
+          <%= locale==="fr" ? "Nouveau produit" : "New Product" %>
+        </a>
+        <a href="/warehouse/suppliers/new" class="btn btn-sm btn-outline-primary">
+          <i class="fas fa-truck me-1"></i>
+          <%= locale==="fr" ? "Nouveau fournisseur" : "New Supplier" %>
+        </a>
+      <% } %>
+    </div>
+  </div>
+
+  <%/* ── Stat cards ── */%>
+  <div class="row g-3 mb-4">
+
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="stat-card d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-val text-primary"><%= products %></div>
+            <div class="stat-lbl"><%= locale==="fr" ? "Produits actifs" : "Active Products" %></div>
+          </div>
+          <i class="fas fa-boxes stat-icon text-primary"></i>
+        </div>
+        <div class="card-footer py-1 border-0" style="background:rgba(13,110,253,.06);">
+          <a href="/warehouse/products" style="font-size:.72rem;">
+            <%= locale==="fr" ? "Voir le catalogue →" : "View catalogue →" %>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="stat-card d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-val text-danger"><%= lowStockProducts.length %></div>
+            <div class="stat-lbl"><%= locale==="fr" ? "Stock bas (sous seuil)" : "Low Stock (below reorder)" %></div>
+          </div>
+          <i class="fas fa-exclamation-triangle stat-icon text-danger"></i>
+        </div>
+        <div class="card-footer py-1 border-0" style="background:rgba(220,53,69,.06);">
+          <a href="/warehouse/products?low_stock=1" style="font-size:.72rem;color:#dc3545;">
+            <%= locale==="fr" ? "Voir les alertes →" : "View alerts →" %>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="stat-card d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-val text-warning"><%= pendingPOs %></div>
+            <div class="stat-lbl"><%= locale==="fr" ? "Commandes en cours" : "Purchase Orders Active" %></div>
+          </div>
+          <i class="fas fa-file-invoice stat-icon text-warning"></i>
+        </div>
+        <div class="card-footer py-1 border-0" style="background:rgba(255,193,7,.06);">
+          <a href="/warehouse/purchase-orders" style="font-size:.72rem;">
+            <%= locale==="fr" ? "Voir les commandes →" : "View orders →" %>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="stat-card d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-val text-info"><%= typeof pendingDeliveries !== "undefined" ? pendingDeliveries : 0 %></div>
+            <div class="stat-lbl"><%= locale==="fr" ? "Livraisons att. QC" : "Deliveries Pending QC" %></div>
+          </div>
+          <i class="fas fa-truck-loading stat-icon text-info"></i>
+        </div>
+        <div class="card-footer py-1 border-0" style="background:rgba(13,202,240,.06);">
+          <a href="/warehouse/deliveries" style="font-size:.72rem;">
+            <%= locale==="fr" ? "Voir les livraisons →" : "View deliveries →" %>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="stat-card d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-val text-primary"><%= typeof pendingRfqs !== "undefined" ? pendingRfqs : 0 %></div>
+            <div class="stat-lbl"><%= locale==="fr" ? "RFQs en cours" : "Active RFQs" %></div>
+          </div>
+          <i class="fas fa-file-alt stat-icon text-primary"></i>
+        </div>
+        <div class="card-footer py-1 border-0" style="background:rgba(13,110,253,.06);">
+          <a href="/warehouse/rfq" style="font-size:.72rem;">
+            <%= locale==="fr" ? "Voir les RFQs →" : "View RFQs →" %>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="stat-card d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stat-val text-success"><%= suppliers %></div>
+            <div class="stat-lbl"><%= locale==="fr" ? "Fournisseurs actifs" : "Active Suppliers" %></div>
+          </div>
+          <i class="fas fa-truck stat-icon text-success"></i>
+        </div>
+        <div class="card-footer py-1 border-0" style="background:rgba(25,135,84,.06);">
+          <a href="/warehouse/suppliers" style="font-size:.72rem;">
+            <%= locale==="fr" ? "Gérer les fournisseurs →" : "Manage suppliers →" %>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="row g-3">
+
+    <%/* ── Low stock alert table ── */%>
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.88rem;">
+            <i class="fas fa-exclamation-circle me-2 text-danger"></i>
+            <%= locale==="fr" ? "Alertes stock bas" : "Low Stock Alerts" %>
+          </span>
+          <% if (lowStockProducts.length > 0) { %>
+            <span class="badge bg-danger"><%= lowStockProducts.length %></span>
+          <% } %>
+        </div>
+        <div class="card-body p-0">
+          <% if (lowStockProducts.length === 0) { %>
+            <div class="text-center text-muted py-4" style="font-size:.82rem;">
+              <i class="fas fa-check-circle fa-lg d-block mb-1 text-success opacity-50"></i>
+              <%= locale==="fr" ? "Tous les stocks sont au-dessus du seuil." : "All stock levels are above reorder threshold." %>
+            </div>
+          <% } else { %>
+            <div style="max-height:360px;overflow-y:auto;">
+              <table class="table table-xs table-hover mb-0 align-middle">
+                <thead class="table-dark" style="font-size:.72rem;">
+                  <tr>
+                    <th><%= locale==="fr" ? "Produit" : "Product" %></th>
+                    <th class="text-center"><%= locale==="fr" ? "Stock" : "Stock" %></th>
+                    <th class="text-center"><%= locale==="fr" ? "Seuil" : "Reorder" %></th>
+                    <th class="text-center"><%= locale==="fr" ? "Catégorie" : "Category" %></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% lowStockProducts.forEach(function(p) { %>
+                    <tr class="status-low">
+                      <td>
+                        <div class="fw-bold" style="font-size:.80rem;"><%= p.name %></div>
+                        <div class="text-muted" style="font-size:.68rem;"><%= p.item_code %></div>
+                      </td>
+                      <td class="text-center">
+                        <span class="badge bg-danger"><%= p.current_stock %></span>
+                      </td>
+                      <td class="text-center text-muted" style="font-size:.78rem;">
+                        <%= p.reorder_level %>
+                      </td>
+                      <td class="text-center">
+                        <% if (p.category) { %>
+                          <span class="badge bg-light text-dark border" style="font-size:.60rem;">
+                            <%= p.category.name %>
+                          </span>
+                        <% } %>
+                      </td>
+                      <td>
+                        <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+                          <a href="/warehouse/purchase-orders/new?product_id=<%= p.product_id %>"
+                            class="btn btn-xs btn-outline-warning"
+                            style="font-size:.62rem;padding:2px 6px;"
+                            title="<%= locale==="fr" ? "Commander" : "Create PO" %>">
+                            <i class="fas fa-cart-plus"></i>
+                          </a>
+                        <% } %>
+                      </td>
+                    </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <%/* ── Expiry alert + quick links ── */%>
+    <div class="col-lg-5">
+
+      <%/* Expiring within 90 days */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2">
+          <span class="fw-bold" style="font-size:.88rem;">
+            <i class="fas fa-calendar-times me-2 text-warning"></i>
+            <%= locale==="fr" ? "Péremptions à venir (90 jours)" : "Expiring Soon (90 days)" %>
+          </span>
+        </div>
+        <div class="card-body py-2">
+          <% if (expiring === 0) { %>
+            <p class="text-muted mb-0" style="font-size:.82rem;">
+              <i class="fas fa-check-circle text-success me-1"></i>
+              <%= locale==="fr" ? "Aucun article n\"expire dans les 90 prochains jours." : "No items expiring within 90 days." %>
+            </p>
+          <% } else { %>
+            <div class="d-flex align-items-center gap-3">
+              <div class="text-warning fw-bold" style="font-size:2.2rem;"><%= expiring %></div>
+              <div>
+                <div style="font-size:.80rem;">
+                  <%= locale==="fr" ? "lot(s) de stock expirent dans 90 jours." : "stock batch(es) expiring within 90 days." %>
+                </div>
+                <a href="/warehouse/reports/expiry" class="text-warning" style="font-size:.72rem;">
+                  <%= locale==="fr" ? "Voir le rapport →" : "View expiry report →" %>
+                </a>
+              </div>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <%/* Quick navigation */%>
+      <div class="card shadow-sm">
+        <div class="card-header py-2">
+          <span class="fw-bold" style="font-size:.88rem;">
+            <i class="fas fa-compass me-2 text-primary"></i>
+            <%= locale==="fr" ? "Navigation rapide" : "Quick Navigation" %>
+          </span>
+        </div>
+        <div class="list-group list-group-flush" style="font-size:.82rem;">
+          <a href="/warehouse/products" class="list-group-item list-group-item-action">
+            <i class="fas fa-boxes me-2 text-primary"></i>
+            <%= locale==="fr" ? "Catalogue produits" : "Product Catalogue" %>
+          </a>
+          <a href="/warehouse/suppliers" class="list-group-item list-group-item-action">
+            <i class="fas fa-truck me-2 text-success"></i>
+            <%= locale==="fr" ? "Fournisseurs" : "Suppliers" %>
+          </a>
+          <a href="/warehouse/purchase-orders" class="list-group-item list-group-item-action">
+            <i class="fas fa-file-invoice me-2 text-warning"></i>
+            <%= locale==="fr" ? "Commandes fournisseurs" : "Purchase Orders" %>
+          </a>
+          <a href="/warehouse/stock" class="list-group-item list-group-item-action">
+            <i class="fas fa-layer-group me-2 text-info"></i>
+            <%= locale==="fr" ? "Etat du stock" : "Stock Status" %>
+          </a>
+          <a href="/warehouse/locations" class="list-group-item list-group-item-action">
+            <i class="fas fa-map-marker-alt me-2 text-secondary"></i>
+            <%= locale==="fr" ? "Allées et étagères" : "Aisles & Shelves" %>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</div>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

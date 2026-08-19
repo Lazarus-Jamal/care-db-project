@@ -1,0 +1,316 @@
+// File: c:\Users\Public\Projects\care-db-project\routes\admin.js
+// routes/admin.js
+const express = require('express');
+const router = express.Router();
+const authMiddleware = require('../middleware/authMiddleware');
+const registrationValidator = require('../middleware/registrationValidator');
+const isAdmin = require('../middleware/isAdminMiddleware');
+const authController = require('../controllers/authController');
+const updateUserRoutes = require('./updateUser');
+const logActivity = require('../utils/activityLogger');
+const facilityValidator = require('../middleware/facilityValidator');
+const staffController = require('../controllers/staffController');
+const adminFacilityController = require('../controllers/adminFacilityController');
+const userController = require('../controllers/userController');
+
+
+const { care_user_roles, care_department, care_staff, care_person, care_facilities } = require('../models');
+
+// GET: User registration form (Admin only)
+router.get('/users/create', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    const roles = await care_user_roles.findAll({ order: [['role_name', 'ASC']] });
+    const facilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+    const departments = await care_department.findAll({
+      where: { is_inactive: false },
+      order: [['name_formal', 'ASC']],
+    });
+    
+    // // Fetch all persons, including those already linked to staff records
+    // const care_personnel = await care_person.findAll({
+    //   order: [['name_last', 'ASC'], ['name_first', 'ASC']],
+    //   attributes: ['pid', 'name_first', 'name_last', 'email'], // Ensure email is fetched here
+    // });
+
+    res.render('users/register', {
+      title: 'Register User',
+      user: req.user,
+      roles,
+      facilities,
+      departments,
+      care_person: [], //care_personnel, // Pass the list of all personnel
+      success: req.query.success,
+      errors: [],
+      activePage: 'admin-users-create',
+    });
+  } catch (error) {
+    console.error('Error loading registration form:', error);
+    res.status(500).send('Failed to load registration form.');
+  }
+});
+
+//This route is called by the javascript to get a filtered list of personnel
+router.get('/users/personnel-search', authMiddleware, isAdmin, staffController.listPersonnel);
+
+// GET: User management page (Admin only)
+router.get('/users/user-search', authMiddleware, isAdmin, userController.searchUsers);
+
+//Registration validation middleware
+router.post('/users/create', authMiddleware, isAdmin, registrationValidator, authController.register);
+
+// The corrected line to apply isAdmin middleware to all updateUserRoutes
+router.use('/users/update', authMiddleware, isAdmin, updateUserRoutes);
+
+// // GET: Search staff by name (Admin only)
+// router.get('/users/staff-search', authMiddleware, isAdmin, userController.searchStaff);
+
+// Logout route
+router.get('/logout', authMiddleware, authController.logout);
+
+// GET: Create Facility Form (Admin only)
+router.get('/facilities/create', authMiddleware, isAdmin, adminFacilityController.getCreateFacilityForm);
+
+// POST: Handle Facility Creation (Admin only)
+router.post('/facilities/create', authMiddleware, isAdmin, facilityValidator, adminFacilityController.createFacility);
+
+// GET: Update Facility Form (Admin only) - corrected route
+router.get('/facilities/update', authMiddleware, isAdmin, adminFacilityController.getUpdateFacilityForm);
+
+// POST: Handle Facility Update (Admin only)
+router.post('/facilities/update', authMiddleware, isAdmin, facilityValidator, adminFacilityController.updateFacility);
+
+// GET: List all facilities
+router.get('/facilities', authMiddleware, isAdmin, adminFacilityController.getFacilitiesManagement);
+
+module.exports = router;
+
+// File: c:\Users\Public\Projects\care-db-project\routes\auth.js
+// routes/auth.js
+const express = require('express');
+const router = express.Router();
+const authController = require('../controllers/authController');
+const authMiddleware = require('../middleware/authMiddleware'); // This will be the new session-based middleware
+
+// GET: Page de connexion
+// La récupération des établissements se fait maintenant via AJAX
+router.get('/login', (req, res) => {
+    res.render('auth/login', {
+        title: 'Connexion',
+        user: null,
+        activePage: 'login',
+        csrfToken: req.csrfToken(), // Add CSRF token for the GET request
+    });
+});
+
+// GET: Route pour obtenir l'heure du serveur
+router.get('/server-time', authController.getServerTime);
+
+// POST: Gérer la connexion
+router.post('/login', authController.login);
+
+// GET: Déconnexion (route protégée)
+// We use the new session-based authMiddleware here
+router.get('/logout', authMiddleware, authController.logout);
+
+// Endpoint pour obtenir l'établissement et le rôle de l'utilisateur
+router.post('/get-user-facility-and-role', authController.getUserFacilityAndRole);
+
+module.exports = router;
+
+
+// File: c:\Users\Public\Projects\care-db-project\routes\logs.js
+const express = require('express');
+const router = express.Router();
+const { Op } = require('sequelize');
+const { care_accesslog } = require('../models');
+const authMiddleware = require('../middleware/authMiddleware');
+const isAdmin = require('../middleware/isAdminMiddleware');
+
+// GET: /admin/logs/
+router.get('/', authMiddleware, isAdmin, async (req, res) => {
+  const { username, from, to, success } = req.query;
+
+  const where = {};
+
+  if (username) {
+    where.username = { [Op.like]: `%${username}%` };
+  }
+
+  if (from || to) {
+    where.datetime = {};
+    if (from) where.datetime[Op.gte] = new Date(from);
+    if (to) where.datetime[Op.lte] = new Date(to);
+  }
+
+  if (success === '1' || success === '0') {
+    where.login_success = success === '1';
+  }
+
+  try {
+    const logs = await care_accesslog.findAll({
+      where,
+      order: [['datetime', 'DESC']],
+      limit: 100,
+    });
+
+    res.render('admin/logs', {
+      title: 'Access Logs',
+      logs,
+      filters: { username, from, to, success },
+      activePage: 'admin-logs',
+      user: req.user,
+    });
+  } catch (error) {
+    console.error('Error fetching logs:', error);
+    res.status(500).send('Failed to load access logs.');
+  }
+});
+
+module.exports = router;
+
+
+// File: c:\Users\Public\Projects\care-db-project\routes\patient.js
+// routes/patient.js
+const express = require('express');
+const router = express.Router();
+const patientController = require('../controllers/patientController');
+const authMiddleware = require('../middleware/authMiddleware'); // Assuming you want this route protected
+
+// GET: Render the patient registration form
+router.get('/create', authMiddleware, patientController.createPatientForm);
+
+// POST: Handle patient registration form submission
+router.post('/create', authMiddleware, patientController.createPatient);
+
+module.exports = router;
+
+// File: c:\Users\Public\Projects\care-db-project\routes\staff.js
+const express = require('express');
+const router = express.Router();    
+const staffController = require('../controllers/staffController');
+const authMiddleware = require('../middleware/authMiddleware');
+const isAdmin = require('../middleware/isAdminMiddleware');
+const { care_staff, care_person } = require('../models');
+
+// GET: Staff management page
+router.get('/list', staffController.listStaffWithPersonInfo);
+
+module.exports = router;
+
+// File: c:\Users\Public\Projects\care-db-project\routes\test.js
+// routes/test.js
+const express = require('express');
+const router = express.Router();
+const authMiddleware = require('../middleware/authMiddleware');
+
+router.get('/test-auth', authMiddleware, (req, res) => {
+  res.send({
+    message: 'Authenticated user info',
+    user: req.user,
+  });
+});
+
+module.exports = router;
+
+
+// File: c:\Users\Public\Projects\care-db-project\routes\updateUser.js
+// routes/updateUser.js
+const express = require('express');
+const router = express.Router();
+const userController = require('../controllers/userController'); // NEW: Import the user controller
+const userUpdateValidator = require('../middleware/userUpdateValidator'); // NEW: Import the validator
+const { User, care_user_roles, care_department, care_staff, care_person, care_facilities } = require('../models');
+
+// GET: Show update form with user selection dropdown
+router.get('/', async (req, res) => {
+  try {
+    const users = await User.findAll({
+      order: [['username', 'ASC']],
+      include: [
+        { model: care_user_roles, as: 'userRole' },
+        { model: care_staff, as: 'staff', include: [{ model: care_person, as: 'person' }] },
+        { model: care_department, as: 'department' }
+      ]
+    });
+
+    const roles = await care_user_roles.findAll({ order: [['role_name', 'ASC']] });
+    const departments = await care_department.findAll({ where: { is_inactive: false }, order: [['name_formal', 'ASC']] });
+    const facilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+
+    const selectedUserId = req.query.user_id;
+    let userToEdit = null;
+    if (selectedUserId) {
+      userToEdit = await User.findByPk(selectedUserId, {
+        include: [
+          { model: care_user_roles, as: 'userRole' },
+          { model: care_staff, as: 'staff', include: [{ model: care_person, as: 'person' }] },
+          { model: care_department, as: 'department' },
+          { model: care_facilities, as: 'facility' }
+        ]
+      });
+    }
+
+    res.render('users/updateUser', {
+      title: 'Update Account',
+      users,
+      userToEdit,
+      roles,
+      departments,
+      facilities,
+      user: req.user,
+      success: req.query.success,
+      errors: [],
+      activePage: 'admin-update-user'
+    });
+  } catch (error) {
+    console.error('Error loading update form:', error);
+    res.status(500).send('Failed to load update form.');
+  }
+});
+
+// POST: Handle user update
+// UPDATED: Now uses the validator middleware and a dedicated controller
+router.post('/edit', userUpdateValidator, userController.updateUser);
+
+module.exports = router;
+
+
+// File: c:\Users\Public\Projects\care-db-project\utils\activityLogger.js
+// utils/activityLogger.js
+const { care_accesslog } = require('../models');
+
+/**
+ * Logs an activity to the care_accesslog table.
+ * @param {object} req - The Express request object.
+ * @param {string} lognote - A descriptive note of the activity.
+ * @param {boolean} login_success - True for success, false for failure.
+ * @param {string} thisfile - The file/route where the activity occurred.
+ * @param {number|string} [userId] - The user ID to explicitly log (optional).
+ * @param {string} [username] - The username to explicitly log (optional).
+ */
+const logActivity = async (req, lognote, login_success, thisfile, userId, username) => {
+    try {
+        // Use the provided userId and username, or fall back to req.user if they are not provided.
+        const userIdentifier = userId || (req.user ? req.user.user_id : 'unknown');
+        const userDisplayName = username || (req.user ? req.user.username : 'system');
+        const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
+        await care_accesslog.create({
+            datetime: new Date(),
+            ip,
+            lognote,
+            userid: String(userIdentifier), // Ensure it's a string for the DB
+            username: userDisplayName,
+            thisfile,
+            fileforward: req.originalUrl,
+            login_success: login_success ? 1 : 0,
+        });
+    } catch (error) {
+        console.error('Failed to log activity:', error);
+    }
+};
+
+module.exports = logActivity;
+
+
+

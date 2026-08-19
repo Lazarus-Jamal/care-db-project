@@ -1,0 +1,120 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title><%= count.count_number %></title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Arial,sans-serif; font-size:10pt; color:#222; background:#fff; padding:20px 28px; }
+    .header { display:flex; justify-content:space-between; border-bottom:2px solid #222;
+              padding-bottom:12px; margin-bottom:14px; }
+    .hospital { font-size:14pt; font-weight:700; }
+    .doc-ref  { text-align:right; }
+    .doc-num  { font-size:13pt; font-weight:700; }
+    .meta-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; border:1px solid #dee2e6; border-radius:4px; padding:8px 12px; }
+    .meta-item .label { font-size:7.5pt; text-transform:uppercase; color:#888; }
+    .meta-item .value { font-size:10pt; font-weight:600; }
+    table { width:100%; border-collapse:collapse; font-size:9pt; }
+    thead tr { background:#495057; color:#fff; }
+    thead th { padding:6px 8px; text-align:left; }
+    .tc { text-align:center; }
+    tbody tr { border-bottom:1px solid #dee2e6; }
+    tbody tr:nth-child(even) { background:#f8f9fa; }
+    tbody td { padding:5px 8px; }
+    .count-box  { border:1px solid #dee2e6; width:70px; height:22px; display:inline-block; }
+    .footer-note { margin-top:12px; font-size:7.5pt; color:#888; text-align:center; border-top:1px solid #dee2e6; padding-top:6px; }
+    .sign-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:14px; }
+    .sign-box { border:1px solid #dee2e6; border-radius:4px; padding:8px; }
+    .sign-box .title { font-size:8pt; font-weight:700; text-transform:uppercase; color:#888; margin-bottom:18px; }
+    .sign-line { border-top:1px solid #222; padding-top:3px; font-size:7.5pt; color:#888; }
+    @media print { .no-print { display:none !important; } body { padding:0; } }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <div class="hospital"><%= (typeof facility !== "undefined" && facility && facility.name) ? facility.name : "Oseel Care" %></div>
+      <% if (typeof facility !== "undefined" && facility && (facility.address || facility.city)) { %>
+        <div style="font-size:7.5pt;color:#888;margin-top:1px;">
+          <%= [facility.address, facility.city].filter(Boolean).join(", ") %>
+        </div>
+      <% } %>
+      <div style="font-size:8.5pt;color:#666;margin-top:3px;">
+        FICHE DE COMPTAGE D'INVENTAIRE PHARMACIE / PHARMACY PHYSICAL INVENTORY COUNT SHEET
+      </div>
+    </div>
+    <div class="doc-ref">
+      <div class="doc-num"><%= count.count_number %></div>
+      <div style="font-size:8.5pt;color:#666;margin-top:2px;">
+        <%
+          var typeLabels = { cycle_20pct: "Cycle 20%", full: "Complet / Full", year_end: "Fin d'annee / Year-End" };
+        %>
+        <%= typeLabels[count.count_type] || count.count_type %>
+      </div>
+      <div style="font-size:8.5pt;color:#666;">Imprime / Printed: <%= new Date(printDate).toLocaleDateString("fr-FR") %></div>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item"><div class="label">Date inventaire</div><div class="value"><%= new Date(count.count_date).toLocaleDateString("fr-FR") %></div></div>
+    <div class="meta-item"><div class="label">Initie par</div><div class="value"><%= count.initiated_by %></div></div>
+    <div class="meta-item"><div class="label">Nombre articles</div><div class="value"><%= count.items ? count.items.length : 0 %></div></div>
+    <div class="meta-item"><div class="label">Statut</div><div class="value"><%= count.status %></div></div>
+  </div>
+
+  <div style="font-size:8pt;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:6px 10px;margin-bottom:10px;">
+    <strong>Instructions:</strong>
+    Comptez physiquement chaque article et inscrivez la quantite dans la colonne "Quantite comptee".
+    En cas d'ecart, indiquez la raison dans la colonne "Raison".
+    NE PAS CONSULTER les quantites du systeme avant de compter.
+    / Count each item physically and write the quantity in "Counted Qty". Note the reason for any variance. DO NOT check system quantities before counting.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:5%;">#</th>
+        <th style="width:45%;">Designation / Description</th>
+        <th style="width:16%;" class="tc">Qte comptee<br><small style="font-size:7pt;">(a remplir)</small></th>
+        <th style="width:24%;">Raison de l'ecart / Variance reason</th>
+        <th style="width:10%;" class="tc">Compte par</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% count.items.forEach(function(item, idx) {
+        var descr = item.drug ? item.drug.item_description : ("#" + item.item_id);
+      %>
+        <tr>
+          <td><%= idx + 1 %></td>
+          <td><%= descr %></td>
+          <td class="tc">
+            <div class="count-box"></div>
+          </td>
+          <td><div style="min-height:14px;border-bottom:1px dotted #ccc;">&nbsp;</div></td>
+          <td class="tc"><div style="min-height:14px;border-bottom:1px dotted #ccc;">&nbsp;</div></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <div class="sign-row">
+    <div class="sign-box"><div class="title">Compteur 1 / Counter 1</div><div class="sign-line">Nom &nbsp;&nbsp;&nbsp; Date</div></div>
+    <div class="sign-box"><div class="title">Compteur 2 / Counter 2</div><div class="sign-line">Nom &nbsp;&nbsp;&nbsp; Date</div></div>
+    <div class="sign-box"><div class="title">Approuve par / Approved by</div><div class="sign-line">Nom &nbsp;&nbsp;&nbsp; Date</div></div>
+  </div>
+
+  <div class="footer-note">
+    <%= count.count_number %> — Oseel Care HMIS — NE PAS MODIFIER / DO NOT ALTER
+  </div>
+
+  <div class="no-print" style="text-align:center;margin-top:16px;">
+    <button onclick="window.print()" style="padding:8px 24px;font-size:11pt;">Imprimer / Print</button>
+    <button onclick="window.close()" style="padding:8px 16px;font-size:11pt;margin-left:8px;">Fermer / Close</button>
+  </div>
+
+</body>
+</html>
+
+

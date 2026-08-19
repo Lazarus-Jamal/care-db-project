@@ -1,0 +1,199 @@
+
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "pharmacy", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6; padding:10px 14px; text-align:center; }
+  .stat-val { font-size:1.3rem; font-weight:800; line-height:1; }
+  .stat-lbl { font-size:.64rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:3px; }
+  .search-wrap { position:relative; }
+  .search-results { position:absolute; z-index:20; background:#fff; border:1px solid #dee2e6;
+    border-radius:.35rem; width:100%; max-height:280px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,.12); display:none; }
+  .search-result { padding:8px 12px; cursor:pointer; font-size:.82rem; border-bottom:1px solid #f0f0f0; }
+  .search-result:hover { background:#f0f6ff; }
+  .picked-item { display:flex; justify-content:space-between; align-items:center; padding:6px 10px;
+    border-bottom:1px solid #f0f0f0; font-size:.82rem; }
+  #progressBar { height:8px; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:800px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/pharmacy">Pharmacy</a></li>
+      <li class="breadcrumb-item"><a href="/pharmacy/inventory-counts"><%= locale==="fr"?"Inventaires":"Counts" %></a></li>
+      <li class="breadcrumb-item active fw-bold">Cycle 20%</li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <div class="row g-2 mb-3">
+    <div class="col-4">
+      <div class="stat-box">
+        <div class="stat-val" style="color:#0d6efd;"><%= totalEligible %></div>
+        <div class="stat-lbl"><%= locale==="fr"?"Eligibles":"Eligible" %></div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="stat-box">
+        <div class="stat-val" style="color:#6c757d;"><%= excludedCount %></div>
+        <div class="stat-lbl"><%= locale==="fr"?"Exclus (dernier cycle)":"Excluded (last cycle)" %></div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="stat-box">
+        <div class="stat-val" style="color:#198754;"><%= target %></div>
+        <div class="stat-lbl"><%= locale==="fr"?"Cible (20%)":"Target (20%)" %></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="d-flex justify-content-between align-items-center mb-1" style="font-size:.78rem;">
+        <span><%= locale==="fr"?"Progression":"Progress" %>: <strong id="progressText">0 / <%= target %></strong></span>
+      </div>
+      <div class="progress" id="progressBar">
+        <div class="progress-bar" id="progressFill" role="progressbar" style="width:0%;background:#198754;"></div>
+      </div>
+      <p class="text-muted mt-2 mb-0" style="font-size:.72rem;">
+        <%= locale==="fr"
+          ? "La cible est indicative — vous pouvez soumettre avec plus ou moins d'articles si necessaire."
+          : "The target is a guide — you can submit with more or fewer items if needed." %>
+      </p>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <label class="lbl"><%= locale==="fr"?"Rechercher un article a ajouter":"Search for an item to add" %></label>
+      <div class="search-wrap">
+        <input type="text" id="item-search" class="form-control form-control-sm"
+          placeholder="<%= locale==="fr"?"Tapez au moins 2 lettres...":"Type at least 2 letters..." %>" autocomplete="off">
+        <div id="search-results" class="search-results"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-2 fw-bold d-flex justify-content-between align-items-center" style="font-size:.85rem;">
+      <span><i class="fas fa-list me-2 text-primary"></i><%= locale==="fr"?"Articles selectionnes":"Selected Items" %>
+        <span class="badge bg-secondary ms-1" id="pickedCount">0</span>
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <div id="picked-empty" class="text-center text-muted py-4">
+        <%= locale==="fr"?"Aucun article selectionne pour l'instant.":"No items selected yet." %>
+      </div>
+      <div id="picked-list"></div>
+    </div>
+  </div>
+
+  <form method="POST" action="/pharmacy/inventory-counts/new" id="finalForm" class="mt-3">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="count_type" value="cycle_20pct">
+    <input type="hidden" name="count_date" value="<%= countDate %>">
+    <input type="hidden" name="notes" value="<%= notes %>">
+    <div id="hiddenItemIds"></div>
+    <button type="submit" class="btn btn-secondary btn-sm" id="createBtn" disabled>
+      <i class="fas fa-clipboard-check me-1"></i><%= locale==="fr"?"Creer l'inventaire avec ces articles":"Create Count With These Items" %>
+    </button>
+    <a href="/pharmacy/inventory-counts/new" class="btn btn-outline-secondary btn-sm"><%= locale==="fr"?"Annuler":"Cancel" %></a>
+  </form>
+
+</div>
+</div>
+
+<script>
+var _target = <%= target %>;
+var _isFr   = '<%= locale %>' === 'fr';
+var _picked = [];
+var _searchTimer = null;
+
+document.getElementById('item-search').addEventListener('input', function() {
+  clearTimeout(_searchTimer);
+  var q = this.value.trim();
+  if (q.length < 2) { document.getElementById('search-results').style.display = 'none'; return; }
+  _searchTimer = setTimeout(function() { doSearch(q); }, 300);
+});
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.search-wrap')) document.getElementById('search-results').style.display = 'none';
+});
+
+function doSearch(q) {
+  fetch('/pharmacy/inventory-counts/picker/search?q=' + encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var box = document.getElementById('search-results');
+      var available = (data.items || []).filter(function(it){
+        return !_picked.some(function(p){ return p.item_id === it.item_id; });
+      });
+      if (!data.ok || available.length === 0) {
+        box.innerHTML = '<div class="search-result text-muted">' + (_isFr?'Aucun resultat.':'No results.') + '</div>';
+        box.style.display = ''; return;
+      }
+      var html = '';
+      available.forEach(function(it) {
+        html += '<div class="search-result" onclick=\'pickItem(' + JSON.stringify(it).replace(/'/g,"&#39;") + ')\'>' +
+          it.description + '</div>';
+      });
+      box.innerHTML = html;
+      box.style.display = '';
+    });
+}
+
+function pickItem(item) {
+  if (_picked.some(function(p){ return p.item_id === item.item_id; })) return;
+  _picked.push(item);
+  document.getElementById('item-search').value = '';
+  document.getElementById('search-results').style.display = 'none';
+  render();
+}
+
+function removeItem(itemId) {
+  _picked = _picked.filter(function(p){ return p.item_id !== itemId; });
+  render();
+}
+
+function render() {
+  var empty = document.getElementById('picked-empty');
+  var list  = document.getElementById('picked-list');
+  document.getElementById('pickedCount').textContent = _picked.length;
+
+  if (_picked.length === 0) {
+    empty.style.display = '';
+    list.innerHTML = '';
+  } else {
+    empty.style.display = 'none';
+    var html = '';
+    _picked.forEach(function(p) {
+      html += '<div class="picked-item"><span>' + p.description + '</span>' +
+        '<button type="button" class="btn btn-xs btn-outline-danger" onclick="removeItem(' + p.item_id + ')">' +
+        '<i class="fas fa-times"></i></button></div>';
+    });
+    list.innerHTML = html;
+  }
+
+  var pct = _target > 0 ? Math.min(100, Math.round((_picked.length / _target) * 100)) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = _picked.length + ' / ' + _target;
+
+  var hidden = document.getElementById('hiddenItemIds');
+  hidden.innerHTML = _picked.map(function(p) {
+    return '<input type="hidden" name="item_ids" value="' + p.item_id + '">';
+  }).join('');
+
+  document.getElementById('createBtn').disabled = _picked.length === 0;
+}
+</script>
+
+<%- include("../../partials/footer") %>

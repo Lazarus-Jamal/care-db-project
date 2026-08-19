@@ -1,0 +1,451 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .sp { display:inline-block; padding:3px 10px; border-radius:20px; font-size:.68rem; font-weight:700; text-transform:uppercase; }
+  .s-draft{background:#e9ecef;color:#495057} .s-pending_manager{background:#fff3cd;color:#856404}
+  .s-approved{background:#d1e7dd;color:#0a3622} .s-sent{background:#cfe2ff;color:#084298}
+  .s-comparing{background:#d0d3f8;color:#1a1f8c} .s-closed{background:#dee2e6;color:#6c757d}
+  .s-cancelled{background:#f8d7da;color:#842029} .s-expired{background:#fde8d8;color:#842029}
+  .quote-cell { min-width:120px; }
+  .best-price { background:#d1e7dd !important; }
+  .selected-row { background:#e8f5e9; }
+  .comparison-table th { white-space:nowrap; }
+  input[type=checkbox].select-cb { width:16px; height:16px; cursor:pointer; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse">Warehouse</a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/rfq">RFQ</a></li>
+      <li class="breadcrumb-item active fw-bold"><%= rfq.rfq_number %></li>
+    </ol>
+  </nav>
+
+  <% if (success === "created") { %>
+    <div class="alert alert-success alert-dismissible py-2 mb-3" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      RFQ <%= rfq.rfq_number %> <%= locale==="fr"?"créée. Soumettez-la pour approbation du manager.":"created. Submit it for manager approval." %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: Info + Actions ── */%>
+    <div class="col-lg-3">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.88rem;"><%= rfq.rfq_number %></span>
+          <%
+            var sLabel={draft:"Draft",pending_manager:locale==="fr"?"Att. Manager":"Pending Mgr",
+              approved:locale==="fr"?"Approuvee":"Approved",sent:locale==="fr"?"Envoyee":"Sent",
+              comparing:locale==="fr"?"Comparaison":"Comparing",closed:locale==="fr"?"Cloturee":"Closed",
+              expired:locale==="fr"?"Expiree":"Expired",cancelled:locale==="fr"?"Annulee":"Cancelled"};
+          %>
+          <span class="sp s-<%= rfq.status %>"><%= sLabel[rfq.status]||rfq.status %></span>
+        </div>
+        <div class="card-body" style="font-size:.82rem;">
+          <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Créé par:":"Created by:" %></span> <strong><%= rfq.created_by %></strong></div>
+          <div class="mb-1"><span class="text-muted">Date:</span> <%= new Date(rfq.create_time).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></div>
+          <% if (rfq.expiry_date) { %>
+            <div class="mb-1">
+              <span class="text-muted"><%= locale==="fr"?"Expiration:":"Expires:" %></span>
+              <strong class="<%= rfq.status==="expired"?"text-danger":"" %>">
+                <%= new Date(rfq.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+              </strong>
+            </div>
+          <% } %>
+          <% if (rfq.approved_by) { %>
+            <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Approuvé par:":"Approved by:" %></span> <%= rfq.approved_by %></div>
+          <% } %>
+          <% if (rfq.notes) { %>
+            <div class="border-top pt-2 mt-2 text-muted" style="font-size:.74rem;"><%= rfq.notes %></div>
+          <% } %>
+        </div>
+      </div>
+
+      <%/* Action buttons */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="font-size:.82rem;"><i class="fas fa-bolt me-2 text-warning"></i>Actions</div>
+        <div class="card-body py-2 d-flex flex-column gap-2">
+
+          <% if (rfq.status === "draft" && typeof hasPermission !== "undefined" && hasPermission("Warehouse.Create.RFQ")) { %>
+            <button class="btn btn-sm btn-primary" onclick="apiAction('submit')">
+              <i class="fas fa-paper-plane me-1"></i><%= locale==="fr"?"Soumettre pour approbation":"Submit for Approval" %>
+            </button>
+          <% } %>
+
+          <% if (rfq.status === "pending_manager" && typeof hasPermission !== "undefined" && hasPermission("Warehouse.Approve.RFQ")) { %>
+            <button class="btn btn-sm btn-success" onclick="apiAction('approve')">
+              <i class="fas fa-check me-1"></i><%= locale==="fr"?"Approuver":"Approve RFQ" %>
+            </button>
+          <% } %>
+
+          <% if (rfq.status === "approved" && typeof hasPermission !== "undefined" && hasPermission("Warehouse.Approve.RFQ")) { %>
+            <button class="btn btn-sm btn-info text-white" onclick="apiAction('send')">
+              <i class="fas fa-paper-plane me-1"></i><%= locale==="fr"?"Marquer comme envoyée":"Mark as Sent" %>
+            </button>
+            <% suppliers.forEach(function(s) { %>
+              <a href="/warehouse/rfq/<%= rfq.rfq_id %>/print/<%= s.supplier_id %>" target="_blank"
+                class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-print me-1"></i><%= locale==="fr"?"Imprimer pour":"Print for" %> <%= s.name %>
+              </a>
+            <% }); %>
+          <% } %>
+
+          <% if (rfq.status === "sent" || rfq.status === "expired") { %>
+            <% suppliers.forEach(function(s) { %>
+              <a href="/warehouse/rfq/<%= rfq.rfq_id %>/print/<%= s.supplier_id %>" target="_blank"
+                class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-print me-1"></i><%= s.name %>
+              </a>
+            <% }); %>
+          <% } %>
+
+          <% if (["sent","comparing","expired"].includes(rfq.status) && typeof hasPermission !== "undefined" && hasPermission("Warehouse.Approve.RFQ")) { %>
+            <button class="btn btn-sm btn-outline-info" onclick="showQuoteEntry()">
+              <i class="fas fa-edit me-1"></i><%= locale==="fr"?"Saisir les réponses":"Enter Quotes" %>
+            </button>
+          <% } %>
+
+          <% if (!["closed","cancelled"].includes(rfq.status)) { %>
+            <button class="btn btn-sm btn-outline-danger" onclick="cancelRfq()">
+              <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Annuler la RFQ":"Cancel RFQ" %>
+            </button>
+          <% } %>
+        </div>
+      </div>
+
+      <%/* Linked POs */%>
+      <% if (rfq.purchaseOrders && rfq.purchaseOrders.length > 0) { %>
+        <div class="card shadow-sm">
+          <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+            <i class="fas fa-file-invoice me-2 text-warning"></i>
+            <%= locale==="fr"?"Bons de commande générés":"Generated Purchase Orders" %>
+          </div>
+          <div class="list-group list-group-flush" style="font-size:.80rem;">
+            <% rfq.purchaseOrders.forEach(function(po) { %>
+              <a href="/warehouse/purchase-orders/<%= po.po_id %>"
+                class="list-group-item list-group-item-action">
+                <div class="fw-bold"><%= po.po_number %></div>
+                <div class="text-muted" style="font-size:.72rem;">
+                  <%= po.supplier ? po.supplier.name : "" %> &bull; <%= po.status %>
+                </div>
+              </a>
+            <% }); %>
+          </div>
+        </div>
+      <% } %>
+    </div>
+
+    <%/* ── RIGHT: Items + Comparison matrix ── */%>
+    <div class="col-lg-9">
+
+      <%/* Items requested */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+          <i class="fas fa-list me-2 text-primary"></i>
+          <%= locale==="fr"?"Produits demandés":"Products Requested" %>
+          <span class="badge bg-secondary ms-1"><%= rfq.items ? rfq.items.length : 0 %></span>
+          <span class="text-muted ms-2" style="font-size:.72rem;">
+            <%= locale==="fr"?"Fournisseurs consultés:":"Suppliers consulted:" %>
+            <strong><%= suppliers.length %></strong>
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th><%= locale==="fr"?"Produit":"Product" %></th>
+                <th class="text-center"><%= locale==="fr"?"Qté demandée":"Qty Requested" %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% rfq.items.forEach(function(item) { %>
+                <tr>
+                  <td>
+                    <div class="fw-bold"><%= item.product ? item.product.name : "#" + item.product_id %></div>
+                    <% if (item.product) { %>
+                      <div class="text-muted" style="font-size:.70rem;"><code><%= item.product.item_code %></code> &bull; <%= item.product.unit_of_measure %></div>
+                    <% } %>
+                  </td>
+                  <td class="text-center"><strong><%= item.quantity_requested %></strong></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <%/* Quote comparison matrix */%>
+      <% if (suppliers.length > 0 && (rfq.status === "comparing" || rfq.status === "closed" || rfq.quotes.some(function(q){ return q.responded_at; }))) { %>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-balance-scale me-2 text-info"></i>
+            <%= locale==="fr"?"Comparaison des offres":"Quote Comparison" %>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-xs table-hover align-middle mb-0 comparison-table">
+                <thead class="table-dark">
+                  <tr>
+                    <th><%= locale==="fr"?"Produit":"Product" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Qté":"Qty" %></th>
+                    <% suppliers.forEach(function(s) { %>
+                      <th class="text-center quote-cell"><%= s.name %></th>
+                    <% }); %>
+                    <% if (rfq.status === "comparing") { %>
+                      <th class="text-center"><%= locale==="fr"?"Sélection":"Select" %></th>
+                    <% } %>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% rfq.items.forEach(function(item) { %>
+                    <%
+                      // Find best (lowest) price for this product
+                      var bestPrice = Infinity;
+                      suppliers.forEach(function(s) {
+                        var q = quoteMap[s.supplier_id] && quoteMap[s.supplier_id][item.product_id];
+                        if (q && q.responded_at && q.unit_price > 0 && q.quantity_available > 0) {
+                          if (parseFloat(q.unit_price) < bestPrice) bestPrice = parseFloat(q.unit_price);
+                        }
+                      });
+                    %>
+                    <tr>
+                      <td>
+                        <div class="fw-bold" style="font-size:.80rem;"><%= item.product ? item.product.name : "#" + item.product_id %></div>
+                        <% if (item.product) { %><div class="text-muted" style="font-size:.68rem;"><code><%= item.product.item_code %></code></div><% } %>
+                      </td>
+                      <td class="text-center"><%= item.quantity_requested %></td>
+                      <% suppliers.forEach(function(s) { %>
+                        <%
+                          var q = quoteMap[s.supplier_id] && quoteMap[s.supplier_id][item.product_id];
+                          var isBest = q && q.responded_at && parseFloat(q.unit_price) === bestPrice && bestPrice < Infinity;
+                          var isSelected = q && q.selected;
+                        %>
+                        <td class="text-center <%= isBest ? "best-price" : "" %> <%= isSelected ? "selected-row" : "" %>">
+                          <% if (q && q.responded_at) { %>
+                            <% if (q.quantity_available === 0) { %>
+                              <span class="text-danger" style="font-size:.72rem;"><%= locale==="fr"?"Indispo":"N/A" %></span>
+                            <% } else { %>
+                              <div class="fw-bold" style="font-size:.80rem;"><%= Number(q.unit_price).toLocaleString("fr-FR") %> F</div>
+                              <div class="text-muted" style="font-size:.66rem;">
+                                <%= locale==="fr"?"Qté:":"Qty:" %> <%= q.quantity_available %>
+                                <% if (q.lead_time_days) { %> &bull; <%= q.lead_time_days %>j<% } %>
+                              </div>
+                              <% if (isBest) { %>
+                                <span class="badge bg-success" style="font-size:.55rem;"><%= locale==="fr"?"Meilleur prix":"Best price" %></span>
+                              <% } %>
+                              <% if (isSelected) { %>
+                                <span class="badge bg-primary" style="font-size:.55rem;"><%= locale==="fr"?"Sélectionné":"Selected" %></span>
+                              <% } %>
+                            <% } %>
+                          <% } else { %>
+                            <span class="text-muted" style="font-size:.72rem;"><%= locale==="fr"?"En attente":"Awaiting" %></span>
+                          <% } %>
+                        </td>
+                      <% }); %>
+                      <% if (rfq.status === "comparing") { %>
+                        <td class="text-center">
+                          <select class="form-select form-select-sm" style="font-size:.72rem;min-width:110px;"
+                            id="sel-<%= item.product_id %>" data-pid="<%= item.product_id %>">
+                            <option value="">-- <%= locale==="fr"?"Choisir":"Choose" %> --</option>
+                            <% suppliers.forEach(function(s) { %>
+                              <% var q = quoteMap[s.supplier_id] && quoteMap[s.supplier_id][item.product_id]; %>
+                              <% if (q && q.responded_at && q.quantity_available > 0) { %>
+                                <option value="<%= s.supplier_id %>" <%= q.selected ? "selected" : "" %>><%= s.name %></option>
+                              <% } %>
+                            <% }); %>
+                          </select>
+                        </td>
+                      <% } %>
+                    </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+            <% if (rfq.status === "comparing") { %>
+              <div class="card-footer d-flex justify-content-end">
+                <button class="btn btn-success btn-sm" onclick="generatePos()">
+                  <i class="fas fa-file-invoice me-1"></i>
+                  <%= locale==="fr"?"Générer les bons de commande":"Generate Purchase Orders" %>
+                </button>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+      <%/* Quote entry form (shown on button click) */%>
+      <div id="quoteEntrySection" style="display:none;">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-edit me-2 text-warning"></i>
+            <%= locale==="fr"?"Saisie des réponses fournisseurs":"Enter Supplier Responses" %>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-xs align-middle mb-0" id="quoteEntryTable">
+                <thead class="table-dark">
+                  <tr>
+                    <th><%= locale==="fr"?"Produit":"Product" %></th>
+                    <th><%= locale==="fr"?"Fournisseur":"Supplier" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Prix unit. (FCFA)":"Unit Price (FCFA)" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Qté disponible":"Qty Available" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Délai (j)":"Lead (days)" %></th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% rfq.items.forEach(function(item) { %>
+                    <% suppliers.forEach(function(s) { %>
+                      <%
+                        var q = quoteMap[s.supplier_id] && quoteMap[s.supplier_id][item.product_id];
+                      %>
+                      <tr>
+                        <td style="font-size:.78rem;">
+                          <div class="fw-bold"><%= item.product ? item.product.name : "#" + item.product_id %></div>
+                        </td>
+                        <td style="font-size:.78rem;"><%= s.name %></td>
+                        <td>
+                          <input type="number" step="0.01" min="0" style="width:100px;"
+                            class="form-control form-control-sm qe-price"
+                            data-sid="<%= s.supplier_id %>" data-pid="<%= item.product_id %>"
+                            value="<%= q ? q.unit_price : 0 %>">
+                        </td>
+                        <td>
+                          <input type="number" min="0" style="width:80px;"
+                            class="form-control form-control-sm qe-qty"
+                            data-sid="<%= s.supplier_id %>" data-pid="<%= item.product_id %>"
+                            value="<%= q ? q.quantity_available : 0 %>">
+                        </td>
+                        <td>
+                          <input type="number" min="0" style="width:70px;"
+                            class="form-control form-control-sm qe-lead"
+                            data-sid="<%= s.supplier_id %>" data-pid="<%= item.product_id %>"
+                            value="<%= q ? q.lead_time_days : 0 %>">
+                        </td>
+                        <td>
+                          <input type="text" class="form-control form-control-sm qe-notes"
+                            data-sid="<%= s.supplier_id %>" data-pid="<%= item.product_id %>"
+                            value="<%= q ? (q.notes||"") : "" %>" style="width:140px;">
+                        </td>
+                      </tr>
+                    <% }); %>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+            <div class="card-footer d-flex gap-2 justify-content-end">
+              <button class="btn btn-outline-secondary btn-sm" onclick="hideQuoteEntry()"><%= locale==="fr"?"Fermer":"Close" %></button>
+              <button class="btn btn-primary btn-sm" onclick="saveQuotes()">
+                <i class="fas fa-save me-1"></i><%= locale==="fr"?"Enregistrer les réponses":"Save Responses" %>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+var _csrf  = '<%= csrfToken %>';
+var _rfqId = <%= rfq.rfq_id %>;
+var _locale = '<%= locale %>';
+
+function apiPost(url, body) {
+  return fetch(url + '?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).then(function(r){ return r.json(); });
+}
+
+function apiAction(action) {
+  var msgs = { submit: _locale==='fr'?'Soumettre pour approbation ?':'Submit for manager approval?',
+    approve: _locale==='fr'?'Approuver cette RFQ ?':'Approve this RFQ?',
+    send: _locale==='fr'?'Marquer comme envoyée au fournisseur ?':'Mark as sent to suppliers?' };
+  if (!confirm(msgs[action] || 'Confirm?')) return;
+  apiPost('/warehouse/rfq/' + _rfqId + '/' + action)
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function cancelRfq() {
+  var reason = prompt(_locale==='fr'?'Raison de l\'annulation:':'Reason for cancellation:');
+  if (reason === null) return;
+  apiPost('/warehouse/rfq/' + _rfqId + '/cancel', { reason: reason })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function showQuoteEntry()  { document.getElementById('quoteEntrySection').style.display = ''; }
+function hideQuoteEntry()  { document.getElementById('quoteEntrySection').style.display = 'none'; }
+
+function saveQuotes() {
+  var quotes = [];
+  document.querySelectorAll('.qe-price').forEach(function(inp) {
+    var sid = inp.dataset.sid; var pid = inp.dataset.pid;
+    quotes.push({
+      supplier_id:        parseInt(sid),
+      product_id:         parseInt(pid),
+      unit_price:         parseFloat(inp.value) || 0,
+      quantity_available: parseInt(document.querySelector('.qe-qty[data-sid="'+sid+'"][data-pid="'+pid+'"]').value) || 0,
+      lead_time_days:     parseInt(document.querySelector('.qe-lead[data-sid="'+sid+'"][data-pid="'+pid+'"]').value) || 0,
+      notes:              document.querySelector('.qe-notes[data-sid="'+sid+'"][data-pid="'+pid+'"]').value || '',
+    });
+  });
+  apiPost('/warehouse/rfq/' + _rfqId + '/quotes', { quotes: quotes })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function generatePos() {
+  var selections = [];
+  document.querySelectorAll('[id^="sel-"]').forEach(function(sel) {
+    var pid = sel.dataset.pid;
+    var sid = sel.value;
+    if (sid) selections.push({ supplier_id: parseInt(sid), product_id: parseInt(pid) });
+  });
+  if (selections.length === 0) {
+    alert(_locale==='fr'?'Veuillez sélectionner au moins un fournisseur par produit.':'Please select at least one supplier per product.');
+    return;
+  }
+  if (!confirm(_locale==='fr'?'Générer les bons de commande et clôturer la RFQ ?':'Generate POs and close this RFQ?')) return;
+  apiPost('/warehouse/rfq/' + _rfqId + '/generate-pos', { selections: selections })
+    .then(function(d) {
+      if (d.ok) {
+        alert((d.pos.length) + (_locale==='fr'?' bon(s) de commande créé(s).'  :' purchase order(s) created.'));
+        location.reload();
+      } else { alert(d.error); }
+    });
+}
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

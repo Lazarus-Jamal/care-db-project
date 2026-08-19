@@ -1,0 +1,470 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "worklist", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card            { background: #fff !important; }
+  .modal-content   { background: #fff !important; }
+  .enc-row         { font-size:.80rem; transition: background .15s; }
+  .enc-row:hover   { background: #f8f9fa; }
+  .status-pending  { border-left: 3px solid #ffc107; }
+  .status-active   { border-left: 3px solid #28a745; }
+  .badge-pending   { background:#ffc107; color:#000; font-size:.68rem; }
+  .badge-active    { background:#28a745; color:#fff; font-size:.68rem; }
+  .btn-action      { font-size:.72rem; padding:2px 8px; }
+  .table-xs td, .table-xs th { padding:5px 8px; }
+  .tab-count       { font-size:.65rem; vertical-align:middle; }
+  .search-wrap     { max-width:320px; }
+  /* ── Tab active state ── */
+  .nav-tabs .nav-link {
+    color:#6c757d; background:#e9ecef;
+    border-color:#dee2e6 #dee2e6 transparent;
+    transition: background .15s, color .15s;
+  }
+  .nav-tabs .nav-link:hover { background:#dee2e6; color:#495057; }
+  .nav-tabs .nav-link.active {
+    color:#0d6efd !important; background:#fff !important;
+    border-color:#dee2e6 #dee2e6 #fff;
+    font-weight:600; border-top:2px solid #0d6efd !important;
+  }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <%/* ── Page header ── */%>
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-stethoscope me-2 text-primary"></i>
+        <%= locale==="fr" ? "File des consultations" : "Encounter Worklist" %>
+      </h5>
+      <small class="text-muted">
+        <%= locale==="fr"
+          ? "Consultations en attente et actives"
+          : "Pending and active encounters" %>
+      </small>
+    </div>
+    <form class="d-flex gap-2 search-wrap" method="GET" action="/encounters/worklist">
+      <input type="hidden" name="tab" value="<%= filterTab %>">
+      <input type="text" name="search" class="form-control form-control-sm"
+        placeholder="<%= locale==="fr" ? "Chercher patient..." : "Search patient..." %>"
+        value="<%= search %>">
+      <button class="btn btn-sm btn-primary" type="submit">
+        <i class="fas fa-search"></i>
+      </button>
+      <% if (search) { %>
+        <a href="/encounters/worklist?tab=<%= filterTab %>"
+          class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-times"></i>
+        </a>
+      <% } %>
+    </form>
+  </div>
+
+  <%/* ── Tabs ── */%>
+  <ul class="nav nav-tabs mb-0" style="border-bottom:none;">
+    <li class="nav-item">
+      <a class="nav-link <%= filterTab==="dept"?"active":"" %>"
+        href="/encounters/worklist?tab=dept<%= search ? "&search=" + encodeURIComponent(search) : "" %>">
+        <i class="fas fa-building me-1"></i>
+        <%= locale==="fr" ? "Mon departement" : "My Department" %>
+        <span class="badge rounded-pill tab-count ms-1
+          <%= filterTab==="dept"?"bg-primary":"bg-secondary" %>">
+          <%= deptCount %>
+        </span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= filterTab==="mine"?"active":"" %>"
+        href="/encounters/worklist?tab=mine<%= search ? "&search=" + encodeURIComponent(search) : "" %>">
+        <i class="fas fa-user-md me-1"></i>
+        <%= locale==="fr" ? "Mes patients" : "My Patients" %>
+        <span class="badge rounded-pill tab-count ms-1
+          <%= filterTab==="mine"?"bg-primary":"bg-secondary" %>">
+          <%= mineCount %>
+        </span>
+      </a>
+    </li>
+  </ul>
+
+  <div class="card shadow-sm" style="border-radius:0 .5rem .5rem .5rem;">
+    <div class="card-body p-0">
+
+      <% if (encounters.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-stethoscope fa-2x mb-2 d-block opacity-25"></i>
+          <% if (search) { %>
+            <%= locale==="fr"
+              ? "Aucun resultat pour \"" + search + "\""
+              : "No results for \"" + search + "\"" %>
+          <% } else { %>
+            <%= locale==="fr"
+              ? "Aucune consultation en cours."
+              : "No pending or active encounters." %>
+          <% } %>
+        </div>
+      <% } else { %>
+
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th><%= locale==="fr" ? "N Dossier" : "File No." %></th>
+                <th><%= locale==="fr" ? "Patient" : "Patient" %></th>
+                <th><%= locale==="fr" ? "Age/Sexe" : "Age/Sex" %></th>
+                <th><%= locale==="fr" ? "Medecin" : "Doctor" %></th>
+                <th>Dept</th>
+                <th>Date</th>
+                <th>Statut</th>
+                <th style="min-width:220px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% encounters.forEach(function(enc) {
+                var isPending = enc.encounter_status === "pending";
+                var p = enc.patient;
+                var dob = p && p.date_birth ? new Date(p.date_birth) : null;
+                var ageYrs = dob
+                  ? (new Date().getFullYear() - dob.getFullYear())
+                  : null;
+              %>
+                <tr class="enc-row status-<%= enc.encounter_status %>"
+                  id="enc-row-<%= enc.encounter_nr %>">
+
+                  <td><code style="font-size:.72rem;"><%= p ? p.hospital_file_nr : "-" %></code></td>
+
+                  <td>
+                    <% if (p) { %>
+                      <a href="/patients/<%= p.pid %>/record"
+                        class="text-decoration-none fw-bold" style="font-size:.80rem;">
+                        <%= p.name_last %>, <%= p.name_first %>
+                      </a>
+                    <% } else { %>-<% } %>
+                  </td>
+
+                  <td class="text-muted">
+                    <%= ageYrs !== null ? ageYrs + (locale==="fr"?" ans":" yrs") : "-" %>
+                    <% if (p && p.sex) { %> / <%= p.sex === "m" ? "M" : "F" %><% } %>
+                  </td>
+
+                  <td style="font-size:.76rem;"><%= enc.consulting_dr || "-" %></td>
+
+                  <td class="text-muted" style="font-size:.72rem;">
+                    #<%= enc.current_dept_nr %>
+                    <% if (enc.encounter_class_nr === 2) { %>
+                      <span class="badge bg-primary ms-1" style="font-size:.58rem;">
+                        <%= locale==="fr" ? "Hospit." : "Inpat." %>
+                      </span>
+                    <% } %>
+                  </td>
+
+                  <td class="text-muted" style="font-size:.72rem;">
+                    <%= enc.encounter_date
+                      ? new Date(enc.encounter_date).toLocaleDateString(
+                          locale==="fr" ? "fr-FR" : "en-GB")
+                      : "-" %>
+                  </td>
+
+                  <td>
+                    <span class="badge badge-<%= enc.encounter_status %>"
+                      id="status-badge-<%= enc.encounter_nr %>">
+                      <%= enc.encounter_status === "pending"
+                        ? (locale==="fr" ? "En attente" : "Pending")
+                        : (locale==="fr" ? "Actif" : "Active") %>
+                    </span>
+                  </td>
+
+                  <td>
+                    <div class="d-flex gap-1 flex-wrap">
+
+                      <% if (isPending) { %>
+                        <button class="btn btn-sm btn-success btn-action"
+                          onclick="doActivate(<%= enc.encounter_nr %>, this)"
+                          title="<%= locale==="fr" ? "Activer" : "Activate" %>">
+                          <i class="fas fa-play me-1"></i>
+                          <%= locale==="fr" ? "Activer" : "Activate" %>
+                        </button>
+                      <% } %>
+
+                      <% if (p) { %>
+                        <a href="/patients/<%= p.pid %>/record"
+                          class="btn btn-sm btn-outline-primary btn-action"
+                          title="<%= locale==="fr" ? "Dossier" : "Record" %>">
+                          <i class="fas fa-folder-open"></i>
+                        </a>
+                      <% } %>
+
+                      <% if (!isPending && p) { %>
+                        <a href="/prescriptions/encounter/<%= enc.encounter_nr %>"
+                          class="btn btn-sm btn-outline-secondary btn-action"
+                          title="<%= locale==="fr" ? "Prescription" : "Prescribe" %>">
+                          <i class="fas fa-prescription-bottle-alt"></i>
+                        </a>
+                      <% } %>
+
+                      <button class="btn btn-sm btn-outline-warning btn-action"
+                        onclick="openTransfer(<%= enc.encounter_nr %>,
+                          document.getElementById('dr-<%= enc.encounter_nr %>').value)"
+                        title="<%= locale==="fr" ? "Transferer" : "Transfer" %>">
+                        <i class="fas fa-exchange-alt"></i>
+                      </button>
+                      <%/* Hidden input to safely pass the dr name to JS */%>
+                      <input type="hidden"
+                        id="dr-<%= enc.encounter_nr %>"
+                        value="<%= (enc.consulting_dr || "").replace(/"/g, "&quot;") %>">
+
+                      <button class="btn btn-sm btn-outline-primary btn-action"
+                        onclick="openInpatient(<%= enc.encounter_nr %>)"
+                        title="<%= locale==="fr" ? "Hospitaliser" : "Admit Inpatient" %>">
+                        <i class="fas fa-bed"></i>
+                      </button>
+
+                      <button class="btn btn-sm btn-outline-danger btn-action"
+                        onclick="doDischarge(<%= enc.encounter_nr %>, this)"
+                        title="<%= locale==="fr" ? "Cloture" : "Discharge" %>">
+                        <i class="fas fa-sign-out-alt"></i>
+                      </button>
+
+                    </div>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<%/* ═══ TRANSFER MODAL ═══ */%>
+<div class="modal fade" id="transferModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">
+          <i class="fas fa-exchange-alt me-2 text-warning"></i>
+          <%= locale==="fr" ? "Transferer le patient" : "Transfer Patient" %>
+        </h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-2" style="font-size:.8rem;">
+          <%= locale==="fr" ? "Actuellement avec:" : "Currently assigned to:" %>
+          <strong id="transfer-current-dr"></strong>
+        </p>
+        <label class="form-label" style="font-size:.78rem;font-weight:600;">
+          <%= locale==="fr" ? "Transferer vers:" : "Transfer to:" %>
+        </label>
+        <select id="transfer-staff-select" class="form-select form-select-sm">
+          <option value="">
+            <%= locale==="fr" ? "Selectionner..." : "Select..." %>
+          </option>
+          <% staffList.forEach(function(s) {
+            var sname = s.person
+              ? s.person.name_first + " " + s.person.name_last
+              : "Staff #" + s.nr;
+          %>
+            <option value="<%= s.nr %>">
+              <%= sname %><% if (s.job_function_title) { %> — <%= s.job_function_title %><% } %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+          <%= locale==="fr" ? "Annuler" : "Cancel" %>
+        </button>
+        <button class="btn btn-sm btn-warning" id="btn-confirm-transfer"
+          onclick="confirmTransfer()">
+          <i class="fas fa-exchange-alt me-1"></i>
+          <%= locale==="fr" ? "Transferer" : "Transfer" %>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%/* ═══ INPATIENT MODAL ═══ */%>
+<div class="modal fade" id="inpatientModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">
+          <i class="fas fa-bed me-2 text-primary"></i>
+          <%= locale==="fr" ? "Admission en hospitalisation" : "Admit to Inpatient Ward" %>
+        </h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" style="font-size:.78rem;font-weight:600;">
+          <%= locale==="fr" ? "Selectionner le ward:" : "Select Ward:" %>
+          <span style="color:#dc3545;">*</span>
+        </label>
+        <select id="inpatient-ward-select" class="form-select form-select-sm">
+          <option value="">
+            <%= locale==="fr" ? "Selectionner un ward..." : "Select a ward..." %>
+          </option>
+          <% wards.forEach(function(w) { %>
+            <option value="<%= w.nr %>">
+              <%= w.name %><% if (w.ward_type) { %> (<%= w.ward_type %>)<% } %>
+            </option>
+          <% }); %>
+        </select>
+        <% if (wards.length === 0) { %>
+          <small class="text-muted mt-1 d-block">
+            <%= locale==="fr" ? "Aucun ward disponible." : "No wards available." %>
+          </small>
+        <% } %>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+          <%= locale==="fr" ? "Annuler" : "Cancel" %>
+        </button>
+        <button class="btn btn-sm btn-primary" onclick="confirmInpatient()">
+          <i class="fas fa-bed me-1"></i>
+          <%= locale==="fr" ? "Hospitaliser" : "Admit Inpatient" %>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var _csrf         = '<%= csrfToken %>';
+var _currentEncNr = null;
+var _confirmActivate = '<%= locale==="fr" ? "Activer cette consultation ?" : "Activate this encounter?" %>';
+var _confirmDischarge = '<%= locale==="fr" ? "Cloture et liberer ce patient ?" : "Discharge and close this encounter?" %>';
+var _selectDoctor = '<%= locale==="fr" ? "Veuillez selectionner un medecin." : "Please select a doctor." %>';
+var _selectWard   = '<%= locale==="fr" ? "Veuillez selectionner un ward." : "Please select a ward." %>';
+var _labelActive  = '<%= locale==="fr" ? "Actif" : "Active" %>';
+var _labelActivate = '<%= locale==="fr" ? "Activer" : "Activate" %>';
+
+function encodeCSRF(token) {
+    return encodeURIComponent(token);
+}
+
+async function postAction(url, body) {
+    var resp = await fetch(url + '?_csrf=' + encodeCSRF(_csrf), {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+    });
+    return resp.json();
+}
+
+function doActivate(encNr, btn) {
+    if (!confirm(_confirmActivate)) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    postAction('/encounters/' + encNr + '/activate', {}).then(function(data) {
+        if (data.ok) {
+            if (data.billWarning) {
+                alert('Warning: ' + data.billWarning);
+            }
+            var badge = document.getElementById('status-badge-' + encNr);
+            if (badge) {
+                badge.className = 'badge badge-active';
+                badge.textContent = _labelActive;
+            }
+            btn.remove();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play me-1"></i>' + _labelActivate;
+        }
+    });
+}
+
+function doDischarge(encNr, btn) {
+    if (!confirm(_confirmDischarge)) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    postAction('/encounters/' + encNr + '/discharge', {}).then(function(data) {
+        if (data.ok) {
+            var row = document.getElementById('enc-row-' + encNr);
+            if (row) {
+                row.style.opacity = '0.4';
+                row.style.transition = 'opacity .4s';
+                setTimeout(function() { row.remove(); }, 500);
+            }
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sign-out-alt"></i>';
+        }
+    });
+}
+
+function openTransfer(encNr, currentDr) {
+    _currentEncNr = encNr;
+    document.getElementById('transfer-current-dr').textContent = currentDr || '-';
+    document.getElementById('transfer-staff-select').value = '';
+    new bootstrap.Modal(document.getElementById('transferModal')).show();
+}
+
+function confirmTransfer() {
+    var staffNr = document.getElementById('transfer-staff-select').value;
+    if (!staffNr) { alert(_selectDoctor); return; }
+    var btn = document.getElementById('btn-confirm-transfer');
+    btn.disabled = true;
+    postAction('/encounters/' + _currentEncNr + '/transfer', { to_staff_nr: staffNr })
+        .then(function(data) {
+            btn.disabled = false;
+            if (data.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('transferModal')).hide();
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        });
+}
+
+function openInpatient(encNr) {
+    _currentEncNr = encNr;
+    document.getElementById('inpatient-ward-select').value = '';
+    new bootstrap.Modal(document.getElementById('inpatientModal')).show();
+}
+
+function confirmInpatient() {
+    var wardNr = document.getElementById('inpatient-ward-select').value;
+    if (!wardNr) { alert(_selectWard); return; }
+    postAction('/encounters/' + _currentEncNr + '/admit-inpatient', { ward_nr: wardNr })
+        .then(function(data) {
+            if (data.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('inpatientModal')).hide();
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        });
+}
+</script>
+
+</div><%/* end wl-page */%>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

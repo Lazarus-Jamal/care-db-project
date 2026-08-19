@@ -1,0 +1,141 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .ph-header { background:linear-gradient(135deg,#1a9e72 0%,#157a58 100%); color:#fff; border-radius:.5rem .5rem 0 0; }
+  .ph-tab-active   { background:#1a9e72 !important; color:#fff !important; border-color:#1a9e72 !important; }
+  .ph-tab-inactive { background:#e8f5f0; color:#1a9e72; border:1px solid #b2dfce; }
+  .ph-tab-inactive:hover { background:#d1ece3; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6; padding:14px 16px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+  .stat-val { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  .table-xs td,.table-xs th { padding:5px 9px; font-size:.79rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stock-ok   { display:inline-block; padding:2px 7px; border-radius:10px; background:#d1ece3; color:#0a3622; font-size:.62rem; font-weight:700; }
+  .stock-low  { display:inline-block; padding:2px 7px; border-radius:10px; background:#fff3cd; color:#856404; font-size:.62rem; font-weight:700; }
+  .stock-out  { display:inline-block; padding:2px 7px; border-radius:10px; background:#f8d7da; color:#842029; font-size:.62rem; font-weight:700; }
+  .badge-med { background:#1a9e72; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  .badge-sup { background:#0d6efd; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-hand-holding-medical me-2" style="color:#dc3545;"></i>
+        <%= locale==="fr"?"File de distribution":"Dispensing Queue" %>
+      </h5>
+      <small class="text-muted"><%= totalCount %> <%= locale==="fr"?"facture(s) en attente":"bill(s) pending" %></small>
+    </div>
+    <a href="/pharmacy" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Dashboard
+    </a>
+  </div>
+
+  <%/* Search */%>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/pharmacy/dispense" class="d-flex gap-2 align-items-end">
+      <div style="flex:1;">
+        <label class="lbl"><%= locale==="fr"?"Recherche (nom patient, N° facture, N° dossier)":"Search (patient name, bill no, file no)" %></label>
+        <input type="text" name="search" value="<%= search %>"
+          class="form-control form-control-sm"
+          placeholder="<%= locale==="fr"?"Nom, N° facture, N° dossier...":"Name, bill no., file no..." %>">
+      </div>
+      <button type="submit" class="btn btn-sm" style="background:#1a9e72;color:#fff;">
+        <i class="fas fa-search"></i>
+      </button>
+      <% if (search) { %>
+        <a href="/pharmacy/dispense" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-times"></i>
+        </a>
+      <% } %>
+    </form>
+  </div></div>
+
+  <div class="card shadow-sm">
+    <div class="ph-header px-3 py-2">
+      <span class="fw-bold" style="font-size:.85rem;">
+        <i class="fas fa-list me-2"></i>
+        <%= locale==="fr"?"Patients avec articles a distribuer":"Patients with items to dispense" %>
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <% if (!rows || rows.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-check-circle fa-2x mb-2 d-block" style="color:#1a9e72;opacity:.4;"></i>
+          <%= locale==="fr"?"Aucun article en attente de distribution.":"No items pending dispensing." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"Patient":"Patient" %></th>
+              <th><%= locale==="fr"?"N° Dossier":"File No." %></th>
+              <th><%= locale==="fr"?"N° Facture":"Bill No." %></th>
+              <th class="text-center"><%= locale==="fr"?"Articles":"Items" %></th>
+              <th class="text-center"><%= locale==="fr"?"Total unites":"Total Units" %></th>
+              <th><%= locale==="fr"?"Date facture":"Bill Date" %></th>
+              <th class="text-center">Actions</th>
+            </tr></thead>
+            <tbody>
+              <% rows.forEach(function(row) { %>
+                <tr>
+                  <td class="fw-bold" style="font-size:.80rem;"><%= row.patient_name %></td>
+                  <td class="text-muted" style="font-size:.74rem;"><%= row.file_nr || "—" %></td>
+                  <td>
+                    <a href="/pharmacy/dispense/<%= row.bill_no %>" class="fw-bold text-decoration-none" style="color:#1a9e72;">
+                      #<%= row.bill_no %>
+                    </a>
+                  </td>
+                  <td class="text-center">
+                    <span class="badge" style="background:#1a9e72;font-size:.62rem;"><%= row.item_count %></span>
+                  </td>
+                  <td class="text-center fw-bold"><%= row.total_units %></td>
+                  <td class="text-muted" style="font-size:.72rem;">
+                    <%= row.bill_date ? new Date(row.bill_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : "—" %>
+                  </td>
+                  <td class="text-center">
+                    <a href="/pharmacy/dispense/<%= row.bill_no %>" class="btn btn-xs" style="background:#1a9e72;color:#fff;">
+                      <i class="fas fa-hand-holding-medical me-1"></i><%= locale==="fr"?"Distribuer":"Dispense" %>
+                    </a>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+        <% if (totalPages > 1) { %>
+          <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+            <small class="text-muted">Page <%= currentPage %> / <%= totalPages %></small>
+            <div class="d-flex gap-1">
+              <% if (currentPage > 1) { %><a href="?page=<%= currentPage-1 %>&search=<%= search %>" class="btn btn-xs btn-outline-secondary">&#8249;</a><% } %>
+              <% if (currentPage < totalPages) { %><a href="?page=<%= currentPage+1 %>&search=<%= search %>" class="btn btn-xs btn-outline-secondary">&#8250;</a><% } %>
+            </div>
+          </div>
+        <% } %>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

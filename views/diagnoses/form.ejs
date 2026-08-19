@@ -1,0 +1,412 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "worklist", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card           { background: #fff !important; }
+  .lbl            { font-size:.68rem; font-weight:700; text-transform:uppercase;
+                    letter-spacing:.06em; color:#6c757d; }
+  .search-result  { font-size:.80rem; padding:7px 12px; cursor:pointer;
+                    border-bottom:1px solid #f0f0f0; }
+  .search-result:hover { background:#fff5f5; }
+  .search-result code { color:#dc3545; font-size:.74rem; }
+  .cart-row       { font-size:.80rem; padding:10px 16px;
+                    border-bottom:1px solid #f5f5f5; }
+  .cart-row:last-child { border-bottom:none; }
+  .cart-empty     { text-align:center; color:#adb5bd; padding:28px 0; font-size:.82rem; }
+  .dx-existing    { font-size:.78rem; padding:6px 16px; border-bottom:1px solid #f5f5f5; }
+  .dx-existing:last-child { border-bottom:none; }
+  #search-results { position:absolute; z-index:1000; background:#fff;
+                    border:1px solid #dee2e6; border-top:none;
+                    border-radius:0 0 .5rem .5rem;
+                    max-height:280px; overflow-y:auto; width:100%; }
+  .search-wrap    { position:relative; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <%/* Breadcrumb */%>
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item">
+        <a href="/encounters/worklist">
+          <i class="fas fa-stethoscope me-1"></i>
+          <%= locale==="fr"?"File consultations":"Worklist" %>
+        </a>
+      </li>
+      <% if (patient) { %>
+        <li class="breadcrumb-item">
+          <a href="/patients/<%= patient.pid %>/record?tab=enc">
+            <%= patient.name_last %>, <%= patient.name_first %>
+          </a>
+        </li>
+      <% } %>
+      <li class="breadcrumb-item active fw-bold">
+        <i class="fas fa-diagnoses me-1"></i>
+        <%= locale==="fr"?"Diagnostics":"Diagnoses" %>
+      </li>
+    </ol>
+  </nav>
+
+  <%/* Encounter info banner */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-3">
+          <div class="lbl"><%= locale==="fr"?"Patient":"Patient" %></div>
+          <div class="fw-bold" style="font-size:.88rem;">
+            <%= patient ? patient.name_last + ", " + patient.name_first : "-" %>
+          </div>
+          <div class="text-muted" style="font-size:.72rem;">
+            <%= patient ? patient.hospital_file_nr : "" %>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <div class="lbl"><%= locale==="fr"?"Consultation":"Encounter" %></div>
+          <div style="font-size:.82rem;"><code>#<%= encounter.encounter_nr %></code></div>
+        </div>
+        <div class="col-md-3">
+          <div class="lbl"><%= locale==="fr"?"Medecin":"Doctor" %></div>
+          <div style="font-size:.82rem;"><%= encounter.consulting_dr || "-" %></div>
+        </div>
+        <div class="col-md-2">
+          <div class="lbl"><%= locale==="fr"?"Departement":"Department" %></div>
+          <div style="font-size:.82rem;">
+            <%= encounter.department ? encounter.department.name_short : "#" + encounter.current_dept_nr %>
+          </div>
+        </div>
+        <div class="col-md-2 text-end">
+          <%
+            var encSCls = encounter.encounter_status==="active"  ? "bg-success" :
+                          encounter.encounter_status==="pending" ? "bg-warning text-dark" :
+                          "bg-secondary";
+          %>
+          <span class="badge <%= encSCls %>">
+            <%= encounter.encounter_status==="active"
+              ? (locale==="fr"?"Actif":"Active")
+              : encounter.encounter_status==="pending"
+                ? (locale==="fr"?"En attente":"Pending")
+                : encounter.encounter_status %>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: Search + Cart ── */%>
+    <div class="col-lg-7">
+
+      <%/* Search card */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-search me-2 text-danger"></i>
+            <%= locale==="fr"?"Rechercher un diagnostic CIM-10":"Search CIM-10 Diagnosis" %>
+          </span>
+        </div>
+        <div class="card-body pb-2">
+          <div class="search-wrap">
+            <input type="text" id="dx-search-input" class="form-control form-control-sm"
+              placeholder="<%= locale==="fr"
+                ? "Saisir le libelle ou le code CIM-10..."
+                : "Enter diagnosis name or CIM-10 code..." %>"
+              autocomplete="off">
+            <div id="search-results" style="display:none;"></div>
+          </div>
+          <div class="text-muted mt-2" style="font-size:.70rem;">
+            <i class="fas fa-info-circle me-1"></i>
+            <%= locale==="fr"
+              ? "Saisissez au moins 2 caracteres. Cliquez sur un resultat pour l\"ajouter au panier."
+              : "Type at least 2 characters. Click a result to add it to the cart." %>
+          </div>
+        </div>
+      </div>
+
+      <%/* Cart card */%>
+      <div class="card shadow-sm">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-shopping-cart me-2 text-danger"></i>
+            <%= locale==="fr"?"Diagnostics selectionnes":"Selected Diagnoses" %>
+            <span class="badge bg-danger ms-1" id="cart-count"
+              style="font-size:.65rem;">0</span>
+          </span>
+        </div>
+        <div class="card-body p-0" id="cart-body">
+          <div class="cart-empty" id="cart-empty">
+            <i class="fas fa-diagnoses fa-2x mb-2 d-block opacity-25"></i>
+            <%= locale==="fr"
+              ? "Aucun diagnostic selectionne."
+              : "No diagnoses selected yet. Search above." %>
+          </div>
+          <div id="cart-items"></div>
+        </div>
+        <div class="card-footer py-2" id="cart-footer" style="display:none;">
+          <button class="btn btn-danger w-100" id="btn-submit-dx"
+            onclick="submitDiagnoses()">
+            <i class="fas fa-save me-2"></i>
+            <%= locale==="fr"?"Enregistrer les diagnostics":"Save Diagnoses" %>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <%/* ── RIGHT: Existing diagnoses for this encounter ── */%>
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header py-2">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-list me-2 text-muted"></i>
+            <%= locale==="fr"?"Diagnostics existants":"Existing Diagnoses" %>
+            <span class="badge bg-secondary ms-1" style="font-size:.65rem;">
+              <%= existing.length %>
+            </span>
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <% if (existing.length === 0) { %>
+            <div class="text-center text-muted py-4" style="font-size:.80rem;">
+              <i class="fas fa-diagnoses fa-lg d-block mb-1 opacity-25"></i>
+              <%= locale==="fr"?"Aucun diagnostic.":"No diagnoses yet." %>
+            </div>
+          <% } else { %>
+            <div style="max-height:480px;overflow-y:auto;">
+              <% existing.forEach(function(dx) { %>
+                <div class="dx-existing" id="dx-row-<%= dx.diagnosis_nr %>">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div style="flex:1;">
+                      <div class="d-flex align-items-center gap-1 flex-wrap">
+                        <code style="font-size:.74rem;color:#dc3545;">
+                          <%= dx.code %>
+                        </code>
+                        <span class="fw-bold" style="font-size:.80rem;">
+                          <%= dx.localcode || dx.code %>
+                        </span>
+                      </div>
+                      <div class="mt-1">
+                        <span class="badge
+                          <%= dx.type==="main"?"bg-danger":dx.type==="secondary"?"bg-warning text-dark":"bg-secondary" %>"
+                          style="font-size:.60rem;">
+                          <%= dx.type || "main" %>
+                        </span>
+                        <% if (dx.diagnosing_clinician) { %>
+                          <span class="text-muted ms-1" style="font-size:.68rem;">
+                            <i class="fas fa-user-md me-1"></i>
+                            <%= dx.diagnosing_clinician %>
+                          </span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <button class="btn btn-xs btn-outline-danger ms-2"
+                      style="font-size:.65rem;padding:2px 7px;"
+                      onclick="removeSavedDx(<%= dx.diagnosis_nr %>, this)"
+                      title="<%= locale==="fr"?"Supprimer":"Remove" %>">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+var _csrf        = '<%= csrfToken %>';
+var _encNr       = <%= encounter.encounter_nr %>;
+var _pid         = <%= patient ? patient.pid : 0 %>;
+var _locale      = '<%= locale %>';
+var _isFr        = _locale === 'fr';
+var _cart        = [];
+var _searchTimer = null;
+
+// ── Search ────────────────────────────────────────────────────────
+document.getElementById('dx-search-input').addEventListener('input', function() {
+    clearTimeout(_searchTimer);
+    var q = this.value.trim();
+    var box = document.getElementById('search-results');
+    if (q.length < 2) { box.style.display = 'none'; return; }
+    _searchTimer = setTimeout(function() { doSearch(q); }, 300);
+});
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.search-wrap')) {
+        document.getElementById('search-results').style.display = 'none';
+    }
+});
+
+function doSearch(q) {
+    fetch('/encounters/cim10/search?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var box = document.getElementById('search-results');
+            if (!data.ok || data.results.length === 0) {
+                box.innerHTML = '<div class="search-result text-muted">' +
+                    (_isFr ? 'Aucun resultat.' : 'No results.') + '</div>';
+                box.style.display = '';
+                return;
+            }
+            var html = '';
+            data.results.forEach(function(item) {
+                html += '<div class="search-result" onclick="selectDx(' +
+                    JSON.stringify(item).replace(/"/g,'&quot;') + ')">' +
+                    '<div><code>' + item.code + '</code> ' +
+                    '<span class="fw-bold">' + item.label + '</span></div>' +
+                    '<div style="font-size:.68rem;color:#6c757d;">' +
+                    (item.label_long && item.label_long !== item.label
+                        ? item.label_long.substring(0,90) + '...'
+                        : '') +
+                    '</div>' +
+                    '</div>';
+            });
+            box.innerHTML = html;
+            box.style.display = '';
+        });
+}
+
+// ── Cart operations ───────────────────────────────────────────────
+function selectDx(item) {
+    // Prevent duplicates
+    var already = _cart.some(function(d) { return d.code === item.code; });
+    if (already) {
+        document.getElementById('search-results').style.display = 'none';
+        document.getElementById('dx-search-input').value = '';
+        return;
+    }
+    _cart.push({
+        code:      item.code,
+        localcode: item.label,
+        type:      'main',
+    });
+    document.getElementById('search-results').style.display = 'none';
+    document.getElementById('dx-search-input').value = '';
+    renderCart();
+}
+
+function setDxType(idx, type) {
+    if (_cart[idx]) _cart[idx].type = type;
+}
+
+function removeFromCart(idx) {
+    _cart.splice(idx, 1);
+    renderCart();
+}
+
+function renderCart() {
+    var count = _cart.length;
+    document.getElementById('cart-count').textContent = count;
+
+    var empty  = document.getElementById('cart-empty');
+    var items  = document.getElementById('cart-items');
+    var footer = document.getElementById('cart-footer');
+
+    if (count === 0) {
+        empty.style.display  = '';
+        items.innerHTML      = '';
+        footer.style.display = 'none';
+        return;
+    }
+    empty.style.display  = 'none';
+    footer.style.display = '';
+
+    var html = '';
+    _cart.forEach(function(dx, idx) {
+        html += '<div class="cart-row">' +
+            '<div class="d-flex justify-content-between align-items-start">' +
+            '<div style="flex:1;">' +
+            '<div class="d-flex align-items-center gap-1 mb-1">' +
+            '<code style="color:#dc3545;">' + dx.code + '</code>' +
+            '<span class="fw-bold">' + dx.localcode + '</span>' +
+            '</div>' +
+            '<div>' +
+            '<select class="form-select form-select-sm d-inline-block"' +
+            ' style="width:auto;font-size:.72rem;"' +
+            ' onchange="setDxType(' + idx + ', this.value)">' +
+            '<option value="main"'      + (dx.type==='main'      ?' selected':'') + '>' +
+                (_isFr?'Principal':'Main Diagnosis') + '</option>' +
+            '<option value="secondary"' + (dx.type==='secondary' ?' selected':'') + '>' +
+                (_isFr?'Secondaire':'Secondary') + '</option>' +
+            '<option value="associated"'+ (dx.type==='associated'?' selected':'') + '>' +
+                (_isFr?'Associe':'Associated') + '</option>' +
+            '</select>' +
+            '</div>' +
+            '</div>' +
+            '<button class="btn btn-xs btn-outline-danger ms-2"' +
+            ' style="font-size:.65rem;padding:2px 7px;"' +
+            ' onclick="removeFromCart(' + idx + ')">' +
+            '<i class="fas fa-times"></i>' +
+            '</button>' +
+            '</div>' +
+            '</div>';
+    });
+    items.innerHTML = html;
+}
+
+// ── Submit ────────────────────────────────────────────────────────
+function submitDiagnoses() {
+    if (_cart.length === 0) return;
+    var btn = document.getElementById('btn-submit-dx');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>' +
+        (_isFr ? 'Enregistrement...' : 'Saving...');
+
+    fetch('/diagnoses/encounter/' + _encNr + '?_csrf=' + encodeURIComponent(_csrf), {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ diagnoses: _cart }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            window.location.href = data.redirect;
+        } else {
+            alert((_isFr ? 'Erreur: ' : 'Error: ') + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>' +
+                (_isFr ? 'Enregistrer les diagnostics' : 'Save Diagnoses');
+        }
+    })
+    .catch(function(err) {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-2"></i>' +
+            (_isFr ? 'Enregistrer les diagnostics' : 'Save Diagnoses');
+    });
+}
+
+// ── Remove a saved diagnosis inline ──────────────────────────────
+function removeSavedDx(dxNr, btn) {
+    if (!confirm(_isFr ? 'Supprimer ce diagnostic ?' : 'Remove this diagnosis?')) return;
+    btn.disabled = true;
+    fetch('/encounters/diagnoses/' + dxNr + '?_csrf=' + encodeURIComponent(_csrf), {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            var row = document.getElementById('dx-row-' + dxNr);
+            if (row) row.remove();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown'));
+            btn.disabled = false;
+        }
+    });
+}
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+

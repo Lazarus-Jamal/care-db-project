@@ -1,0 +1,142 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  #searchResults { max-height: 260px; overflow-y: auto; }
+  .search-result-item { cursor:pointer; padding:6px 10px; border-bottom:1px solid #eee; font-size:.82rem; }
+  .search-result-item:hover { background:#f0f6ff; }
+  .badge-med { background:#1a9e72; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  .badge-sup { background:#0d6efd; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <h5 class="mb-3 fw-bold">
+    <i class="fas fa-plus-circle me-2" style="color:#fd7e14;"></i>
+    <%= locale==="fr" ? "Ajouter un article au stock" : "Add Item to Stock" %>
+  </h5>
+  <p class="text-muted" style="font-size:.85rem;">
+    <%= locale==="fr"
+      ? "Recherchez dans le catalogue general. Seuls les articles que votre unite ne possede pas encore apparaitront."
+      : "Search the general catalog. Only items your unit doesn't already carry will appear." %>
+  </p>
+
+  <div class="alert alert-danger d-none" id="errorBox" style="font-size:.85rem;"></div>
+  <div class="alert alert-success d-none" id="successBox" style="font-size:.85rem;"></div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <label class="lbl"><%= locale==="fr"?"Rechercher un article":"Search for an item" %></label>
+      <input type="text" id="itemSearch" class="form-control" autocomplete="off"
+        placeholder="<%= locale==='fr' ? 'Tapez au moins 2 caracteres...' : 'Type at least 2 characters...' %>">
+      <div id="searchResults" class="border rounded mt-1 d-none"></div>
+    </div>
+  </div>
+
+  <form id="addForm" class="card shadow-sm d-none">
+    <div class="card-body">
+      <input type="hidden" id="selectedItemId" name="item_id">
+      <p class="mb-3">
+        <strong id="selectedItemLabel"></strong>
+        <span id="selectedItemBadge"></span>
+      </p>
+
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="lbl"><%= locale==="fr"?"Quantite initiale":"Initial Quantity" %></label>
+          <input type="number" name="initial_quantity" class="form-control form-control-sm" value="0" min="0">
+        </div>
+        <div class="col-md-3">
+          <label class="lbl"><%= locale==="fr"?"Seuil de reappro":"Reorder Level" %></label>
+          <input type="number" name="reorder_level" class="form-control form-control-sm" value="0" min="0">
+        </div>
+        <div class="col-md-3">
+          <label class="lbl"><%= locale==="fr"?"Niveau minimum":"Minimum Level" %></label>
+          <input type="number" name="minimum_level" class="form-control form-control-sm" value="0" min="0">
+        </div>
+        <div class="col-md-3">
+          <label class="lbl"><%= locale==="fr"?"Niveau maximum":"Maximum Level" %></label>
+          <input type="number" name="maximum_level" class="form-control form-control-sm" value="0" min="0">
+        </div>
+      </div>
+
+      <div class="text-end mt-3">
+        <button type="submit" class="btn btn-sm" style="background:#1a9e72;color:#fff;">
+          <i class="fas fa-check me-1"></i><%= locale==="fr"?"Ajouter au stock":"Add to Stock" %>
+        </button>
+      </div>
+    </div>
+  </form>
+
+</div>
+
+<script>
+const _csrf = <%- JSON.stringify(csrfToken) %>;
+let searchTimeout;
+
+document.getElementById('itemSearch').addEventListener('input', function() {
+  clearTimeout(searchTimeout);
+  const q = this.value.trim();
+  const resultsBox = document.getElementById('searchResults');
+  if (q.length < 2) { resultsBox.classList.add('d-none'); resultsBox.innerHTML = ''; return; }
+  searchTimeout = setTimeout(function() {
+    fetch('/pharmacy/stock/search-catalog?q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(data => {
+        resultsBox.innerHTML = '';
+        if (!data.ok || !data.items.length) {
+          resultsBox.innerHTML = '<div class="p-2 text-muted" style="font-size:.8rem;">' +
+            (<%- JSON.stringify(locale === "fr" ? "Aucun resultat." : "No results.") %>) + '</div>';
+        } else {
+          data.items.forEach(function(item) {
+            const div = document.createElement('div');
+            div.className = 'search-result-item';
+            div.innerHTML = item.description + ' <span class="badge-' + item.item_number.toLowerCase() + '">' + item.item_number + '</span>';
+            div.onclick = function() { selectItem(item); };
+            resultsBox.appendChild(div);
+          });
+        }
+        resultsBox.classList.remove('d-none');
+      });
+  }, 300);
+});
+
+function selectItem(item) {
+  document.getElementById('selectedItemId').value = item.item_id;
+  document.getElementById('selectedItemLabel').textContent = item.description;
+  document.getElementById('selectedItemBadge').innerHTML =
+    '<span class="badge-' + item.item_number.toLowerCase() + '">' + item.item_number + '</span>';
+  document.getElementById('addForm').classList.remove('d-none');
+  document.getElementById('searchResults').classList.add('d-none');
+  document.getElementById('itemSearch').value = item.description;
+}
+
+document.getElementById('addForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const errorBox = document.getElementById('errorBox');
+  const successBox = document.getElementById('successBox');
+  errorBox.classList.add('d-none');
+  successBox.classList.add('d-none');
+
+  const formData = new URLSearchParams(new FormData(this));
+  fetch('/pharmacy/stock/add?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formData,
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        successBox.textContent = <%- JSON.stringify(locale === "fr" ? "Article ajoute avec succes." : "Item added successfully.") %>;
+        successBox.classList.remove('d-none');
+        setTimeout(function() { window.location.href = '/pharmacy/stock'; }, 1200);
+      } else {
+        errorBox.textContent = data.error || 'Error';
+        errorBox.classList.remove('d-none');
+      }
+    })
+    .catch(err => { errorBox.textContent = err.message; errorBox.classList.remove('d-none'); });
+});
+</script>
+
+<%- include("../partials/footer") %>

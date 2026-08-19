@@ -1,0 +1,405 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "patients", user: user }) %>
+
+<style>
+  
+  .admit-wrap { max-width: 900px; margin: 0 auto; }
+  .sec-title  { font-size:.68rem; font-weight:700; text-transform:uppercase;
+                letter-spacing:.07em; color:#6c757d;
+                border-bottom:1px solid #dee2e6; padding-bottom:3px; margin-bottom:10px; }
+  .form-label { font-size:.75rem; font-weight:600; margin-bottom:2px; }
+  .form-control, .form-select { font-size:.8rem; padding:.3rem .5rem; }
+  .req        { color:#dc3545; }
+  .patient-bar { background:linear-gradient(135deg,#0d6efd 0%,#0a58ca 100%);
+                 color:#fff; border-radius:.5rem; }
+  .price-badge { font-size:1.1rem; font-weight:700; color:#0d6efd; }
+  .ins-section { transition: all .25s ease; }
+  .step-badge  { width:24px; height:24px; border-radius:50%;
+                 background:#0d6efd; color:#fff;
+                 display:inline-flex; align-items:center; justify-content:center;
+                 font-size:.72rem; font-weight:700; flex-shrink:0; }
+</style>
+
+<div class="container-fluid py-3">
+<div class="admit-wrap">
+
+  <%/* ── Banner if coming from registration ── */%>
+  <% if (typeof fromRegistration !== "undefined" && fromRegistration) { %>
+    <div class="alert alert-success d-flex align-items-center gap-2 mb-3 py-2"
+      style="font-size:.82rem;">
+      <i class="fas fa-check-circle fa-lg"></i>
+      <div>
+        <strong>
+          <%= locale==="fr" ? "Patient enregistré avec succès !" : "Patient registered successfully!" %>
+        </strong>
+        <%= locale==="fr"
+          ? "Veuillez procéder à l\"admission pour créer la consultation."
+          : "Please proceed with admission to create the encounter." %>
+      </div>
+    </div>
+  <% } %>
+
+  <%/* ── Patient identity bar ── */%>
+  <div class="patient-bar p-3 mb-3 d-flex justify-content-between align-items-center">
+    <div>
+      <h6 class="mb-0 fw-bold">
+        <i class="fas fa-user me-2"></i>
+        <%= patient.name_last %>, <%= patient.name_first %>
+      </h6>
+      <small class="opacity-75">
+        N° <%= patient.hospital_file_nr || "—" %>
+        <% if (patient.date_birth) { %>
+          &nbsp;&bull;&nbsp;
+          <%
+            var dob = new Date(patient.date_birth);
+            var today = new Date();
+            var age = today.getFullYear() - dob.getFullYear();
+            var bm  = today.getMonth() - dob.getMonth();
+            if (bm < 0 || (bm===0 && today.getDate()<dob.getDate())) age--;
+          %>
+          <%= age %> <%= locale==="fr"?"ans":"yrs" %>
+        <% } %>
+        <% if (patient.sex) { %>
+          &nbsp;&bull;&nbsp;<%= patient.sex==="m"?(locale==="fr"?"Masculin":"Male"):(locale==="fr"?"Féminin":"Female") %>
+        <% } %>
+        <% if (patient.blood_group) { %>
+          &nbsp;&bull;&nbsp;Bl: <%= patient.blood_group %>
+        <% } %>
+      </small>
+    </div>
+    <div class="text-end">
+      <a href="/patients/<%= patient.pid %>/record"
+        class="btn btn-sm btn-light opacity-75">
+        <i class="fas fa-folder-open me-1"></i>
+        <%= locale==="fr"?"Voir dossier":"View record" %>
+      </a>
+    </div>
+  </div>
+
+  <%/* ── Errors ── */%>
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.8rem;">
+      <% errors.forEach(function(e){ %>
+        <div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div>
+      <% }); %>
+    </div>
+  <% } %>
+
+  <%/* ── Main form — not shown at all if already admitted elsewhere,
+      since filling it out would just fail again at submit ── */%>
+  <% if (typeof alreadyAdmittedElsewhere === "undefined" || !alreadyAdmittedElsewhere) { %>
+  <form action="/patients/<%= patient.pid %>/admit?_csrf=<%= encodeURIComponent(csrfToken) %>"
+        method="POST" id="admitForm">
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-body p-3">
+
+        <%/* ── STEP 1: Department + Doctor ── */%>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="step-badge">1</span>
+          <p class="sec-title mb-0" style="border:none;">
+            <%= locale==="fr" ? "Département & Médecin" : "Department & Doctor" %>
+          </p>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">
+              <%= locale==="fr" ? "Département" : "Department" %> <span class="req">*</span>
+            </label>
+            <select name="dept_nr" id="dept_nr" class="form-select" required>
+              <option value="">
+                <%= locale==="fr" ? "Sélectionner un département..." : "Select a department..." %>
+              </option>
+              <% departments.forEach(function(d) { %>
+                <option value="<%= d.nr %>"><%= d.name_formal %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">
+              <%= locale==="fr" ? "Médecin traitant" : "Consulting Doctor" %>
+              <span class="req">*</span>
+            </label>
+            <select name="consulting_dr_nr" id="consulting_dr_nr" class="form-select" required>
+              <option value="">
+                <%= locale==="fr" ? "Sélectionner un médecin..." : "Select a doctor..." %>
+              </option>
+              <% staffList.forEach(function(s) {
+                var fullName = s.person
+                  ? (s.person.name_first + " " + s.person.name_last).trim()
+                  : "Staff #" + s.nr;
+              %>
+                <option value="<%= s.nr %>"><%= fullName %>
+                  <% if (s.job_function_title) { %>
+                    — <%= s.job_function_title %>
+                  <% } %>
+                </option>
+              <% }); %>
+            </select>
+          </div>
+        </div>
+
+        <%/* ── STEP 2: Chief Complaint / Referral ── */%>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="step-badge">2</span>
+          <p class="sec-title mb-0" style="border:none;">
+            <%= locale==="fr" ? "Motif de consultation" : "Reason for Visit" %>
+          </p>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-8">
+            <label class="form-label">
+              <%= locale==="fr" ? "Motif / Plainte principale" : "Chief Complaint" %>
+            </label>
+            <input type="text" name="chief_complaint" class="form-control"
+              placeholder="<%= locale==="fr"
+                ? "Ex: Fièvre, douleurs abdominales..."
+                : "e.g. Fever, abdominal pain..." %>">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">
+              <%= locale==="fr" ? "Médecin référent" : "Referring Doctor" %>
+            </label>
+            <input type="text" name="referrer_dr" class="form-control"
+              placeholder="<%= locale==="fr" ? "Nom du médecin référent" : "Referring doctor name" %>">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">
+              <%= locale==="fr" ? "Institution référente" : "Referring Institution" %>
+            </label>
+            <input type="text" name="referrer_institution" class="form-control"
+              placeholder="<%= locale==="fr" ? "Hôpital, clinique..." : "Hospital, clinic..." %>">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">
+              <%= locale==="fr" ? "Contact / Accompagnant" : "Accompanying Contact" %>
+            </label>
+            <input type="text" name="contact_name" class="form-control"
+              value="<%= patient.contact_person || "" %>"
+              placeholder="<%= locale==="fr" ? "Nom de la personne accompagnante" : "Companion name" %>">
+          </div>
+        </div>
+
+        <%/* ── STEP 3: Insurance ── */%>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="step-badge">3</span>
+          <p class="sec-title mb-0" style="border:none;">
+            <%= locale==="fr" ? "Couverture Médicale" : "Insurance Coverage" %>
+          </p>
+        </div>
+
+        <div class="mb-2">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="has_insurance"
+              name="has_insurance" value="1" onchange="toggleInsurance(this.checked)">
+            <label class="form-check-label" for="has_insurance" style="font-size:.82rem;">
+              <%= locale==="fr"
+                ? "Ce patient a une assurance maladie"
+                : "This patient has health insurance" %>
+            </label>
+          </div>
+        </div>
+
+        <%/* Financial class for cash/indigent */%>
+        <div id="no-insurance-section" class="mb-3">
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label">
+                <%= locale==="fr" ? "Mode de paiement" : "Payment Mode" %>
+              </label>
+              <select name="financial_class" class="form-select">
+                <option value="1" selected>
+                  <%= locale==="fr" ? "Comptant (Cash)" : "Cash" %>
+                </option>
+                <option value="3">
+                  <%= locale==="fr" ? "Indigent / Gratuit" : "Indigent / Free" %>
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="insurance-section" class="ins-section mb-3" style="display:none;">
+          <div class="row g-2">
+            <div class="col-md-5">
+              <label class="form-label">
+                <%= locale==="fr" ? "Compagnie d\"assurance" : "Insurance Company" %>
+                <span class="req">*</span>
+              </label>
+              <select name="insurance_firm_id" id="insurance_firm_id" class="form-select"
+                onchange="setInsuranceName(this)">
+                <option value="">
+                  <%= locale==="fr" ? "Sélectionner..." : "Select..." %>
+                </option>
+                <% insurers.forEach(function(ins) { %>
+                  <option value="<%= ins.firm_id %>" data-name="<%= ins.name %>">
+                    <%= ins.name %>
+                  </option>
+                <% }); %>
+              </select>
+              <input type="hidden" name="insurance_firm_name" id="insurance_firm_name">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">
+                <%= locale==="fr" ? "N° Police / Membre" : "Policy / Member No." %>
+              </label>
+              <input type="text" name="insurance_nr" class="form-control"
+                placeholder="<%= locale==="fr" ? "N° police" : "Policy number" %>">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">
+                <%= locale==="fr" ? "% Pris en charge" : "Coverage %" %>
+              </label>
+              <input type="number" name="insurance_pct" id="insurance_pct"
+                class="form-control" value="80" min="0" max="100"
+                onchange="updatePrice()">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">
+                <%= locale==="fr" ? "Part Patient" : "Patient Pays" %>
+              </label>
+              <div class="form-control bg-light text-center fw-bold" id="patient_share"
+                style="font-size:.8rem;">—</div>
+            </div>
+          </div>
+        </div>
+
+        <%/* ── STEP 4: Consultation ── */%>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="step-badge">4</span>
+          <p class="sec-title mb-0" style="border:none;">
+            <%= locale==="fr" ? "Type de Consultation" : "Consultation Type" %>
+          </p>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-8">
+            <label class="form-label">
+              <%= locale==="fr" ? "Consultation" : "Consultation" %> <span class="req">*</span>
+            </label>
+            <select name="consultation_id" id="consultation_id" class="form-select" required
+              onchange="updatePrice()">
+              <option value="">
+                <%= locale==="fr" ? "Sélectionner une consultation..." : "Select consultation type..." %>
+              </option>
+              <% consultations.forEach(function(c) {
+                var label = (locale==="fr")
+                  ? c.item_description
+                  : (c.item_description_en || c.item_description);
+                var p1 = parseFloat(c.unit_price_dec || c.unit_price) || 0;
+                var p2 = parseFloat(c.unit_price_2_dec || c.unit_price_2) || 0;
+              %>
+                <option value="<%= c.item_id %>"
+                  data-price="<%= p1 %>"
+                  data-price-ins="<%= p2 %>">
+                  <%= label %>
+                  (<%= locale==="fr"?"Sans ass.":"No ins." %>: <%= p1.toLocaleString() %>
+                  / <%= locale==="fr"?"Avec ass.":"With ins." %>: <%= p2.toLocaleString() %>)
+                </option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">
+              <%= locale==="fr" ? "Montant à facturer" : "Amount to Bill" %>
+            </label>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <span class="price-badge" id="price-display">—</span>
+              <span class="text-muted" style="font-size:.72rem;">FCFA</span>
+            </div>
+            <input type="hidden" id="computed_price" name="computed_price">
+          </div>
+        </div>
+
+        <div class="p-2 rounded mb-1" style="background:#f0f4ff;font-size:.75rem;">
+          <i class="fas fa-info-circle me-1 text-primary"></i>
+          <% if (locale==="fr") { %>
+            Un <strong>bon de consultation</strong> (facture) sera automatiquement créé à la validation.
+            Si le patient a une assurance, le tarif avec assurance sera appliqué.
+          <% } else { %>
+            A <strong>consultation bill</strong> will be automatically created on validation.
+            If the patient has insurance, the insurance rate will be applied.
+          <% } %>
+        </div>
+
+      </div>
+    </div>
+
+    <%/* ── Action buttons ── */%>
+    <div class="d-flex justify-content-between align-items-center">
+      <a href="/patients/<%= patient.pid %>/record"
+        class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-times me-1"></i>
+        <%= locale==="fr" ? "Annuler" : "Cancel" %>
+      </a>
+      <button type="submit" class="btn btn-primary" id="btnAdmit">
+        <i class="fas fa-hospital-user me-2"></i>
+        <%= locale==="fr" ? "Valider l\"Admission" : "Confirm Admission" %>
+      </button>
+    </div>
+
+  </form>
+  <% } %>
+</div>
+</div>
+
+<script>
+var hasInsurance = false;
+
+function toggleInsurance(checked) {
+  hasInsurance = checked;
+  document.getElementById('insurance-section').style.display    = checked ? 'block' : 'none';
+  document.getElementById('no-insurance-section').style.display = checked ? 'none'  : 'block';
+  updatePrice();
+}
+
+function setInsuranceName(sel) {
+  var opt = sel.options[sel.selectedIndex];
+  document.getElementById('insurance_firm_name').value = opt ? (opt.getAttribute('data-name') || '') : '';
+  updatePrice();
+}
+
+function updatePrice() {
+  var sel   = document.getElementById('consultation_id');
+  var opt   = sel ? sel.options[sel.selectedIndex] : null;
+  if (!opt || !opt.value) {
+    document.getElementById('price-display').textContent = '—';
+    document.getElementById('computed_price').value = '';
+    document.getElementById('patient_share').textContent = '—';
+    return;
+  }
+  var p1 = parseFloat(opt.getAttribute('data-price'))     || 0;
+  var p2 = parseFloat(opt.getAttribute('data-price-ins')) || 0;
+  var price = hasInsurance ? p2 : p1;
+
+  document.getElementById('price-display').textContent  = price.toLocaleString();
+  document.getElementById('computed_price').value       = price;
+
+  if (hasInsurance) {
+    var pctEl  = document.getElementById('insurance_pct');
+    var pct    = pctEl ? (parseFloat(pctEl.value) || 0) : 0;
+    var patAmt = Math.round(price * (1 - pct / 100));
+    document.getElementById('patient_share').textContent = patAmt.toLocaleString();
+  } else {
+    document.getElementById('patient_share').textContent = '—';
+  }
+}
+
+// Prevent double-submit
+document.getElementById('admitForm').addEventListener('submit', function() {
+  var btn = document.getElementById('btnAdmit');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>'
+    + ('<%= locale==="fr"?"Traitement...":"Processing..." %>');
+});
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+

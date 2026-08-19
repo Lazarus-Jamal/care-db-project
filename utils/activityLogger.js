@@ -1,0 +1,36 @@
+// utils/activityLogger.js
+const { care_accesslog } = require('../models');
+
+/**
+ * Logs an activity to the care_accesslog table.
+ * @param {object} req - The Express request object.
+ * @param {string} lognote - A descriptive note of the activity.
+ * @param {boolean} login_success - True for success, false for failure.
+ * @param {string} thisfile - The file/route where the activity occurred.
+ * @param {number|string} [userId] - The user ID to explicitly log (optional).
+ * @param {string} [username] - The username to explicitly log (optional).
+ */
+const logActivity = async (req, lognote, login_success, thisfile, userId, username) => {
+    try {
+        // Use the provided userId and username, or fall back to req.user if they are not provided.
+        const userIdentifier = userId || (req.user ? req.user.user_id : 'unknown');
+        const userDisplayName = username || (req.user ? req.user.username : 'system');
+        const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+        await care_accesslog.create({
+            datetime: new Date(),
+            ip,
+            lognote,
+            userid: String(userIdentifier), // Ensure it's a string for the DB
+            username: userDisplayName,
+            thisfile,
+            fileforward: req.originalUrl,
+            login_success: login_success ? 1 : 0,
+        });
+    } catch (error) {
+        console.error('Failed to log activity:', error);
+    }
+};
+
+module.exports = logActivity;
+

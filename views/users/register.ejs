@@ -1,0 +1,171 @@
+
+<%- include("../partials/header") %>
+<%- include("../partials/navbar") %>
+
+<style>
+  
+
+  .form-wrapper { max-width:700px; margin:0 auto; padding:20px; font-size:0.85rem; background:#f8f9fa; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.05); }
+  .form-control, .form-select { font-size:0.85rem; padding:0.3rem 0.5rem; }
+  h2  { font-size:1.2rem; margin-bottom:1rem; }
+  .btn { font-size:0.85rem; padding:0.4rem 0.75rem; }
+  .alert { font-size:0.8rem; padding:0.5rem; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="card bg-light p-4 form-wrapper">
+    <h4 class="mb-3"><%= t.users.createTitle %></h4>
+
+    <% if (success) { %>
+      <div class="alert alert-success"><%= t.users.successCreate %></div>
+    <% } %>
+    <% if (errors && errors.length > 0) { %>
+      <div class="alert alert-danger">
+        <ul><% errors.forEach(e => { %><li><%= e %></li><% }) %></ul>
+      </div>
+    <% } %>
+
+    <form method="POST" action="/admin/users/create">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <div class="row mb-2">
+        <div class="col-md-6">
+          <label for="person_id" class="form-label"><%= t.users.selectStaff %></label>
+          <input type="text" id="personSearch" class="form-control form-control-sm mb-2"
+            placeholder="<%= t.users.searchStaff %>">
+          <select name="person_id" id="person_id" class="form-select form-select-sm" required size="5">
+            <option value=""><%= t.users.selectStaffPh %></option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="username" class="form-label"><%= t.users.generatedUser %></label>
+          <input type="text" name="username" id="username" class="form-control form-control-sm" readonly required>
+          <label for="email" class="form-label mt-2"><%= t.users.email %></label>
+          <input type="email" name="email" id="email" class="form-control form-control-sm" readonly>
+        </div>
+      </div>
+
+      <div class="row mb-2">
+        <div class="col-md-6">
+          <label for="password" class="form-label"><%= t.users.password %></label>
+          <input type="password" name="password" id="password" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-md-6">
+          <label for="role_id" class="form-label"><%= t.users.role %></label>
+          <select name="role_id" id="role_id" class="form-select form-select-sm" required>
+            <option value=""><%= t.users.selectRole %></option>
+            <% roles.forEach(userole => { %>
+              <option value="<%= userole.id %>"><%= userole.role_name %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+
+      <div class="row mb-2">
+        <div class="col-md-6">
+          <label for="facility_id" class="form-label"><%= t.users.facility %></label>
+          <select name="facility_id" id="facility_id" class="form-select form-select-sm" required>
+            <option value=""><%= t.users.selectFacility %></option>
+            <% facilities.forEach(facility => { %>
+              <option value="<%= facility.id %>"><%= facility.name %> (<%= facility.code %>)</option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="dept_nr" class="form-label"><%= t.users.department %></label>
+          <select name="dept_nr" id="dept_nr" class="form-select form-select-sm">
+            <option value=""><%= t.users.selectDept %></option>
+            <% departments.forEach(dept => { %>
+              <option value="<%= dept.nr %>"><%= dept.name_formal %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+
+      <div class="text-end mt-3">
+        <a href="/" class="btn btn-sm btn-secondary"><%= t.common.close %></a>
+        <button type="submit" class="btn btn-sm btn-primary"><%= t.users.submit %></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function debounce(func, delay) {
+    let timeout;
+    return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); };
+  }
+
+  document.getElementById('personSearch').addEventListener('input', debounce(function () {
+    const q = this.value;
+    const sel = document.getElementById('person_id');
+    while (sel.options.length > 1) sel.remove(1);
+    if (q.length < 3) return;
+    fetch('/admin/users/personnel-search?query=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(data => data.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.pid;
+        opt.textContent = (p.name_first || '') + ' ' + (p.name_last || '') + ' (PID: ' + p.pid + ')';
+        opt.dataset.firstname = p.name_first || '';
+        opt.dataset.lastname  = p.name_last  || '';
+        opt.dataset.email     = p.email      || '';
+        sel.appendChild(opt);
+      }));
+  }, 300));
+
+  document.getElementById('person_id').addEventListener('change', function () {
+    const opt = this.options[this.selectedIndex];
+    if (opt.value) {
+      const last  = opt.dataset.lastname;
+      const first = opt.dataset.firstname;
+      let uname = last.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (first.length >= 2) uname += first.substring(0, 2).toLowerCase().replace(/[^a-z0-9]/g, '');
+      document.getElementById('username').value = uname;
+      document.getElementById('email').value    = opt.dataset.email;
+    } else {
+      document.getElementById('username').value = '';
+      document.getElementById('email').value    = '';
+    }
+  });
+
+  // Departments are facility-scoped (System Configuration module) — filter
+  // the department dropdown to only what's actually configured for the
+  // selected facility, rather than showing the full global catalog
+  // regardless of facility. facilityDeptMap is pre-loaded whole
+  // (facility_id -> [dept_nr, ...]) so this is instant, client-side, no
+  // round-trip per change.
+  const facilityDeptMap = <%- JSON.stringify(typeof facilityDeptMap !== "undefined" ? facilityDeptMap : {}) %>;
+  const facilitySelectEl = document.getElementById('facility_id');
+  const deptSelectEl     = document.getElementById('dept_nr');
+  const allDeptOptions   = Array.from(deptSelectEl.options);
+
+  function filterDeptOptions() {
+    const allowedNrs = facilityDeptMap[facilitySelectEl.value] || null;
+    const currentVal = deptSelectEl.value;
+    deptSelectEl.innerHTML = '';
+    allDeptOptions.forEach(function(opt) {
+      const isPlaceholder = opt.value === '';
+      const isAllowed = isPlaceholder || !allowedNrs || allowedNrs.map(String).indexOf(opt.value) !== -1;
+      if (isAllowed) deptSelectEl.appendChild(opt);
+    });
+    // Keep the previous selection if it's still a valid option, else reset
+    // to the placeholder rather than silently keeping a now-hidden value.
+    if (Array.from(deptSelectEl.options).some(o => o.value === currentVal)) {
+      deptSelectEl.value = currentVal;
+    } else {
+      deptSelectEl.value = '';
+    }
+  }
+
+  facilitySelectEl.addEventListener('change', filterDeptOptions);
+  filterDeptOptions();
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+

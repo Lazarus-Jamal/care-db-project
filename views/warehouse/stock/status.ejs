@@ -1,0 +1,308 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:3px 7px; font-size:.74rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .exp-expired  { background:#f8d7da !important; color:#842029; }
+  .exp-critical { background:#fff3cd !important; color:#856404; }
+  .exp-warning  { background:#fff8e1 !important; }
+  .batch-row    { font-size:.70rem; }
+  .fefo-arrow   { color:#198754; font-weight:700; }
+  .stock-zero   { opacity:.5; }
+  .low-badge    { display:inline-block; padding:1px 6px; border-radius:10px; background:#f8d7da; color:#842029; font-size:.62rem; font-weight:700; }
+  /* coloured tabs */
+  .wh-tabs { display:flex; gap:4px; border-bottom:2px solid #dee2e6; margin-bottom:1rem; }
+  .wh-tab  { display:inline-flex; align-items:center; gap:5px; padding:6px 14px;
+             border-radius:.4rem .4rem 0 0; font-size:.80rem; font-weight:600;
+             text-decoration:none; border:1px solid transparent; border-bottom:none;
+             color:#6c757d; background:#e9ecef; transition:background .15s; }
+  .wh-tab:hover { background:#dee2e6; color:#212529; text-decoration:none; }
+  .tab-loc  { background:#0d6efd !important; color:#fff !important; border-color:#0d6efd !important; }
+  .tab-prod { background:#198754 !important; color:#fff !important; border-color:#198754 !important; }
+  .tab-mov  { background:#6f42c1 !important; color:#fff !important; border-color:#6f42c1 !important; }
+  /* location cards */
+  .aisle-card  { border-left:4px solid #0d6efd !important; }
+  .aisle-head  { background:linear-gradient(135deg,#e8f0fe,#f0f4ff) !important; border-bottom:1px solid #c9d8fb; }
+  .aisle-badge { background:#0d6efd; color:#fff; padding:2px 8px; border-radius:4px;
+                 font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+  /* tighter location rows */
+  .loc-row td  { padding:3px 8px !important; font-size:.73rem !important; }
+  .loc-head th { padding:3px 8px !important; font-size:.66rem !important;
+                 text-transform:uppercase; letter-spacing:.04em; background:#eef2ff; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-layer-group me-2 text-info"></i><%= locale==="fr"?"État du stock":"Stock Status" %></h5>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Fulfil.PharmacyOrder")) { %>
+        <a href="/warehouse/stock/issue" class="btn btn-sm btn-success"><i class="fas fa-pills me-1"></i><%= locale==="fr"?"Émettre vers pharmacie":"Issue to Pharmacy" %></a>
+      <% } %>
+      <a href="/warehouse/stock/expiry" class="btn btn-sm btn-outline-warning"><i class="fas fa-calendar-times me-1"></i><%= locale==="fr"?"Rapport péremption":"Expiry Report" %></a>
+      <a href="/warehouse" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Dashboard</a>
+    </div>
+  </div>
+
+  <%/* Search */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <form method="GET" action="/warehouse/stock" class="d-flex gap-2 align-items-center flex-wrap">
+        <input type="hidden" name="tab" value="<%= tab %>">
+        <input type="text" name="search" value="<%= search %>" class="form-control form-control-sm"
+          style="max-width:240px;" placeholder="<%= locale==="fr"?"Rechercher produit...":"Search product..." %>">
+        <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-search"></i></button>
+        <% if (search) { %>
+          <a href="/warehouse/stock?tab=<%= tab %>" class="btn btn-sm btn-outline-danger"><i class="fas fa-times"></i></a>
+        <% } %>
+      </form>
+    </div>
+  </div>
+
+  <%/* Tabs */%>
+  <div class="wh-tabs">
+    <a class="wh-tab <%= tab==="location"?"tab-loc":"" %>"
+       href="/warehouse/stock?tab=location&search=<%= search %>">
+      <i class="fas fa-map-marker-alt"></i>
+      <%= locale==="fr"?"Par emplacement":"By Location" %>
+    </a>
+    <a class="wh-tab <%= tab==="product"?"tab-prod":"" %>"
+       href="/warehouse/stock?tab=product&search=<%= search %>">
+      <i class="fas fa-box"></i>
+      <%= locale==="fr"?"Par produit":"By Product" %>
+    </a>
+    <a class="wh-tab <%= tab==="movements"?"tab-mov":"" %>"
+       href="/warehouse/stock?tab=movements">
+      <i class="fas fa-history"></i>
+      <%= locale==="fr"?"Mouvements":"Movements" %>
+      <span style="font-size:.66rem;opacity:.75;margin-left:3px;">
+        <a href="/warehouse/stock/movements" style="color:inherit;" title="<%= locale==="fr"?"Voir tout":"View all" %>">
+          <i class="fas fa-external-link-alt"></i>
+        </a>
+      </span>
+    </a>
+  </div>
+
+  <%/* ── BY PRODUCT ── */%>
+  <% if (tab === "product") { %>
+    <% if (!products || products.length === 0) { %>
+      <div class="card shadow-sm"><div class="card-body text-center text-muted py-5"><%= locale==="fr"?"Aucun produit.":"No products." %></div></div>
+    <% } else { %>
+      <% products.forEach(function(p) { %>
+        <%
+          var hasStock = p.stockBatches && p.stockBatches.length > 0;
+          var isLow    = p.reorder_level > 0 && p.current_stock <= p.reorder_level;
+        %>
+        <div class="card shadow-sm mb-2 <%= !hasStock ? "stock-zero" : "" %>">
+          <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+              <div>
+                <div class="fw-bold" style="font-size:.83rem;"><%= p.name %></div>
+                <div class="text-muted" style="font-size:.70rem;">
+                  <code><%= p.item_code %></code> &bull; <%= p.unit_of_measure %>
+                  <% if (p.category) { %> &bull; <%= p.category.name %><% } %>
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <% if (isLow) { %>
+                  <span class="low-badge"><i class="fas fa-exclamation-triangle me-1"></i><%= locale==="fr"?"Stock bas":"Low Stock" %></span>
+                  <div class="d-flex gap-1">
+                    <a href="/warehouse/purchase-orders/new?product_id=<%= p.product_id %>" class="btn btn-xs btn-outline-warning" title="<%= locale==="fr"?"Créer une commande":"Create PO" %>"><i class="fas fa-file-invoice"></i></a>
+                    <a href="/warehouse/rfq/new?product_id=<%= p.product_id %>"             class="btn btn-xs btn-outline-info"    title="<%= locale==="fr"?"Créer RFQ":"Create RFQ" %>"><i class="fas fa-file-alt"></i></a>
+                  </div>
+                <% } %>
+                <div class="text-center">
+                  <div style="font-size:1.1rem; font-weight:800; color:<%= isLow?"#dc3545":"#0d6efd" %>"><%= p.current_stock %></div>
+                  <div style="font-size:.62rem; color:#6c757d;"><%= p.unit_of_measure %></div>
+                </div>
+              </div>
+            </div>
+
+            <%/* FEFO batch breakdown */%>
+            <% if (hasStock) { %>
+              <div class="mt-2 border-top pt-2">
+                <table class="table table-xs mb-0 batch-row">
+                  <thead class="table-dark"><tr>
+                    <th style="width:24px;"></th>
+                    <th><%= locale==="fr"?"Lot":"Batch" %></th>
+                    <th><%= locale==="fr"?"Emplacement":"Location" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Qté":"Qty" %></th>
+                    <th><%= locale==="fr"?"Péremption":"Expiry" %></th>
+                  </tr></thead>
+                  <tbody>
+                    <% p.stockBatches.forEach(function(b, bidx) { %>
+                      <%
+                        var bExpClass = b.expiry_date <= TODAY ? "exp-expired" :
+                                        b.expiry_date <= IN_7  ? "exp-critical" :
+                                        b.expiry_date <= IN_30 ? "exp-warning"  : "";
+                      %>
+                      <tr class="<%= bExpClass %>">
+                        <td class="text-center">
+                          <% if (bidx === 0) { %>
+                            <span class="fefo-arrow" title="FEFO — use this batch first">&#8594;</span>
+                          <% } %>
+                        </td>
+                        <td><%= b.batch_number || "—" %></td>
+                        <td><%= b.location ? b.location.label : "<span class=\"text-muted\">"+( locale==="fr"?"Non rangé":"Not shelved")+"</span>" %></td>
+                        <td class="text-center fw-bold"><%= b.quantity %></td>
+                        <td>
+                          <%= b.expiry_date ? new Date(b.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : "—" %>
+                          <% if (b.expiry_date <= TODAY) { %>
+                            <span class="badge bg-danger ms-1" style="font-size:.58rem;"><%= locale==="fr"?"PÉRIMÉ":"EXPIRED" %></span>
+                          <% } else if (b.expiry_date <= IN_7) { %>
+                            <span class="badge bg-warning text-dark ms-1" style="font-size:.58rem;"><%= locale==="fr"?"Critique":"Critical" %></span>
+                          <% } else if (b.expiry_date <= IN_30) { %>
+                            <span class="badge bg-warning text-dark ms-1" style="font-size:.58rem;">< 30j</span>
+                          <% } %>
+                        </td>
+                      </tr>
+                    <% }); %>
+                  </tbody>
+                </table>
+              </div>
+            <% } else { %>
+              <div class="text-muted mt-1" style="font-size:.72rem;"><i class="fas fa-box-open me-1 opacity-50"></i><%= locale==="fr"?"Aucun lot en stock.":"No stock batches." %></div>
+            <% } %>
+          </div>
+        </div>
+      <% }); %>
+    <% } %>
+  <% } %>
+
+  <%/* ── BY LOCATION ── */%>
+  <% if (tab === "location") { %>
+    <% if (!locations || locations.length === 0) { %>
+      <div class="card shadow-sm"><div class="card-body text-center text-muted py-5">
+        <%= locale==="fr"?"Aucun emplacement défini.":"No locations defined." %>
+        <a href="/warehouse/locations/new" class="ms-2"><%= locale==="fr"?"Créer un emplacement":"Create location" %></a>
+      </div></div>
+    <% } else { %>
+      <% locations.forEach(function(loc) { %>
+        <div class="card shadow-sm mb-2 aisle-card">
+          <div class="card-header py-2 d-flex justify-content-between align-items-center aisle-head">
+            <span>
+              <span class="aisle-badge me-2"><%= loc.aisle %></span>
+              <span class="fw-bold" style="font-size:.82rem;"><%= loc.label %></span>
+              <% if (loc.shelf) { %><span class="text-muted ms-1" style="font-size:.74rem;">/ <%= loc.shelf %></span><% } %>
+              <% if (loc.description) { %><span class="text-muted ms-2" style="font-size:.70rem;font-style:italic;"><%= loc.description.substring(0,50) %></span><% } %>
+            </span>
+            <span class="badge" style="background:#0d6efd;font-size:.62rem;"><%= loc.stock ? loc.stock.length : 0 %> lot(s)</span>
+          </div>
+          <% if (loc.stock && loc.stock.length > 0) { %>
+            <div class="card-body p-0">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark loc-head"><tr>
+                  <th><%= locale==="fr"?"Produit":"Product" %></th>
+                  <th><%= locale==="fr"?"Lot":"Batch" %></th>
+                  <th class="text-center">Qty</th>
+                  <th><%= locale==="fr"?"Peremption":"Expiry" %></th>
+                </tr></thead>
+                <tbody>
+                  <% loc.stock.forEach(function(s) { %>
+                    <%
+                      var sExp = s.expiry_date <= TODAY ? "exp-expired" :
+                                 s.expiry_date <= IN_7  ? "exp-critical" :
+                                 s.expiry_date <= IN_30 ? "exp-warning"  : "";
+                    %>
+                    <tr class="loc-row <%= sExp %>">
+                      <td>
+                        <span class="fw-bold"><%= s.product ? s.product.name : "#"+s.product_id %></span>
+                        <% if (s.product) { %> <code style="font-size:.64rem;color:#6c757d;"><%= s.product.item_code %></code><% } %>
+                      </td>
+                      <td class="text-muted"><%= s.batch_number || "—" %></td>
+                      <td class="text-center fw-bold"><%= s.quantity %></td>
+                      <td><%= s.expiry_date ? new Date(s.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : "—" %>
+                        <% if (s.expiry_date <= TODAY) { %><span class="badge bg-danger ms-1" style="font-size:.56rem;">EXP</span><% } %>
+                      </td>
+                    </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          <% } else { %>
+            <div class="card-body py-2 text-muted" style="font-size:.78rem;"><i class="fas fa-box-open me-1"></i><%= locale==="fr"?"Emplacement vide.":"Location is empty." %></div>
+          <% } %>
+        </div>
+      <% }); %>
+    <% } %>
+  <% } %>
+
+  <%/* ── RECENT MOVEMENTS ── */%>
+  <% if (tab === "movements") { %>
+    <div class="card shadow-sm">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center" style="font-size:.85rem;">
+        <span class="fw-bold"><i class="fas fa-history me-2"></i><%= locale==="fr"?"20 derniers mouvements":"Last 20 Movements" %></span>
+        <a href="/warehouse/stock/movements" class="btn btn-xs btn-outline-secondary"><%= locale==="fr"?"Voir tout":"View All" %></a>
+      </div>
+      <div class="card-body p-0">
+        <% if (!recentMovements || recentMovements.length === 0) { %>
+          <div class="text-center text-muted py-4"><%= locale==="fr"?"Aucun mouvement.":"No movements." %></div>
+        <% } else { %>
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"Date":"Date" %></th>
+              <th><%= locale==="fr"?"Type":"Type" %></th>
+              <th><%= locale==="fr"?"Produit":"Product" %></th>
+              <th class="text-center">Qty</th>
+              <th><%= locale==="fr"?"Lot":"Batch" %></th>
+              <th><%= locale==="fr"?"Par":"By" %></th>
+            </tr></thead>
+            <tbody>
+              <% recentMovements.forEach(function(m) { %>
+                <tr>
+                  <td class="text-muted" style="font-size:.74rem;"><%= new Date(m.performed_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+                  <td>
+                    <%
+                      var tClass = { receipt:"bg-success", issue:"bg-danger", adjustment:"bg-warning text-dark" };
+                      var tLabel = locale==="fr"
+                        ? { receipt:"Entree", issue:"Sortie", adjustment:"Ajustement" }
+                        : { receipt:"Receipt", issue:"Issue",  adjustment:"Adjustment" };
+                    %>
+                    <span class="badge <%= tClass[m.movement_type]||"bg-secondary" %>" style="font-size:.60rem;">
+                      <%= tLabel[m.movement_type]||m.movement_type %>
+                    </span>
+                  </td>
+                  <td>
+                    <div style="font-size:.78rem;"><%= m.product ? m.product.name : "#"+m.product_id %></div>
+                    <% if (m.product) { %><div class="text-muted" style="font-size:.68rem;"><code><%= m.product.item_code %></code></div><% } %>
+                  </td>
+                  <td class="text-center fw-bold" style="color:<%= m.quantity>=0?"#198754":"#dc3545" %>">
+                    <%= m.quantity >= 0 ? "+" + m.quantity : m.quantity %>
+                  </td>
+                  <td class="text-muted" style="font-size:.74rem;"><%= m.batch_number || "—" %></td>
+                  <td class="text-muted" style="font-size:.74rem;"><%= m.performed_by %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
+
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

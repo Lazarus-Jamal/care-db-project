@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="<%= typeof locale !== "undefined" ? locale : "en" %>">
+<head>
+  <meta charset="UTF-8">
+  <title><%= title %> — Oseel Care</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Arial',sans-serif; font-size:10pt; color:#222; background:#fff; padding:20px 28px; }
+    h1 { font-size:14pt; margin-bottom:4px; }
+    .meta { font-size:8pt; color:#666; margin-bottom:16px; }
+    table { width:100%; border-collapse:collapse; font-size:9pt; margin-top:12px; }
+    th { background:#333; color:#fff; padding:5px 8px; text-align:left; font-size:8pt; text-transform:uppercase; letter-spacing:.03em; }
+    td { padding:4px 8px; border-bottom:1px solid #eee; }
+    tr:nth-child(even) td { background:#f9f9f9; }
+    .summary { display:flex; gap:20px; margin-bottom:16px; flex-wrap:wrap; }
+    .s-box { border:1px solid #dee2e6; border-radius:4px; padding:8px 14px; min-width:110px; }
+    .s-val { font-size:13pt; font-weight:800; }
+    .s-lbl { font-size:7pt; text-transform:uppercase; color:#666; }
+    .section-title { font-size:10pt; font-weight:700; margin:14px 0 6px; border-bottom:2px solid #333; padding-bottom:3px; }
+    @media print { body { padding:0; } }
+  </style>
+</head>
+<body>
+  <h1><i>Oseel Care</i> — <%= title %></h1>
+  <div class="meta">
+    <%= locale==="fr"?"Genere le":"Generated" %> <%= new Date(generatedAt).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+    &bull; <%= user ? user.username : "" %>
+  </div>
+
+  <div class="summary">
+    <div class="s-box"><div class="s-val" style="color:#20c997"><%= total %></div><div class="s-lbl">Total</div></div>
+    <div class="s-box"><div class="s-val" style="color:#198754"><%= passed %></div><div class="s-lbl">Pass</div></div>
+    <div class="s-box"><div class="s-val" style="color:#dc3545"><%= failed %></div><div class="s-lbl">Fail</div></div>
+    <div class="s-box"><div class="s-val" style="color:#ffc107"><%= tempFail %></div><div class="s-lbl">Temp. NOK</div></div>
+  </div>
+  <table><thead><tr><th>Date</th><th><%= locale==="fr"?"Produit":"Product" %></th><th><%= locale==="fr"?"Fournisseur":"Supplier" %></th><th>OK</th><th>NOK</th><th>Temp</th><th><%= locale==="fr"?"Motif":"Reason" %></th></tr></thead>
+    <tbody>
+      <% checks.forEach(function(q){ %>
+        <%
+          var prod = q.deliveryItem && q.deliveryItem.product ? q.deliveryItem.product.name : "—";
+          var sup  = q.deliveryItem && q.deliveryItem.delivery && q.deliveryItem.delivery.po &&
+                     q.deliveryItem.delivery.po.supplier ? q.deliveryItem.delivery.po.supplier.name : "—";
+        %>
+        <tr style="<%= q.result==="fail"?"background:#fff0f0":"" %>">
+          <td><%= new Date(q.checked_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+          <td><%= prod %></td><td><%= sup %></td>
+          <td style="color:#198754;font-weight:700"><%= q.quantity_accepted %></td>
+          <td style="color:#dc3545;font-weight:700"><%= q.quantity_rejected %></td>
+          <td style="color:<%= q.temperature_ok===0?"#dc3545":"#198754" %>"><%= q.temperature_ok===0?"NOK":"OK" %></td>
+          <td style="font-size:8pt"><%= q.rejection_reason||"" %></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  <script>window.onload=function(){window.print();}</script>
+</body>
+</html>
+

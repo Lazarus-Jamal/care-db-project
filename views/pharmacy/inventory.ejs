@@ -1,0 +1,167 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.78rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .stock-badge { display:inline-block; padding:2px 7px; border-radius:10px;
+                 font-size:.62rem; font-weight:700; }
+  .exp-expired  { background:#f8d7da !important; color:#842029; }
+  .exp-critical { background:#fff3cd !important; color:#856404; }
+  .exp-warning  { background:#fff8e1 !important; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h5 class="mb-0 fw-bold">
+      <i class="fas fa-boxes me-2 text-info"></i>
+      <%= locale==="fr"?"Stock disponible":"Available Stock" %>
+    </h5>
+    <a href="/pharmacy/orders/new" class="btn btn-sm btn-success">
+      <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Nouvelle commande":"New Request" %>
+    </a>
+  </div>
+
+  <%/* Filters */%>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/pharmacy/inventory" class="d-flex gap-2 flex-wrap align-items-end">
+      <div>
+        <label class="lbl d-block" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6c757d;">
+          <%= locale==="fr"?"Recherche":"Search" %>
+        </label>
+        <input type="text" name="search" value="<%= search %>"
+          class="form-control form-control-sm" style="width:200px;"
+          placeholder="<%= locale==="fr"?"Nom ou code...":"Name or code..." %>">
+      </div>
+      <div>
+        <label class="lbl d-block" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6c757d;">
+          <%= locale==="fr"?"Categorie":"Category" %>
+        </label>
+        <select name="category_id" class="form-select form-select-sm">
+          <option value=""><%= locale==="fr"?"Toutes":"All" %></option>
+          <% categories.forEach(function(c){ %>
+            <option value="<%= c.category_id %>" <%= catId==c.category_id?"selected":"" %>><%= c.name %></option>
+          <% }); %>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-search"></i></button>
+      <% if (search || catId) { %>
+        <a href="/pharmacy/inventory" class="btn btn-sm btn-outline-danger"><i class="fas fa-times"></i></a>
+      <% } %>
+    </form>
+  </div></div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!products || products.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-box-open fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr"?"Aucun produit trouve.":"No products found." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"Produit":"Product" %></th>
+              <th><%= locale==="fr"?"Code":"Code" %></th>
+              <th><%= locale==="fr"?"Categorie":"Category" %></th>
+              <th><%= locale==="fr"?"Unite":"Unit" %></th>
+              <th class="text-center"><%= locale==="fr"?"Stock total":"Total Stock" %></th>
+              <th><%= locale==="fr"?"Lots disponibles":"Batches" %></th>
+              <th class="text-center">Actions</th>
+            </tr></thead>
+            <tbody>
+              <% products.forEach(function(p) {
+                var batches     = p.stockBatches || [];
+                var totalQty    = batches.reduce(function(s,b){return s+b.quantity;}, 0);
+                var hasExpiring = batches.some(function(b){return b.expiry_date && b.expiry_date <= in30;});
+                var hasExpired  = batches.some(function(b){return b.expiry_date && b.expiry_date <= today;});
+              %>
+                <tr class="<%= p.current_stock === 0 ? "opacity-50" : "" %>">
+                  <td>
+                    <div class="fw-bold" style="font-size:.78rem;"><%= p.name %></div>
+                    <% if (p.generic_name) { %>
+                      <div class="text-muted" style="font-size:.66rem;font-style:italic;"><%= p.generic_name %></div>
+                    <% } %>
+                  </td>
+                  <td><code style="font-size:.70rem;"><%= p.item_code %></code></td>
+                  <td class="text-muted"><%= p.category ? p.category.name : "—" %></td>
+                  <td class="text-muted"><%= p.unit_of_measure %></td>
+                  <td class="text-center">
+                    <% if (p.current_stock === 0) { %>
+                      <span class="stock-badge" style="background:#f8d7da;color:#842029;">
+                        0 <%= locale==="fr"?"Rupture":"Out" %>
+                      </span>
+                    <% } else if (p.reorder_level > 0 && p.current_stock <= p.reorder_level) { %>
+                      <span class="stock-badge" style="background:#fff3cd;color:#856404;">
+                        <%= p.current_stock %> <%= locale==="fr"?"(bas)":"(low)" %>
+                      </span>
+                    <% } else { %>
+                      <span class="stock-badge" style="background:#d1e7dd;color:#0a3622;">
+                        <%= p.current_stock %>
+                      </span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (batches.length === 0) { %>
+                      <span class="text-muted" style="font-size:.72rem;"><%= locale==="fr"?"Aucun lot":"No batches" %></span>
+                    <% } else { %>
+                      <% batches.slice(0,3).forEach(function(b) {
+                        var expClass = b.expiry_date <= today ? "exp-expired" :
+                                       b.expiry_date <= in30  ? "exp-warning"  : "";
+                      %>
+                        <div style="font-size:.70rem;" class="<%= expClass %>">
+                          <span class="fw-bold"><%= b.quantity %></span>
+                          <% if (b.batch_number) { %><span class="text-muted ms-1"><%= b.batch_number %></span><% } %>
+                          <% if (b.expiry_date) { %>
+                            <span class="ms-1 <%= b.expiry_date <= today ? "text-danger" : b.expiry_date <= in30 ? "text-warning" : "text-muted" %>">
+                              <%= new Date(b.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                              <% if (b.expiry_date <= today) { %><span class="badge bg-danger ms-1" style="font-size:.52rem;">EXP</span><% } %>
+                            </span>
+                          <% } %>
+                        </div>
+                      <% }); %>
+                      <% if (batches.length > 3) { %>
+                        <div class="text-muted" style="font-size:.66rem;">+<%= batches.length-3 %> <%= locale==="fr"?"autres lots":"more batches" %></div>
+                      <% } %>
+                    <% } %>
+                  </td>
+                  <td class="text-center">
+                    <% if (p.current_stock > 0) { %>
+                      <a href="/pharmacy/orders/new" class="btn btn-xs btn-outline-success"
+                         title="<%= locale==="fr"?"Commander":"Request" %>">
+                        <i class="fas fa-plus"></i>
+                      </a>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

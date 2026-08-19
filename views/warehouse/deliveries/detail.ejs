@@ -1,0 +1,335 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; } .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .pipeline-step { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .pipeline-dot  { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.85rem; }
+  .pipeline-done { background:#198754; color:#fff; }
+  .pipeline-curr { background:#0d6efd; color:#fff; }
+  .pipeline-wait { background:#dee2e6; color:#6c757d; }
+  .pipeline-line { flex:1; height:3px; margin:0 4px; }
+  .line-done { background:#198754; }
+  .line-wait { background:#dee2e6; }
+  .item-card   { background:#f8f9fa; border:1px solid #dee2e6; border-radius:.4rem; padding:10px 12px; margin-bottom:8px; }
+  .qc-pass     { border-left:4px solid #198754; }
+  .qc-fail     { border-left:4px solid #dc3545; }
+  .qc-pending  { border-left:4px solid #ffc107; }
+  .qc-shelved  { border-left:4px solid #6f42c1; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse">Warehouse</a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/deliveries"><%= locale==="fr"?"Livraisons":"Deliveries" %></a></li>
+      <li class="breadcrumb-item active fw-bold">#<%= delivery.delivery_id %></li>
+    </ol>
+  </nav>
+
+  <% if (success) { %>
+    <div class="alert alert-success py-2 mb-3 alert-dismissible" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= success==="qc" ? (locale==="fr"?"QC enregistré.":"QC recorded.") : (locale==="fr"?"Articles rangés. Stock mis à jour.":"Items shelved. Stock updated.") %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+    <%/* ── LEFT: Info + Pipeline ── */%>
+    <div class="col-lg-3">
+
+      <%/* Pipeline progress */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="font-size:.85rem;"><i class="fas fa-stream me-2 text-primary"></i><%= locale==="fr"?"Progression":"Pipeline" %></div>
+        <div class="card-body py-3">
+          <%
+            var steps = ["received","qc","shelved"];
+            var stepLabels = locale==="fr"
+              ? ["Receptionne","Controle QC","Range"]
+              : ["Received","QC Check","Shelved"];
+            var isPassed = delivery.status.startsWith("qc_p") || delivery.status.startsWith("shelved");
+            var isShelved = delivery.status.startsWith("shelved");
+            var stepState = [
+              "done",
+              (isPassed||isShelved) ? "done" : (delivery.status==="pending_qc"||delivery.status==="qc_partial") ? "curr" : "wait",
+              isShelved ? "done" : (isPassed&&!isShelved) ? "curr" : "wait",
+            ];
+          %>
+          <div class="d-flex align-items-center">
+            <% steps.forEach(function(s, idx) { %>
+              <div class="pipeline-step" style="min-width:56px; text-align:center;">
+                <div class="pipeline-dot pipeline-<%= stepState[idx] %>">
+                  <% if (stepState[idx]==="done") { %><i class="fas fa-check"></i>
+                  <% } else { %><%= idx+1 %><% } %>
+                </div>
+                <div style="font-size:.65rem; font-weight:600; color:<%= stepState[idx]==="curr"?"#0d6efd":stepState[idx]==="done"?"#198754":"#6c757d" %>">
+                  <%= stepLabels[idx] %>
+                </div>
+              </div>
+              <% if (idx < steps.length-1) { %>
+                <div class="pipeline-line <%= stepState[idx]==="done"?"line-done":"line-wait" %>"></div>
+              <% } %>
+            <% }); %>
+          </div>
+        </div>
+      </div>
+
+      <%/* Delivery info */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="font-size:.85rem;"><i class="fas fa-truck me-2 text-success"></i><%= locale==="fr"?"Détails livraison":"Delivery Details" %></div>
+        <div class="card-body" style="font-size:.82rem;">
+          <% if (delivery.po) { %>
+            <div class="mb-1"><span class="text-muted">PO:</span> <a href="/warehouse/purchase-orders/<%= delivery.po_id %>" class="fw-bold"><%= delivery.po.po_number %></a></div>
+            <% if (delivery.po.supplier) { %>
+              <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Fournisseur:":"Supplier:" %></span> <%= delivery.po.supplier.name %></div>
+            <% } %>
+          <% } %>
+          <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Réf. BL:":"Delivery ref:" %></span> <%= delivery.delivery_ref || "—" %></div>
+          <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Livré par:":"Delivered by:" %></span> <%= delivery.delivered_by || "—" %></div>
+          <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Reçu par:":"Received by:" %></span> <%= delivery.received_by %></div>
+          <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Date:":"Date:" %></span> <%= new Date(delivery.received_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></div>
+          <% if (delivery.notes) { %>
+            <div class="border-top pt-2 mt-2 text-muted" style="font-size:.76rem;"><%= delivery.notes %></div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <%/* ── RIGHT: Items + QC / Shelving forms ── */%>
+    <div class="col-lg-9">
+
+      <%/* Items table */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold d-flex justify-content-between align-items-center" style="font-size:.85rem;">
+          <span><i class="fas fa-boxes me-2 text-primary"></i><%= locale==="fr"?"Articles livrés":"Delivered Items" %> <span class="badge bg-secondary ms-1"><%= delivery.items ? delivery.items.length : 0 %></span></span>
+          <%/* QC submit button — show when pending */%>
+          <% if (["pending_qc","qc_partial"].includes(delivery.status) &&
+                typeof hasPermission !== "undefined" &&
+                hasAnyPermission(["Warehouse.QC.Check","Admin.FullAccess"])) { %>
+            <button class="btn btn-sm btn-warning text-dark" onclick="submitQC()">
+              <i class="fas fa-clipboard-check me-1"></i><%= locale==="fr"?"Valider le QC":"Submit QC" %>
+            </button>
+          <% } %>
+          <%/* Shelve button — show after QC pass */%>
+          <% if (["qc_passed","qc_partial","shelved_partial"].includes(delivery.status) &&
+                typeof hasPermission !== "undefined" &&
+                hasAnyPermission(["Warehouse.Receive.Delivery","Admin.FullAccess"])) { %>
+            <button class="btn btn-sm btn-primary" onclick="shelveItems()">
+              <i class="fas fa-archive me-1"></i><%= locale==="fr"?"Ranger en stock":"Shelve to Stock" %>
+            </button>
+          <% } %>
+        </div>
+        <div class="card-body p-3">
+          <% if (!delivery.items || delivery.items.length === 0) { %>
+            <p class="text-muted text-center py-3"><%= locale==="fr"?"Aucun article.":"No items." %></p>
+          <% } else { %>
+            <% delivery.items.forEach(function(item) { %>
+              <%
+                var qcClass = item.qc_status === "passed" ? "qc-pass" :
+                              item.qc_status === "failed" ? "qc-fail" :
+                              item.stock_id              ? "qc-shelved" : "qc-pending";
+                var latestQC = item.qcChecks && item.qcChecks.length ? item.qcChecks[item.qcChecks.length-1] : null;
+              %>
+              <div class="item-card <%= qcClass %>" id="item-card-<%= item.id %>">
+                <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-2">
+                  <div>
+                    <div class="fw-bold" style="font-size:.82rem;"><%= item.product ? item.product.name : "#"+item.product_id %></div>
+                    <% if (item.product) { %>
+                      <div class="text-muted" style="font-size:.70rem;"><code><%= item.product.item_code %></code> &bull; <%= item.product.unit_of_measure %></div>
+                    <% } %>
+                    <div class="mt-1" style="font-size:.72rem;">
+                      <span class="badge bg-secondary"><%= locale==="fr"?"Qté livrée":"Delivered" %>: <%= item.quantity_delivered %></span>
+                      <% if (item.batch_number) { %> <span class="badge bg-light text-dark">Lot: <%= item.batch_number %></span><% } %>
+                      <% if (item.expiry_date) { %>
+                        <% var expClass = item.expiry_date <= new Date().toISOString().slice(0,10) ? "bg-danger" : "bg-light text-dark"; %>
+                        <span class="badge <%= expClass %>">Exp: <%= new Date(item.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></span>
+                      <% } %>
+                    </div>
+                  </div>
+                  <div class="text-end">
+                    <%
+                      var qcLabel = { pending:"Pending QC", passed:"QC Passed", failed:"QC Failed", replaced:"Replaced" };
+                      if (locale==="fr") Object.assign(qcLabel, { pending:"Att. QC", passed:"QC OK", failed:"QC Echoue", replaced:"Remplace" });
+                      var qcBadge = { pending:"bg-warning text-dark", passed:"bg-success", failed:"bg-danger", replaced:"bg-info" };
+                    %>
+                    <span class="badge <%= qcBadge[item.qc_status]||"bg-secondary" %>" style="font-size:.62rem;">
+                      <%= qcLabel[item.qc_status]||item.qc_status %>
+                    </span>
+                    <% if (item.stock_id) { %>
+                      <div class="mt-1">
+                        <span class="badge bg-purple" style="background:#6f42c1;font-size:.60rem;">
+                          <i class="fas fa-archive me-1"></i>
+                          <%= item.stock && item.stock.location ? item.stock.location.label : (locale==="fr"?"Range":"Shelved") %>
+                        </span>
+                      </div>
+                    <% } %>
+                  </div>
+                </div>
+
+                <%/* QC inputs — shown when pending */%>
+                <% if (item.qc_status === "pending" && ["pending_qc","qc_partial"].includes(delivery.status) &&
+                      typeof hasPermission !== "undefined" &&
+                      hasAnyPermission(["Warehouse.QC.Check","Admin.FullAccess"])) { %>
+                  <div class="border-top pt-2 mt-1">
+                    <div class="row g-2">
+                      <div class="col-sm-3">
+                        <div class="lbl"><%= locale==="fr"?"Résultat QC":"QC Result" %></div>
+                        <select class="form-select form-select-sm qc-result" data-item-id="<%= item.id %>">
+                          <option value="pass"><%= locale==="fr"?"Accepté":"Pass" %></option>
+                          <option value="fail"><%= locale==="fr"?"Rejeté":"Fail" %></option>
+                        </select>
+                      </div>
+                      <div class="col-sm-2">
+                        <div class="lbl"><%= locale==="fr"?"Qté acceptée":"Qty Accepted" %></div>
+                        <input type="number" class="form-control form-control-sm qc-accepted" data-item-id="<%= item.id %>"
+                          value="<%= item.quantity_delivered %>" min="0" max="<%= item.quantity_delivered %>">
+                      </div>
+                      <div class="col-sm-2">
+                        <div class="lbl"><%= locale==="fr"?"Qté rejetée":"Qty Rejected" %></div>
+                        <input type="number" class="form-control form-control-sm qc-rejected" data-item-id="<%= item.id %>"
+                          value="0" min="0" max="<%= item.quantity_delivered %>">
+                      </div>
+                      <div class="col-sm-2">
+                        <div class="lbl"><%= locale==="fr"?"Temp. OK":"Temp OK" %></div>
+                        <select class="form-select form-select-sm qc-temp" data-item-id="<%= item.id %>">
+                          <option value="1">OK</option>
+                          <option value="0">NOK</option>
+                        </select>
+                      </div>
+                      <div class="col-sm-3">
+                        <div class="lbl"><%= locale==="fr"?"Raison rejet":"Rejection reason" %></div>
+                        <input type="text" class="form-control form-control-sm qc-reason" data-item-id="<%= item.id %>"
+                          placeholder="<%= locale==="fr"?"Si rejeté...":"If failed..." %>">
+                      </div>
+                    </div>
+                  </div>
+                <% } %>
+
+                <%/* Shelve input — shown after QC pass */%>
+                <% if (item.qc_status === "passed" && !item.stock_id &&
+                      ["qc_passed","qc_partial","shelved_partial"].includes(delivery.status) &&
+                      typeof hasPermission !== "undefined" &&
+                      hasAnyPermission(["Warehouse.Receive.Delivery","Admin.FullAccess"])) { %>
+                  <div class="border-top pt-2 mt-1">
+                    <div class="row g-2 align-items-end">
+                      <div class="col-sm-5">
+                        <div class="lbl"><%= locale==="fr"?"Emplacement de rangement":"Shelf Location" %> <span style="color:#dc3545;">*</span></div>
+                        <select class="form-select form-select-sm shelve-location" data-item-id="<%= item.id %>">
+                          <option value="">-- <%= locale==="fr"?"Choisir":"Select" %> --</option>
+                          <% locations.forEach(function(l) { %>
+                            <option value="<%= l.location_id %>"><%= l.aisle %> — <%= l.label %><%= l.description ? " ("+l.description+")" : "" %></option>
+                          <% }); %>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                <% } %>
+
+                <%/* QC result display */%>
+                <% if (latestQC) { %>
+                  <div class="border-top pt-2 mt-1" style="font-size:.72rem;">
+                    <span class="text-muted">
+                      QC <%= locale==="fr"?"par":"by" %> <%= latestQC.checked_by %> &bull;
+                      <%= locale==="fr"?"Accepte":"Accepted" %>: <strong><%= latestQC.quantity_accepted %></strong> &bull;
+                      <%= locale==="fr"?"Rejete":"Rejected" %>: <strong><%= latestQC.quantity_rejected %></strong>
+                    </span>
+                    <% if (latestQC.rejection_reason) { %>
+                      <div class="mt-1 text-danger"><i class="fas fa-times-circle me-1"></i><%= latestQC.rejection_reason %></div>
+                    <% } %>
+                  </div>
+                <% } %>
+
+                <%/* QC failed — vendor replacement notice */%>
+                <% if (item.qc_status === "failed") { %>
+                  <div class="border-top pt-2 mt-1" style="background:#fff5f5;border-radius:0 0 .3rem .3rem;padding:8px 10px;">
+                    <div style="font-size:.76rem;font-weight:700;color:#842029;">
+                      <i class="fas fa-times-circle me-1"></i>
+                      <%= locale==="fr"?"Article refuse au controle qualite":"Item failed quality control" %>
+                    </div>
+                    <div style="font-size:.72rem;color:#6c757d;margin-top:4px;">
+                      <%= locale==="fr"
+                        ? "Cet article a ete rejete et ne sera pas ajoute au stock. Si le fournisseur accepte de remplacer la quantite rejetee, une nouvelle livraison peut etre creee depuis le bon de commande."
+                        : "This item was rejected and will not be added to stock. If the vendor agrees to replace the rejected quantity, a new partial delivery can be recorded from the purchase order." %>
+                    </div>
+                    <% if (latestQC && latestQC.quantity_rejected > 0) { %>
+                      <div style="font-size:.72rem;margin-top:6px;">
+                        <span class="badge bg-danger me-1"><%= latestQC.quantity_rejected %> <%= locale==="fr"?"unite(s) rejetee(s)":"unit(s) rejected" %></span>
+                        <% if (latestQC.temperature_ok === 0) { %>
+                          <span class="badge bg-warning text-dark"><%= locale==="fr"?"Probleme temperature":"Temperature issue" %></span>
+                        <% } %>
+                      </div>
+                    <% } %>
+                  </div>
+                <% } %>
+              </div>
+            <% }); %>
+          <% } %>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div></div>
+
+<script>
+var _csrf     = '<%= csrfToken %>';
+var _delivId  = <%= delivery.delivery_id %>;
+var _locale   = '<%= locale %>';
+
+function apiPost(url, body) {
+  return fetch(url + '?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).then(function(r){ return r.json(); });
+}
+
+function submitQC() {
+  var results = [];
+  document.querySelectorAll('.qc-result').forEach(function(sel) {
+    var itemId = sel.dataset.itemId;
+    results.push({
+      delivery_item_id: itemId,
+      result:           sel.value,
+      qty_accepted:     document.querySelector('.qc-accepted[data-item-id="'+itemId+'"]').value,
+      qty_rejected:     document.querySelector('.qc-rejected[data-item-id="'+itemId+'"]').value,
+      temperature_ok:   document.querySelector('.qc-temp[data-item-id="'+itemId+'"]').value,
+      rejection_reason: document.querySelector('.qc-reason[data-item-id="'+itemId+'"]').value,
+    });
+  });
+  if (!results.length) { alert(_locale==='fr'?'Aucun article à valider.':'No items to QC.'); return; }
+  if (!confirm(_locale==='fr'?'Confirmer le contrôle qualité ?':'Confirm QC results?')) return;
+  apiPost('/warehouse/deliveries/' + _delivId + '/qc', { results: results })
+    .then(function(d) {
+      if (d.ok) { window.location.href = '/warehouse/deliveries/' + _delivId + '?success=qc'; }
+      else { alert(d.error); }
+    });
+}
+
+function shelveItems() {
+  var shelves = [];
+  document.querySelectorAll('.shelve-location').forEach(function(sel) {
+    if (sel.value) shelves.push({ delivery_item_id: sel.dataset.itemId, location_id: sel.value });
+  });
+  if (!shelves.length) { alert(_locale==='fr'?'Veuillez sélectionner au moins un emplacement.':'Please select at least one location.'); return; }
+  if (!confirm(_locale==='fr'?'Ranger ces articles en stock ?':'Shelve these items to stock?')) return;
+  apiPost('/warehouse/deliveries/' + _delivId + '/shelve', { shelves: shelves })
+    .then(function(d) {
+      if (d.ok) { window.location.href = '/warehouse/deliveries/' + _delivId + '?success=shelved'; }
+      else { alert(d.error); }
+    });
+}
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+

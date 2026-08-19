@@ -1,0 +1,214 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "billing", user: user }) %>
+
+<style>
+  
+  .card          { background: #fff !important; }
+  .table-xs td, .table-xs th { padding: 5px 8px; }
+  .status-open    { border-left: 3px solid #ffc107; }
+  .status-partial { border-left: 3px solid #0d6efd; }
+  .status-paid    { border-left: 3px solid #28a745; opacity: .75; }
+  .badge-open     { background:#ffc107; color:#000; }
+  .badge-partial  { background:#0d6efd; color:#fff; }
+  .badge-paid     { background:#28a745; color:#fff; }
+  .search-wrap    { max-width: 320px; }
+  .tab-count      { font-size:.65rem; }
+  /* ── Tab active state ── */
+  .nav-tabs .nav-link {
+    color:#6c757d; background:#e9ecef;
+    border-color:#dee2e6 #dee2e6 transparent;
+    transition: background .15s, color .15s;
+  }
+  .nav-tabs .nav-link:hover { background:#dee2e6; color:#495057; }
+  .nav-tabs .nav-link.active {
+    color:#0d6efd !important; background:#fff !important;
+    border-color:#dee2e6 #dee2e6 #fff;
+    font-weight:600; border-top:2px solid #0d6efd !important;
+  }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-file-invoice-dollar me-2 text-success"></i>
+        <%= locale==="fr" ? "File de facturation" : "Billing Worklist" %>
+      </h5>
+      <small class="text-muted" style="font-size:.76rem;">
+        <%= locale==="fr" ? "Factures ouvertes et partielles" : "Open and partial bills" %>
+      </small>
+    </div>
+    <form class="d-flex gap-2 search-wrap" method="GET" action="/billing/worklist">
+      <input type="hidden" name="status" value="<%= statusF %>">
+      <input type="text" name="search" class="form-control form-control-sm"
+        placeholder="<%= locale==="fr" ? "Chercher patient..." : "Search patient..." %>"
+        value="<%= search %>">
+      <button class="btn btn-sm btn-primary" type="submit">
+        <i class="fas fa-search"></i>
+      </button>
+      <% if (search) { %>
+        <a href="/billing/worklist?status=<%= statusF %>" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-times"></i>
+        </a>
+      <% } %>
+    </form>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="card text-white bg-success">
+        <div class="card-body py-2">
+          <small><%= locale==="fr" ? "Total du jour" : "Today's Total" %></small>
+          <h4 class="mb-0"><%= todayTotal.toLocaleString(locale === "fr" ? "fr-FR" : "en-GB") %> FCFA</h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white bg-primary">
+        <div class="card-body py-2">
+          <small><%= locale==="fr" ? "Total du mois" : "This Month's Total" %></small>
+          <h4 class="mb-0"><%= monthTotal.toLocaleString(locale === "fr" ? "fr-FR" : "en-GB") %> FCFA</h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white bg-warning text-dark">
+        <div class="card-body py-2">
+          <small><%= locale==="fr" ? "Total en attente" : "Pending Total" %></small>
+          <h4 class="mb-0"><%= pendingTotal.toLocaleString(locale === "fr" ? "fr-FR" : "en-GB") %> FCFA</h4>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%/* Status tabs */%>
+  <ul class="nav nav-tabs mb-0" style="border-bottom:none;">
+    <li class="nav-item">
+      <a class="nav-link <%= statusF==="open"?"active":"" %>"
+        href="/billing/worklist?status=open<%= search?"&search="+encodeURIComponent(search):"" %>">
+        <%= locale==="fr" ? "Ouvertes" : "Open" %>
+        <span class="badge badge-open rounded-pill tab-count ms-1"><%= openCount %></span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= statusF==="partial"?"active":"" %>"
+        href="/billing/worklist?status=partial<%= search?"&search="+encodeURIComponent(search):"" %>">
+        <%= locale==="fr" ? "Partielles" : "Partial" %>
+        <span class="badge badge-partial rounded-pill tab-count ms-1"><%= partialCount %></span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= statusF==="paid"?"active":"" %>"
+        href="/billing/worklist?status=paid<%= search?"&search="+encodeURIComponent(search):"" %>">
+        <%= locale==="fr" ? "Payees" : "Paid" %>
+        <span class="badge badge-paid rounded-pill tab-count ms-1"><%= paidCount %></span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= statusF==="all"?"active":"" %>"
+        href="/billing/worklist?status=all<%= search?"&search="+encodeURIComponent(search):"" %>">
+        <%= locale==="fr" ? "Toutes" : "All" %>
+      </a>
+    </li>
+  </ul>
+
+  <div class="card shadow-sm" style="border-radius:0 .5rem .5rem .5rem;">
+    <div class="card-body p-0">
+      <% if (enrichedBills.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-file-invoice-dollar fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr" ? "Aucune facture trouvee." : "No bills found." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>#<%= locale==="fr"?"Facture":"Bill" %></th>
+                <th>#<%= locale==="fr"?"Consultation":"Encounter" %></th>
+                <th><%= locale==="fr"?"Patient":"Patient" %></th>
+                <th><%= locale==="fr"?"N° Dossier":"File No." %></th>
+                <th>Date</th>
+                <th class="text-end"><%= locale==="fr"?"Montant":"Amount" %></th>
+                <th>Statut</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% enrichedBills.forEach(function(row) {
+                var b = row.bill, p = row.pat;
+                var amtStr = (b.amount||0).toLocaleString("fr-FR") + " FCFA";
+              %>
+                <tr class="status-<%= b.status %>">
+                  <td><code style="font-size:.72rem;">#<%= b.bill_no %></code></td>
+                  <td><code style="font-size:.72rem;">#<%= b.encounter_nr %></code></td>
+                  <td style="font-size:.80rem;">
+                    <% if (p) { %>
+                      <a href="/patients/<%= p.pid %>/record" class="text-decoration-none fw-bold">
+                        <%= p.name_last %>, <%= p.name_first %>
+                      </a>
+                    <% } else { %>-<% } %>
+                  </td>
+                  <td><code style="font-size:.72rem;"><%= p ? p.hospital_file_nr : "-" %></code></td>
+                  <td style="font-size:.72rem;" class="text-muted">
+                    <%= b.date ? new Date(b.date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : "-" %>
+                  </td>
+                  <td class="text-end fw-bold" style="font-size:.80rem;"><%= amtStr %></td>
+                  <td>
+                    <span class="badge badge-<%= b.status %>" style="font-size:.68rem;">
+                      <% if (b.status==="open") { %><%= locale==="fr"?"Ouverte":"Open" %>
+                      <% } else if (b.status==="partial") { %><%= locale==="fr"?"Partielle":"Partial" %>
+                      <% } else { %><%= locale==="fr"?"Payee":"Paid" %><% } %>
+                    </span>
+                  </td>
+                  <td>
+                    <div class="d-flex gap-1">
+                      <a href="/billing/bill/<%= b.bill_no %>"
+                        class="btn btn-sm btn-outline-primary" style="font-size:.72rem;padding:2px 8px;">
+                        <i class="fas fa-eye me-1"></i><%= locale==="fr"?"Detail":"Detail" %>
+                      </a>
+                      <% if (b.status !== "paid" &&
+                             (typeof hasAnyPermission !== "undefined" &&
+                              hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"]))) { %>
+                        <a href="/billing/bill/<%= b.bill_no %>#payment-section"
+                          class="btn btn-sm btn-success" style="font-size:.72rem;padding:2px 8px;">
+                          <i class="fas fa-cash-register me-1"></i><%= locale==="fr"?"Paiement":"Pay" %>
+                        </a>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

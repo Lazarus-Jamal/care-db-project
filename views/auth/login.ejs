@@ -1,0 +1,102 @@
+<%- include("../partials/header") %>
+
+<div class="form-wrapper mx-auto bg-white p-8 rounded-lg shadow-lg" style="font-size: 0.875rem;">
+    <h2 class="mb-4 text-center text-lg font-semibold"><%= t.login.title %></h2>
+
+    <% if (typeof errors !== "undefined" && errors.length > 0) { %>
+        <div class="alert alert-danger" role="alert" style="font-size: 0.8rem;">
+            <% errors.forEach(function(error) { %><%= error %><br><% }); %>
+        </div>
+    <% } %>
+
+    <form action="/auth/login" method="POST" class="mb-3" id="loginForm">
+        <input type="hidden" name="_csrf" id="csrfToken" value="<%= csrfToken %>">
+        <div class="mb-3 d-flex align-items-center">
+            <label class="form-label mb-0 me-2" for="username" style="width:150px;"><%= t.login.username %></label>
+            <input type="text" name="username" id="username" class="form-control"
+                value="<%= typeof username !== "undefined" ? username : "" %>" required style="font-size:0.85rem;">
+        </div>
+        <div class="mb-3 d-flex align-items-center">
+            <label class="form-label mb-0 me-2" for="password" style="width:150px;"><%= t.login.password %></label>
+            <input type="password" name="password" id="password" class="form-control" required style="font-size:0.85rem;">
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="facilityName"><%= t.login.facility %></label>
+            <input type="text" id="facilityName" class="form-control"
+                placeholder="<%= t.login.facilityHint %>" readonly style="font-size:0.85rem;">
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="userRoleName"><%= t.login.role %></label>
+            <input type="text" id="userRoleName" class="form-control"
+                placeholder="<%= t.login.roleHint %>" readonly style="font-size:0.85rem;">
+        </div>
+        <input type="hidden" name="localTime" id="localTimeInput">
+        <button type="submit" class="btn btn-primary w-100" style="font-size:0.9rem;">
+            <%= t.login.submit %> <i class="fas fa-sign-in-alt"></i>
+        </button>
+    </form>
+
+    <div class="time-display mt-3 d-flex justify-content-between text-center" style="font-size:0.8rem;">
+        <p class="mb-0 flex-grow-1"><strong><%= t.login.server %></strong> <span id="serverTimeDisplay"><%= t.login.loading %></span></p>
+        <p class="mb-0 flex-grow-1"><strong><%= t.login.machine %></strong> <span id="localTimeDisplay"><%= t.login.loading %></span></p>
+    </div>
+    <p id="timeDifferenceMessage" class="text-danger text-center mt-2" style="font-size:0.8rem;"></p>
+</div>
+
+<%- include("../partials/footer") %>
+
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const usernameInput     = document.getElementById('username');
+        const facilityNameInput = document.getElementById('facilityName');
+        const userRoleNameInput = document.getElementById('userRoleName');
+        const serverTimeDisplay = document.getElementById('serverTimeDisplay');
+        const localTimeDisplay  = document.getElementById('localTimeDisplay');
+        const localTimeInput    = document.getElementById('localTimeInput');
+
+        const updateTimes = async () => {
+            try {
+                const response = await fetch(window.location.origin + '/auth/server-time');
+                const data = await response.json();
+                serverTimeDisplay.textContent = new Date(data.serverTime).toLocaleString('fr-FR');
+            } catch (error) {
+                serverTimeDisplay.textContent = 'Échec du chargement';
+            }
+            const localTime = new Date();
+            localTimeDisplay.textContent = localTime.toLocaleString('fr-FR');
+            localTimeInput.value = localTime.toISOString();
+        };
+
+        await updateTimes();
+        setInterval(updateTimes, 30000);
+
+        usernameInput.addEventListener('change', async (event) => {
+            const username = event.target.value.trim();
+            if (username.length > 0) {
+                try {
+                    const csrfToken = document.getElementById('csrfToken').value;
+                    const response = await fetch(window.location.origin + '/auth/get-user-facility-and-role', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                        body: JSON.stringify({ username }),
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        facilityNameInput.value = data.facilityName;
+                        userRoleNameInput.value  = data.roleName;
+                    } else {
+                        facilityNameInput.value = data.message;
+                        userRoleNameInput.value  = '';
+                    }
+                } catch (error) {
+                    facilityNameInput.value = 'Erreur lors du chargement.';
+                    userRoleNameInput.value  = '';
+                }
+            }
+        });
+
+        if (usernameInput.value) usernameInput.dispatchEvent(new Event('change'));
+    });
+</script>
+
+

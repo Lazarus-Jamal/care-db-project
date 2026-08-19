@@ -1,0 +1,496 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "billing", user: user }) %>
+
+<style>
+  
+  .card          { background: #fff !important; }
+  .lbl           { font-size:.68rem; font-weight:700; text-transform:uppercase;
+                   letter-spacing:.06em; color:#6c757d; }
+  .table-xs td, .table-xs th { padding: 4px 8px; font-size:.80rem; }
+  .item-row-paid    { background: #f6fff8; color:#6c757d; }
+  .item-row-open    { background: #fff; }
+  .item-row-checked { background: #fffde7; }
+  .fcfa             { font-size:.72rem; color:#6c757d; }
+  .summary-box      { border-radius:.5rem; padding:14px 18px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <%/* Breadcrumb */%>
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item">
+        <a href="/billing/worklist"><i class="fas fa-file-invoice-dollar me-1"></i>
+          <%= locale==="fr"?"Facturation":"Billing" %>
+        </a>
+      </li>
+      <li class="breadcrumb-item active fw-bold">
+        <%= locale==="fr"?"Facture":"Bill" %> #<%= bill.bill_no %>
+      </li>
+    </ol>
+  </nav>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: Bill info + items ── */%>
+    <div class="col-lg-7">
+
+      <%/* Bill header card */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.88rem;">
+            <i class="fas fa-file-invoice me-2 text-primary"></i>
+            <%= locale==="fr"?"Facture":"Bill" %> #<%= bill.bill_no %>
+          </span>
+          <%
+            var sClass = bill.status==="paid"?"bg-success":
+                         bill.status==="partial"?"bg-primary":"bg-warning text-dark";
+            var sLabel = bill.status==="paid"
+              ? (locale==="fr"?"Payee":"Paid")
+              : bill.status==="partial"
+                ? (locale==="fr"?"Partielle":"Partial")
+                : (locale==="fr"?"Ouverte":"Open");
+          %>
+          <span class="badge <%= sClass %>" id="bill-status-badge"><%= sLabel %></span>
+        </div>
+        <div class="card-body py-2">
+          <div class="row g-2">
+            <div class="col-6 col-md-3">
+              <div class="lbl"><%= locale==="fr"?"Consultation":"Encounter" %></div>
+              <div style="font-size:.82rem;"><code>#<%= bill.encounter_nr %></code></div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="lbl">Patient</div>
+              <div style="font-size:.82rem;" class="fw-bold">
+                <% if (patient) { %>
+                  <a href="/patients/<%= patient.pid %>/record" class="text-decoration-none">
+                    <%= patient.name_last %>, <%= patient.name_first %>
+                  </a>
+                <% } else { %>-<% } %>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="lbl"><%= locale==="fr"?"N° Dossier":"File No." %></div>
+              <div style="font-size:.82rem;"><code><%= patient ? patient.hospital_file_nr : "-" %></code></div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="lbl">Date</div>
+              <div style="font-size:.82rem;">
+                <%= bill.date ? new Date(bill.date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : "-" %>
+              </div>
+            </div>
+            <% if (enc) { %>
+              <div class="col-6 col-md-4">
+                <div class="lbl"><%= locale==="fr"?"Medecin":"Doctor" %></div>
+                <div style="font-size:.82rem;"><%= enc.consulting_dr || "-" %></div>
+              </div>
+            <% } %>
+            <% if (bill.insurance_pct > 0) { %>
+              <div class="col-6 col-md-4">
+                <div class="lbl"><%= locale==="fr"?"Assurance":"Insurance" %></div>
+                <div style="font-size:.82rem;" class="text-primary fw-bold">
+                  <%= bill.insurance_pct %>%
+                  &mdash; <%= locale==="fr"?"Part patient:":"Patient due:" %>
+                  <strong><%= patientDue.toLocaleString("fr-FR") %> FCFA</strong>
+                </div>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <%/* Bill items card */%>
+      <div class="card shadow-sm">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-list me-2"></i>
+            <%= locale==="fr"?"Articles":"Bill Items" %>
+          </span>
+          <% if (bill.status !== "paid" &&
+                 typeof hasAnyPermission !== "undefined" &&
+                 hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+            <button class="btn btn-sm btn-outline-primary" style="font-size:.72rem;"
+              onclick="toggleAllItems(true)">
+              <i class="fas fa-check-double me-1"></i>
+              <%= locale==="fr"?"Tout selectionner":"Select All Open" %>
+            </button>
+          <% } %>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-xs align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <% if (bill.status !== "paid" &&
+                       typeof hasAnyPermission !== "undefined" &&
+                       hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+                  <th style="width:36px;">
+                    <input type="checkbox" id="chk-all" class="form-check-input"
+                      onchange="toggleAllItems(this.checked)">
+                  </th>
+                <% } %>
+                <th>#</th>
+                <th><%= locale==="fr"?"Article":"Item" %></th>
+                <th class="text-center"><%= locale==="fr"?"Qte":"Qty" %></th>
+                <th class="text-end"><%= locale==="fr"?"P.U.":"Unit" %></th>
+                <th class="text-end">Total</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody id="items-table-body">
+              <% var grandTotal=0, paidTotal=0, openTotal=0;
+                 items.forEach(function(item, idx) {
+                   grandTotal += item.amount||0;
+                   if (item.status==="paid") paidTotal += item.amount||0;
+                   else openTotal += item.amount||0;
+                   var isPaid = item.status==="paid";
+              %>
+                <tr class="item-row-<%= item.status %>" id="item-row-<%= item.id %>">
+                  <% if (bill.status !== "paid" &&
+                         typeof hasAnyPermission !== "undefined" &&
+                         hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+                    <td>
+                      <% if (!isPaid) { %>
+                        <input type="checkbox" class="form-check-input item-chk"
+                          id="chk-<%= item.id %>" value="<%= item.id %>"
+                          onchange="onItemCheck(this)">
+                      <% } %>
+                    </td>
+                  <% } %>
+                  <td class="text-muted"><%= idx+1 %></td>
+                  <td>
+                    <div style="font-size:.80rem;font-weight:600;"><%= item.article %></div>
+                    <div style="font-size:.65rem;color:#adb5bd;">
+                      <% if (item.class) { %><span class="me-2"><%= item.class %></span><% } %>
+                      <% if (item.billtype) { %><%= item.billtype %><% } %>
+                    </div>
+                  </td>
+                  <td class="text-center"><%= item.units %></td>
+                  <td class="text-end text-muted" style="font-size:.76rem;">
+                    <%= (item.unit_cost||0).toLocaleString("fr-FR") %>
+                  </td>
+                  <td class="text-end fw-bold" style="font-size:.80rem;">
+                    <%= (item.amount||0).toLocaleString("fr-FR") %>
+                    <span class="fcfa">FCFA</span>
+                  </td>
+                  <td>
+                    <% if (isPaid) { %>
+                      <span class="badge bg-success" style="font-size:.62rem;">
+                        <%= locale==="fr"?"Paye":"Paid" %>
+                      </span>
+                    <% } else { %>
+                      <span class="badge bg-warning text-dark" id="item-status-<%= item.id %>"
+                        style="font-size:.62rem;">
+                        <%= locale==="fr"?"Ouvert":"Open" %>
+                      </span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+            <tfoot class="table-light">
+              <tr>
+                <% if (bill.status !== "paid" &&
+                       typeof hasAnyPermission !== "undefined" &&
+                       hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+                  <td></td>
+                <% } %>
+                <td colspan="4" class="text-end fw-bold" style="font-size:.80rem;">
+                  Total
+                </td>
+                <td class="text-end fw-bold" style="font-size:.80rem;" id="grand-total-cell">
+                  <%= grandTotal.toLocaleString("fr-FR") %> <span class="fcfa">FCFA</span>
+                </td>
+                <td></td>
+              </tr>
+              <% if (paidTotal > 0) { %>
+                <tr>
+                  <% if (bill.status !== "paid" &&
+                         typeof hasAnyPermission !== "undefined" &&
+                         hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+                    <td></td>
+                  <% } %>
+                  <td colspan="4" class="text-end text-success" style="font-size:.76rem;">
+                    <%= locale==="fr"?"Deja paye":"Already paid" %>
+                  </td>
+                  <td class="text-end text-success fw-bold" style="font-size:.76rem;">
+                    <%= paidTotal.toLocaleString("fr-FR") %> <span class="fcfa">FCFA</span>
+                  </td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <% if (bill.status !== "paid" &&
+                         typeof hasAnyPermission !== "undefined" &&
+                         hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+                    <td></td>
+                  <% } %>
+                  <td colspan="4" class="text-end fw-bold text-danger" style="font-size:.80rem;">
+                    <%= locale==="fr"?"Reste a payer":"Balance due" %>
+                  </td>
+                  <td class="text-end fw-bold text-danger" style="font-size:.80rem;">
+                    <%= openTotal.toLocaleString("fr-FR") %> <span class="fcfa">FCFA</span>
+                  </td>
+                  <td></td>
+                </tr>
+              <% } %>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <%/* ── RIGHT: Payment + history ── */%>
+    <div class="col-lg-5">
+
+      <%/* Payment form — cashier/billing clerk only, bill not fully paid */%>
+      <% if (bill.status !== "paid" &&
+             typeof hasAnyPermission !== "undefined" &&
+             hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+        <div class="card shadow-sm mb-3" id="payment-section">
+          <div class="card-header py-2">
+            <span class="fw-bold" style="font-size:.85rem;">
+              <i class="fas fa-cash-register me-2 text-success"></i>
+              <%= locale==="fr"?"Encaisser le paiement":"Collect Payment" %>
+            </span>
+          </div>
+          <div class="card-body">
+
+            <%/* Selection summary */%>
+            <div class="summary-box bg-light mb-3" id="selection-summary" style="display:none;">
+              <div class="d-flex justify-content-between align-items-center">
+                <span style="font-size:.82rem;">
+                  <span id="selected-count">0</span>
+                  <%= locale==="fr"?"article(s) selectionne(s)":"item(s) selected" %>
+                </span>
+                <span class="fw-bold text-success" style="font-size:.95rem;" id="selected-total">
+                  0 FCFA
+                </span>
+              </div>
+              <% if (bill.insurance_pct > 0) { %>
+                <div class="mt-1 text-primary" style="font-size:.76rem;">
+                  <%= locale==="fr"?"Part assurance":"Insurance covers" %>
+                  (<%= bill.insurance_pct %>%):
+                  <strong id="insurance-share">0 FCFA</strong>
+                  &mdash;
+                  <%= locale==="fr"?"Patient doit payer":"Patient pays" %>:
+                  <strong id="patient-share">0 FCFA</strong>
+                </div>
+              <% } %>
+            </div>
+
+            <div id="no-selection-msg" class="text-center text-muted py-2" style="font-size:.80rem;">
+              <i class="fas fa-hand-pointer me-1"></i>
+              <%= locale==="fr"
+                ? "Cochez les articles a encaisser ci-contre."
+                : "Check the items to collect on the left." %>
+            </div>
+
+            <%/* Payment mode — only billing clerk sees non-cash */%>
+            <% if (typeof hasPermission !== "undefined" && hasPermission("Billing.Create.Bill")) { %>
+              <div class="mb-3" id="mode-section" style="display:none;">
+                <label class="form-label lbl">
+                  <%= locale==="fr"?"Mode de paiement":"Payment Mode" %>
+                </label>
+                <select class="form-select form-select-sm" id="payment-mode">
+                  <option value="cash"><%= locale==="fr"?"Especes":"Cash" %></option>
+                  <option value="cheque"><%= locale==="fr"?"Cheque":"Cheque" %></option>
+                  <option value="card"><%= locale==="fr"?"Carte bancaire":"Card" %></option>
+                  <option value="mobile"><%= locale==="fr"?"Mobile money":"Mobile" %></option>
+                  <option value="insurance"><%= locale==="fr"?"Assurance":"Insurance" %></option>
+                </select>
+              </div>
+            <% } else { %>
+              <input type="hidden" id="payment-mode" value="cash">
+            <% } %>
+
+            <div id="pay-btn-wrap" style="display:none;">
+              <button class="btn btn-success w-100" id="btn-pay" onclick="submitPayment()">
+                <i class="fas fa-check me-2"></i>
+                <%= locale==="fr"?"Confirmer le paiement":"Confirm Payment" %>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      <% } %>
+
+      <%/* Payment history */%>
+      <div class="card shadow-sm">
+        <div class="card-header py-2">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-history me-2 text-muted"></i>
+            <%= locale==="fr"?"Historique des paiements":"Payment History" %>
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <% if (!payments || payments.length === 0) { %>
+            <div class="text-center text-muted py-4" style="font-size:.80rem;">
+              <%= locale==="fr"?"Aucun paiement enregistre.":"No payments recorded." %>
+            </div>
+          <% } else { %>
+            <table class="table table-xs mb-0">
+              <thead class="table-dark">
+                <tr>
+                  <th>#</th>
+                  <th>Date</th>
+                  <th><%= locale==="fr"?"Mode":"Mode" %></th>
+                  <th class="text-end">Montant</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <% payments.forEach(function(pmt) { %>
+                  <tr>
+                    <td><code style="font-size:.68rem;">#<%= pmt.payment_id %></code></td>
+                    <td style="font-size:.72rem;" class="text-muted">
+                      <%= pmt.payment_date
+                        ? new Date(pmt.payment_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB")
+                        : "-" %>
+                    </td>
+                    <td>
+                      <span class="badge bg-secondary" style="font-size:.62rem;">
+                        <%= pmt.payment_mode %>
+                      </span>
+                    </td>
+                    <td class="text-end fw-bold" style="font-size:.78rem;">
+                      <%= (pmt.payment_amount_total||0).toLocaleString("fr-FR") %> FCFA
+                    </td>
+                    <td>
+                      <a href="/billing/receipt/<%= pmt.payment_id %>"
+                        class="btn btn-xs btn-outline-secondary" target="_blank"
+                        style="font-size:.65rem;padding:1px 5px;"
+                        title="<%= locale==="fr"?"Imprimer recu":"Print Receipt" %>">
+                        <i class="fas fa-print"></i>
+                      </a>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          <% } %>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+var _csrf     = '<%= csrfToken %>';
+var _billNo   = <%= bill.bill_no %>;
+var _insPct   = <%= bill.insurance_pct || 0 %>;
+var _selectedIds  = [];
+var _selectedTotal = 0;
+
+function fmt(n) {
+    return Math.round(n).toLocaleString('fr-FR') + ' FCFA';
+}
+
+function onItemCheck(chk) {
+    rebuildSelected();
+}
+
+function toggleAllItems(state) {
+    document.querySelectorAll('.item-chk').forEach(function(c) {
+        c.checked = state;
+    });
+    document.getElementById('chk-all') && (document.getElementById('chk-all').checked = state);
+    rebuildSelected();
+}
+
+function rebuildSelected() {
+    _selectedIds   = [];
+    _selectedTotal = 0;
+    document.querySelectorAll('.item-chk:checked').forEach(function(c) {
+        _selectedIds.push(parseInt(c.value));
+        // Get amount from the row
+        var row = document.getElementById('item-row-' + c.value);
+        if (row) {
+            var cells = row.querySelectorAll('td');
+            // amount is in the 6th td (index 5 with checkbox, 4 without)
+            var amtCell = row.querySelector('td:nth-child(6)');
+            if (amtCell) {
+                var txt = amtCell.textContent.replace(/[^0-9\s]/g,'').trim().replace(/\s/g,'');
+                _selectedTotal += parseInt(txt) || 0;
+            }
+        }
+    });
+
+    var hasSelection = _selectedIds.length > 0;
+    var summary = document.getElementById('selection-summary');
+    var noMsg   = document.getElementById('no-selection-msg');
+    var modeSection = document.getElementById('mode-section');
+    var payWrap = document.getElementById('pay-btn-wrap');
+
+    if (summary)    summary.style.display    = hasSelection ? '' : 'none';
+    if (noMsg)      noMsg.style.display      = hasSelection ? 'none' : '';
+    if (modeSection) modeSection.style.display = hasSelection ? '' : 'none';
+    if (payWrap)    payWrap.style.display    = hasSelection ? '' : 'none';
+
+    if (hasSelection) {
+        document.getElementById('selected-count').textContent = _selectedIds.length;
+        document.getElementById('selected-total').textContent = fmt(_selectedTotal);
+        var insShare = Math.round(_selectedTotal * _insPct / 100);
+        var patShare = _selectedTotal - insShare;
+        var insEl  = document.getElementById('insurance-share');
+        var patEl  = document.getElementById('patient-share');
+        if (insEl) insEl.textContent = fmt(insShare);
+        if (patEl) patEl.textContent = fmt(patShare);
+    }
+}
+
+function submitPayment() {
+    if (_selectedIds.length === 0) {
+        alert('<%= locale==="fr"?"Veuillez selectionner au moins un article.":"Please select at least one item." %>');
+        return;
+    }
+    var modeEl = document.getElementById('payment-mode');
+    var mode   = modeEl ? modeEl.value : 'cash';
+    var btn    = document.getElementById('btn-pay');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i><%= locale==="fr"?"Traitement...":"Processing..." %>';
+
+    fetch('/billing/bill/' + _billNo + '/pay?_csrf=' + encodeURIComponent(_csrf), {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ item_ids: _selectedIds, payment_mode: mode }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            window.open(data.receiptUrl, '_blank');
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check me-2"></i><%= locale==="fr"?"Confirmer le paiement":"Confirm Payment" %>';
+        }
+    })
+    .catch(function(err) {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-2"></i><%= locale==="fr"?"Confirmer le paiement":"Confirm Payment" %>';
+    });
+}
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

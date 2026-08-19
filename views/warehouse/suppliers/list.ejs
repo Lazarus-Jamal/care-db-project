@@ -1,0 +1,133 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card     { background: #fff !important; }
+  .table-xs td, .table-xs th { padding: 5px 8px; }
+  .btn-xs   { padding: 2px 7px; font-size: .70rem; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-truck me-2 text-success"></i>
+        <%= locale==="fr" ? "Fournisseurs" : "Suppliers" %>
+      </h5>
+      <small class="text-muted"><%= suppliers.length %> <%= locale==="fr" ? "fournisseur(s) actif(s)" : "active supplier(s)" %></small>
+    </div>
+    <div class="d-flex gap-2">
+      <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Manage.Suppliers")) { %>
+        <a href="/warehouse/suppliers/new" class="btn btn-sm btn-success">
+          <i class="fas fa-plus me-1"></i>
+          <%= locale==="fr" ? "Nouveau fournisseur" : "New Supplier" %>
+        </a>
+      <% } %>
+      <a href="/warehouse" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>
+        <%= locale==="fr" ? "Tableau de bord" : "Dashboard" %>
+      </a>
+    </div>
+  </div>
+
+  <%/* Search */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+      <form method="GET" action="/warehouse/suppliers" class="d-flex gap-2">
+        <input type="text" name="search" class="form-control form-control-sm" style="max-width:320px;"
+          placeholder="<%= locale==="fr" ? "Chercher nom, contact..." : "Search name, contact..." %>"
+          value="<%= search || "" %>">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-search"></i></button>
+        <a href="/warehouse/suppliers" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo"></i></a>
+      </form>
+    </div>
+  </div>
+
+  <%/* Success flash */%>
+  <% if (typeof success !== "undefined" && success) { %>
+    <div class="alert alert-success alert-dismissible py-2 mb-3" role="alert" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= success === "1" ? (locale==="fr" ? "Fournisseur cree." : "Supplier created.") : (locale==="fr" ? "Fournisseur mis a jour." : "Supplier updated.") %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!suppliers || suppliers.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-truck fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr" ? "Aucun fournisseur enregistré." : "No suppliers found." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0" style="font-size:.80rem;">
+            <thead class="table-dark">
+              <tr>
+                <th><%= locale==="fr" ? "Nom" : "Name" %></th>
+                <th><%= locale==="fr" ? "Contact" : "Contact" %></th>
+                <th><%= locale==="fr" ? "Téléphone" : "Phone" %></th>
+                <th><%= locale==="fr" ? "Email" : "Email" %></th>
+                <th><%= locale==="fr" ? "Conditions paiement" : "Payment Terms" %></th>
+                <th class="text-center"><%= locale==="fr" ? "Actions" : "Actions" %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% suppliers.forEach(function(s) { %>
+                <tr>
+                  <td class="fw-bold"><%= s.name %></td>
+                  <td class="text-muted"><%= s.contact_person || "—" %></td>
+                  <td><%= s.phone || "—" %></td>
+                  <td>
+                    <% if (s.email) { %>
+                      <a href="mailto:<%= s.email %>" style="font-size:.76rem;"><%= s.email %></a>
+                    <% } else { %>—<% } %>
+                  </td>
+                  <td>
+                    <% if (s.payment_terms) { %>
+                      <span class="badge bg-light text-dark border" style="font-size:.65rem;"><%= s.payment_terms %></span>
+                    <% } else { %>—<% } %>
+                  </td>
+                  <td class="text-center">
+                    <% if (typeof hasPermission !== "undefined" && hasPermission("Warehouse.Manage.Suppliers")) { %>
+                      <a href="/warehouse/suppliers/<%= s.supplier_id %>/edit"
+                        class="btn btn-xs btn-outline-secondary">
+                        <i class="fas fa-edit"></i>
+                      </a>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

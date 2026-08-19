@@ -1,0 +1,509 @@
+
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.78rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .wh-header { background:linear-gradient(135deg,#0d6efd 0%,#0a58ca 100%); color:#fff; border-radius:.5rem .5rem 0 0; }
+  /* pipeline */
+  .pip-wrap { display:flex; align-items:center; }
+  .pip-step { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:68px; }
+  .pip-dot  { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.80rem; }
+  .pip-done { background:#198754; color:#fff; }
+  .pip-curr { background:#0d6efd; color:#fff; }
+  .pip-wait { background:#dee2e6; color:#6c757d; }
+  .pip-fail { background:#dc3545; color:#fff; }
+  .pip-line { flex:1; height:3px; margin:0 2px; margin-bottom:16px; }
+  .pip-line-done { background:#198754; }
+  .pip-line-wait { background:#dee2e6; }
+  .pip-lbl  { font-size:.60rem; font-weight:600; text-align:center; line-height:1.2; }
+  .is-pending    { background:#fff3cd; color:#856404; }
+  .is-issued     { background:#d1e7dd; color:#0a3622; }
+  .is-partial    { background:#fff0d0; color:#7a4800; }
+  .is-unavailable{ background:#f8d7da; color:#842029; }
+  .is-cancelled  { background:#e2e3e5; color:#41464b; }
+  .is-counted    { background:#e2d9f3; color:#432874; }
+  .is-accepted   { background:#d1e7dd; color:#0a3622; }
+  .pip-warn { background:#fd7e14; color:#fff; }
+  .sp { display:inline-block; padding:1px 7px; border-radius:20px; font-size:.60rem; font-weight:700; text-transform:uppercase; }
+  .transit-badge { background:#cff4fc; color:#055160; display:inline-block; padding:2px 7px; border-radius:10px; font-size:.62rem; font-weight:700; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item">
+        <a href="/warehouse/pharmacy-orders"><%= locale==="fr"?"Commandes pharmacie":"Pharmacy Orders" %></a>
+      </li>
+      <li class="breadcrumb-item active fw-bold"><%= order.order_number %></li>
+    </ol>
+  </nav>
+
+  <% if (success) { %>
+    <div class="alert alert-success py-2 mb-3 alert-dismissible" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= success==="fulfilled"
+        ? (locale==="fr"?"Commande preparee. Articles en transit vers la pharmacie.":"Order fulfilled. Items in transit to pharmacy.")
+        : success==="rejected"
+        ? (locale==="fr"?"Commande rejetee.":"Order rejected.")
+        : success==="writeoff"
+        ? (locale==="fr"?"Articles en attente clotures.":"Outstanding items written off.")
+        : success==="confirmed"
+        ? (locale==="fr"?"Reception confirmee, stock pharmacie credite.":"Receipt confirmed, pharmacy stock credited.")
+        : (locale==="fr"?"Operation realisee.":"Done.") %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: pipeline + info ── */%>
+    <div class="col-lg-4">
+
+      <%/* Pipeline */%>
+      <div class="card shadow-sm mb-3">
+        <div class="wh-header px-3 py-2">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-stream me-2"></i><%= locale==="fr"?"Progression":"Progress" %>
+          </span>
+        </div>
+        <div class="card-body py-3 px-2">
+          <%
+            var st = order.status;
+            var pip = [
+              { key:"pending",    icon:"fas fa-clock",        lbl:locale==="fr"?"Soumise":"Submitted" },
+              { key:"in_transit", icon:"fas fa-truck",        lbl:locale==="fr"?"En transit":"In Transit" },
+              { key:"collected",  icon:"fas fa-check-double", lbl:locale==="fr"?"Collectee":"Collected" },
+            ];
+            var seq = ["pending","in_transit","collected"];
+            var effectiveSt = st === "partially_collected" ? "collected" : st;
+            var currIdx = seq.indexOf(effectiveSt);
+            var isCancelled = st === "cancelled";
+            var isPartial   = st === "partially_collected";
+          %>
+          <div class="pip-wrap">
+            <% pip.forEach(function(step, idx) {
+              var dot  = isCancelled ? (idx===0?"pip-fail":"pip-wait")
+                       : currIdx>idx ? "pip-done"
+                       : currIdx===idx ? ((isPartial && idx===2) ? "pip-warn" : "pip-curr") : "pip-wait";
+              var lc   = dot==="pip-done"?"#198754":dot==="pip-curr"?"#0d6efd":dot==="pip-warn"?"#fd7e14":dot==="pip-fail"?"#dc3545":"#adb5bd";
+              var line = currIdx>idx ? "pip-line-done" : "pip-line-wait";
+            %>
+              <div class="pip-step">
+                <div class="pip-dot <%= dot %>">
+                  <% if(dot==="pip-done"){%><i class="fas fa-check"></i>
+                  <%}else if(dot==="pip-warn"){%><i class="fas fa-exclamation"></i>
+                  <%}else if(dot==="pip-fail"){%><i class="fas fa-times"></i>
+                  <%}else{%><i class="<%= step.icon %>"></i><%}%>
+                </div>
+                <div class="pip-lbl" style="color:<%= lc %>"><%= step.lbl %></div>
+              </div>
+              <%if(idx<pip.length-1){%><div class="pip-line <%= line %>"></div><%}%>
+            <% }); %>
+          </div>
+          <% if (isPartial) { %>
+            <div class="text-center mt-2">
+              <span class="badge bg-warning text-dark" style="font-size:.68rem;">
+                <i class="fas fa-exclamation-triangle me-1"></i><%= locale==="fr"?"Incomplete":"Incomplete" %>
+              </span>
+            </div>
+          <% } %>
+          <% if (isCancelled) { %>
+            <div class="text-center mt-2">
+              <span class="badge bg-danger" style="font-size:.68rem;">
+                <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Annulee":"Cancelled" %>
+              </span>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <%/* Order info */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="background:#e8f0fe;font-size:.82rem;border-bottom:2px solid #0d6efd;">
+          <i class="fas fa-info-circle me-2" style="color:#0d6efd;"></i>
+          <%= locale==="fr"?"Details":"Details" %>
+        </div>
+        <div class="card-body py-2 px-3">
+          <% [
+            [locale==="fr"?"N° commande":"Order No.", order.order_number],
+            [locale==="fr"?"Demande par":"Requested by", order.requested_by],
+            [locale==="fr"?"Date":"Date", new Date(order.requested_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB")],
+            order.approved_by ? [locale==="fr"?"Traite par":"Processed by", order.approved_by] : null,
+            order.collected_by ? [locale==="fr"?"Collecte par":"Collected by", order.collected_by] : null,
+            order.notes ? ["Notes", order.notes] : null,
+          ].filter(Boolean).forEach(function(r){ %>
+            <div class="d-flex justify-content-between py-1 border-bottom" style="font-size:.79rem;">
+              <span class="text-muted"><%= r[0] %></span>
+              <span class="fw-bold text-end ms-2" style="max-width:58%;word-break:break-word;"><%= r[1] %></span>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+
+      <%
+        var outstandingItems = (order.items || []).filter(function(i){
+          return i.status === "partial" || i.status === "unavailable";
+        });
+        var canProcess = typeof hasPermission !== "undefined" &&
+                         hasAnyPermission(["Warehouse.Fulfil.PharmacyOrder","Admin.FullAccess"]);
+        var canRetry        = canProcess && outstandingItems.length > 0 &&
+                               ["in_transit","partially_collected"].indexOf(order.status) !== -1;
+        var canReject        = canProcess && order.status === "pending";
+        var countedRows      = (transitRows || []).filter(function(r){ return r.status === "counted"; });
+        var canConfirm        = canProcess && countedRows.length > 0;
+        var canWriteOff       = canProcess && order.status === "partially_collected";
+      %>
+
+      <%/* Fulfil action — first attempt, shown when pending */%>
+      <% if (order.status === "pending" && canProcess) { %>
+        <div class="card shadow-sm mb-3" style="border:2px solid #0d6efd;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2" style="color:#0d6efd;">
+              <i class="fas fa-boxes me-1"></i>
+              <%= locale==="fr"?"Preparer la commande":"Process Order" %>
+            </div>
+            <p style="font-size:.76rem;color:#6c757d;margin-bottom:8px;">
+              <%= locale==="fr"
+                ?"Deduit le stock entrepot (FEFO) et met les articles en transit vers la pharmacie."
+                :"Deducts warehouse stock (FEFO) and puts items in transit to pharmacy." %>
+            </p>
+            <button class="btn btn-sm w-100 fw-bold mb-2" style="background:#0d6efd;color:#fff;"
+              onclick="doFulfil()">
+              <i class="fas fa-truck me-1"></i>
+              <%= locale==="fr"?"Valider et mettre en transit":"Validate & Send to Transit" %>
+            </button>
+            <button class="btn btn-sm btn-outline-danger w-100" onclick="doReject()">
+              <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Rejeter la commande":"Reject Order" %>
+            </button>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (canRetry) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #fd7e14;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2" style="color:#fd7e14;">
+              <i class="fas fa-redo me-1"></i>
+              <%= locale==="fr"?"Articles en attente":"Outstanding Items" %>
+            </div>
+            <p style="font-size:.76rem;color:#6c757d;margin-bottom:8px;">
+              <%= locale==="fr"
+                ?"Certains articles n'ont pas pu etre entierement fournis. Reessayer si du stock est arrive."
+                :"Some items couldn't be fully supplied. Retry if stock has since arrived." %>
+            </p>
+            <button class="btn btn-sm w-100 fw-bold mb-2" style="background:#fd7e14;color:#fff;" onclick="doFulfil()">
+              <i class="fas fa-redo me-1"></i><%= locale==="fr"?"Reessayer":"Retry Fulfilment" %>
+            </button>
+            <% if (canWriteOff) { %>
+              <button class="btn btn-sm btn-outline-secondary w-100" onclick="doWriteOff()">
+                <i class="fas fa-eraser me-1"></i><%= locale==="fr"?"Clore sans le reste":"Write Off Remainder" %>
+              </button>
+            <% } %>
+          </div>
+        </div>
+      <% } else if (canWriteOff) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #6c757d;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2"><i class="fas fa-eraser me-1 text-secondary"></i>
+              <%= locale==="fr"?"Articles en attente":"Outstanding Items" %>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary w-100" onclick="doWriteOff()">
+              <i class="fas fa-eraser me-1"></i><%= locale==="fr"?"Clore sans le reste":"Write Off Remainder" %>
+            </button>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (order.status === "in_transit" && countedRows.length === 0) { %>
+        <div class="alert py-2" style="background:#cff4fc;border:1px solid #0dcaf0;font-size:.79rem;">
+          <i class="fas fa-truck me-2" style="color:#055160;"></i>
+          <%= locale==="fr"
+            ?"Articles en transit. En attente de comptage par la pharmacie."
+            :"Items in transit. Awaiting count by pharmacy." %>
+        </div>
+      <% } %>
+
+      <% if (canConfirm) { %>
+        <div class="card shadow-sm mb-3" style="border:2px solid #198754;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2" style="color:#198754;">
+              <i class="fas fa-clipboard-check me-1"></i>
+              <%= locale==="fr"?"Confirmer la reception":"Confirm Receipt" %>
+            </div>
+            <p style="font-size:.76rem;color:#6c757d;margin-bottom:8px;">
+              <%= locale==="fr"
+                ?"La pharmacie a compte cette livraison. Confirmez pour crediter le stock pharmacie."
+                :"Pharmacy has counted this delivery. Confirm to credit pharmacy stock." %>
+            </p>
+            <table class="table table-xs mb-2">
+              <thead><tr>
+                <th><%= locale==="fr"?"Produit":"Product" %></th>
+                <th class="text-center"><%= locale==="fr"?"Expedie":"Shipped" %></th>
+                <th class="text-center"><%= locale==="fr"?"Compte":"Counted" %></th>
+              </tr></thead>
+              <tbody>
+                <% countedRows.forEach(function(row) {
+                  var diff = row.accepted_qty - row.qty_in_transit;
+                %>
+                  <tr>
+                    <td style="font-size:.76rem;"><%= row.product_name %></td>
+                    <td class="text-center"><%= row.qty_in_transit %></td>
+                    <td class="text-center fw-bold" style="<%= diff !== 0 ? 'color:#dc3545;' : 'color:#198754;' %>">
+                      <%= row.accepted_qty %>
+                      <% if (diff !== 0) { %>
+                        <span style="font-size:.62rem;">(<%= diff>0?'+':'' %><%= diff %>)</span>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+            <button class="btn btn-sm w-100 fw-bold" style="background:#198754;color:#fff;" onclick="doConfirmReceipt()">
+              <i class="fas fa-clipboard-check me-1"></i><%= locale==="fr"?"Confirmer et crediter":"Confirm & Credit Stock" %>
+            </button>
+          </div>
+        </div>
+      <% } %>
+
+    </div>
+
+    <%/* ── RIGHT: items + transit ── */%>
+    <div class="col-lg-8">
+
+      <%/* Order items */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold d-flex justify-content-between align-items-center"
+             style="background:#e8f0fe;font-size:.82rem;border-bottom:2px solid #0d6efd;">
+          <span>
+            <i class="fas fa-list me-2" style="color:#0d6efd;"></i>
+            <%= locale==="fr"?"Articles commandes":"Ordered Items" %>
+            <span class="badge ms-1" style="background:#0d6efd;font-size:.60rem;">
+              <%= order.items ? order.items.length : 0 %>
+            </span>
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"Produit":"Product" %></th>
+              <th><%= locale==="fr"?"Code":"Code" %></th>
+              <th class="text-center"><%= locale==="fr"?"Qte demandee":"Requested" %></th>
+              <th class="text-center"><%= locale==="fr"?"Stock WH actuel":"WH Stock" %></th>
+              <th class="text-center"><%= locale==="fr"?"Qte emise":"Issued" %></th>
+              <th class="text-center"><%= locale==="fr"?"Statut":"Status" %></th>
+            </tr></thead>
+            <tbody>
+              <% if (!order.items || order.items.length===0) { %>
+                <tr><td colspan="6" class="text-center text-muted py-3">
+                  <%= locale==="fr"?"Aucun article.":"No items." %>
+                </td></tr>
+              <% } else { order.items.forEach(function(item) {
+                var sLabel = { pending:"En attente", issued:"Emis", partial:"Partiel", unavailable:"Indisponible", cancelled:"Annule" };
+                if (locale !== "fr") sLabel = { pending:"Pending", issued:"Issued", partial:"Partial", unavailable:"N/A", cancelled:"Written off" };
+                var stockOk = item.product && item.product.current_stock >= item.quantity_requested;
+                var stockLow = item.product && item.product.current_stock > 0 && item.product.current_stock < item.quantity_requested;
+              %>
+                <tr>
+                  <td class="fw-bold" style="font-size:.77rem;">
+                    <%= item.product ? item.product.name : "#"+item.product_id %>
+                  </td>
+                  <td><code style="font-size:.68rem;"><%= item.product ? item.product.item_code : "" %></code></td>
+                  <td class="text-center fw-bold" style="font-size:.82rem;"><%= item.quantity_requested %></td>
+                  <td class="text-center">
+                    <% if (!item.product) { %>
+                      <span class="text-muted">—</span>
+                    <% } else if (item.product.current_stock === 0) { %>
+                      <span style="color:#842029;font-weight:700;">0</span>
+                    <% } else if (stockLow) { %>
+                      <span style="color:#856404;font-weight:700;"><%= item.product.current_stock %></span>
+                    <% } else { %>
+                      <span style="color:#198754;font-weight:700;"><%= item.product.current_stock %></span>
+                    <% } %>
+                    <span class="text-muted" style="font-size:.66rem;">
+                      <%= item.product ? item.product.unit_of_measure : "" %>
+                    </span>
+                  </td>
+                  <td class="text-center">
+                    <% if (item.quantity_issued > 0) { %>
+                      <span style="color:#198754;font-weight:700;"><%= item.quantity_issued %></span>
+                    <% } else { %>
+                      <span class="text-muted">—</span>
+                    <% } %>
+                  </td>
+                  <td class="text-center">
+                    <span class="sp is-<%= item.status %>"><%= sLabel[item.status]||item.status %></span>
+                  </td>
+                </tr>
+              <% }); } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <%/* Transit tracking — shown when in_transit or collected */%>
+      <% if (transitRows && transitRows.length > 0) { %>
+        <div class="card shadow-sm">
+          <div class="card-header py-2 fw-bold"
+               style="background:#e0f7fa;font-size:.82rem;border-bottom:2px solid #0dcaf0;">
+            <i class="fas fa-truck me-2" style="color:#055160;"></i>
+            <%= locale==="fr"?"Suivi transit":"Transit Tracking" %>
+            <span class="badge ms-1" style="background:#055160;font-size:.60rem;">
+              <%= transitRows.length %>
+            </span>
+          </div>
+          <div class="card-body p-0">
+            <table class="table table-xs table-hover align-middle mb-0">
+              <thead class="table-dark"><tr>
+                <th><%= locale==="fr"?"Produit":"Product" %></th>
+                <th><%= locale==="fr"?"Lot":"Batch" %></th>
+                <th class="text-center"><%= locale==="fr"?"Qte en transit":"In Transit" %></th>
+                <th class="text-center"><%= locale==="fr"?"Qte acceptee":"Accepted" %></th>
+                <th><%= locale==="fr"?"Expedie par":"Dispatched by" %></th>
+                <th><%= locale==="fr"?"Statut":"Status" %></th>
+              </tr></thead>
+              <tbody>
+                <% transitRows.forEach(function(t) {
+                  var sLabel = { in_transit: locale==="fr"?"En transit":"In Transit",
+                                 counted:    locale==="fr"?"Compte":"Counted",
+                                 accepted:   locale==="fr"?"Accepte":"Accepted" };
+                %>
+                  <tr>
+                    <td class="fw-bold" style="font-size:.76rem;"><%= t.product_name %></td>
+                    <td class="text-muted" style="font-size:.72rem;"><%= t.batch_number || "—" %></td>
+                    <td class="text-center fw-bold" style="color:#055160;"><%= t.qty_in_transit %></td>
+                    <td class="text-center">
+                      <% if (t.accepted_qty > 0) { %>
+                        <span style="color:#198754;font-weight:700;"><%= t.accepted_qty %></span>
+                      <% } else { %><span class="text-muted">—</span><% } %>
+                    </td>
+                    <td class="text-muted" style="font-size:.72rem;"><%= t.dispatched_by %></td>
+                    <td>
+                      <span class="<%= t.status==="in_transit"?"transit-badge":"sp is-"+t.status %>">
+                        <%= sLabel[t.status]||t.status %>
+                      </span>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      <% } %>
+
+    </div>
+  </div>
+</div></div>
+
+<script>
+var _csrf  = '<%= csrfToken %>';
+var _id    = <%= order.order_id %>;
+var locale = '<%= locale %>';
+
+function doFulfil() {
+  if (!confirm(locale==='fr'
+    ? 'Valider cette commande ? Le stock entrepot sera deduit (FEFO) et les articles mis en transit.'
+    : 'Process this order? Warehouse stock will be deducted (FEFO) and items placed in transit.')) return;
+  fetch('/pharmacy/orders/' + _id + '/fulfil?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      window.location.href = '/warehouse/pharmacy-orders/' + _id + '?success=fulfilled';
+    } else {
+      alert(d.error || 'Error');
+    }
+  });
+}
+
+function doReject() {
+  var reason = prompt(locale==='fr'
+    ? 'Raison du rejet (obligatoire) :'
+    : 'Reason for rejecting (required):');
+  if (reason === null) return;
+  if (!reason.trim()) { alert(locale==='fr'?'Une raison est requise.':'A reason is required.'); return; }
+  fetch('/pharmacy/orders/' + _id + '/reject?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      window.location.href = '/warehouse/pharmacy-orders/' + _id + '?success=rejected';
+    } else {
+      alert(d.error || 'Error');
+    }
+  });
+}
+
+function doWriteOff() {
+  var reason = prompt(locale==='fr'
+    ? 'Raison de la cloture (obligatoire) :'
+    : 'Reason for closing it out (required):');
+  if (reason === null) return;
+  if (!reason.trim()) { alert(locale==='fr'?'Une raison est requise.':'A reason is required.'); return; }
+  fetch('/pharmacy/orders/' + _id + '/write-off?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      window.location.href = '/warehouse/pharmacy-orders/' + _id + '?success=writeoff';
+    } else {
+      alert(d.error || 'Error');
+    }
+  });
+}
+
+function doConfirmReceipt() {
+  if (!confirm(locale==='fr'
+    ? 'Confirmer ce compte ? Le stock pharmacie sera credite.'
+    : 'Confirm this count? Pharmacy stock will be credited.')) return;
+  fetch('/pharmacy/orders/' + _id + '/confirm-receipt?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      window.location.href = '/warehouse/pharmacy-orders/' + _id + '?success=confirmed';
+    } else {
+      alert(d.error || 'Error');
+    }
+  });
+}
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

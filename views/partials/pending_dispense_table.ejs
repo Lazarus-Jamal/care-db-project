@@ -1,0 +1,55 @@
+
+<%/* partials/pending_dispense_table.ejs
+     Reusable embedded pending-dispense table for the pharmacy-only
+     dashboard — same shape as open_bills_table.ejs for cashier/billing.
+     Expects: pharmacyPendingList, locale
+*/%>
+<div class="card shadow-sm">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center">
+    <span class="fw-bold" style="font-size:.85rem;">
+      <i class="fas fa-hand-holding-medical me-2" style="color:#fd7e14;"></i>
+      <%= locale==="fr" ? "En attente de distribution" : "Pending Dispense" %>
+      <span class="badge" style="background:#fd7e14;font-size:.65rem;">
+        <%= pharmacyPendingList.length %>
+      </span>
+    </span>
+    <a href="/pharmacy/dispense" class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;">
+      <%= locale==="fr" ? "Voir tout" : "View all" %>
+    </a>
+  </div>
+  <div class="card-body p-0">
+    <% if (!pharmacyPendingList || pharmacyPendingList.length === 0) { %>
+      <div class="text-center text-muted py-4" style="font-size:.82rem;">
+        <i class="fas fa-check-circle fa-2x mb-2 d-block text-success opacity-50"></i>
+        <%= locale==="fr" ? "Aucun article en attente." : "Nothing pending." %>
+      </div>
+    <% } else { %>
+      <div class="table-responsive" style="max-height:380px;overflow-y:auto;">
+        <table class="table table-hover align-middle mb-0" style="font-size:.80rem;">
+          <thead class="table-light" style="position:sticky;top:0;">
+            <tr>
+              <th class="ps-3"><%= locale==="fr" ? "Patient" : "Patient" %></th>
+              <th><%= locale==="fr" ? "N° Dossier" : "File No." %></th>
+              <th><%= locale==="fr" ? "Article" : "Item" %></th>
+              <th class="text-center"><%= locale==="fr" ? "Qte" : "Qty" %></th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% pharmacyPendingList.forEach(function(row) { %>
+              <tr>
+                <td class="ps-3">
+                  <%= row.name_first ? (row.name_first + " " + row.name_last) : "—" %>
+                </td>
+                <td><%= row.file_nr || "—" %></td>
+                <td><%= row.article %></td>
+                <td class="text-center"><%= row.qtealivrer || row.units || 0 %></td>
+                <td><%= row.bill_date ? String(row.bill_date).slice(0,10) : "—" %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>

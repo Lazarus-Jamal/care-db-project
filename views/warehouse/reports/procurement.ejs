@@ -1,0 +1,173 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.78rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6;
+              padding:14px 16px; text-align:center; }
+  .stat-val  { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl  { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-file-invoice me-2" style="color:#fd7e14;"></i>
+        <%= locale==="fr"?"Synthese des achats":"Procurement Summary" %>
+      </h5>
+      <small class="text-muted"><%= locale==="fr"?"Genere le":"Generated" %> <%= new Date().toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></small>
+    </div>
+    <a href="/warehouse/reports" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i><%= locale==="fr"?"Rapports":"Reports" %>
+    </a>
+  </div>
+
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/warehouse/reports/procurement" class="d-flex gap-2 flex-wrap align-items-end">
+      <div><label class="lbl"><%= locale==="fr"?"Du":"From" %></label>
+        <input type="date" name="date_from" value="<%= dateFrom %>" class="form-control form-control-sm"></div>
+      <div><label class="lbl"><%= locale==="fr"?"Au":"To" %></label>
+        <input type="date" name="date_to" value="<%= dateTo %>" class="form-control form-control-sm"></div>
+      <div><label class="lbl"><%= locale==="fr"?"Fournisseur":"Supplier" %></label>
+        <select name="supplier_id" class="form-select form-select-sm">
+          <option value=""><%= locale==="fr"?"Tous":"All" %></option>
+          <% suppliers.forEach(function(s){ %>
+            <option value="<%= s.supplier_id %>" <%= supplierId==s.supplier_id?"selected":"" %>><%= s.name %></option>
+          <% }); %>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter"></i></button>
+      <a href="/warehouse/reports/procurement?print=1&date_from=<%= dateFrom %>&date_to=<%= dateTo %><%= supplierId?"&supplier_id="+supplierId:"" %>"
+         target="_blank" class="btn btn-sm btn-outline-primary ms-auto">
+        <i class="fas fa-print me-1"></i><%= locale==="fr"?"Imprimer":"Print" %>
+      </a>
+    </form>
+  </div></div>
+
+  <%/* Stats */%>
+  <div class="row g-3 mb-3">
+    <% var pStats = [
+      { val: pos.length,                        lbl: locale==="fr"?"Bons de commande":"Purchase Orders", color:"#fd7e14" },
+      { val: fmtFCFA(grandTotal)+" FCFA",       lbl: locale==="fr"?"Valeur totale":"Total Value",       color:"#0a3622" },
+      { val: pos.filter(function(p){return p.is_paid;}).length, lbl: locale==="fr"?"Payes":"Paid",      color:"#198754" },
+      { val: fmtFCFA(reimbTotal)+" FCFA",       lbl: locale==="fr"?"Remboursements":"Reimbursements",   color:"#6f42c1" },
+    ]; %>
+    <% pStats.forEach(function(s){ %>
+      <div class="col-6 col-md-3">
+        <div class="stat-box shadow-sm">
+          <div class="stat-val" style="color:<%= s.color %>;font-size:1.2rem;"><%= s.val %></div>
+          <div class="stat-lbl"><%= s.lbl %></div>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+
+  <div class="row g-3">
+    <%/* Status funnel */%>
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+          <i class="fas fa-filter me-2 text-warning"></i><%= locale==="fr"?"Entonnoir statuts":"Status Funnel" %>
+        </div>
+        <div class="card-body py-2">
+          <% var statuses = [
+            {key:"draft",            lbl:locale==="fr"?"Brouillon":"Draft",           col:"#6c757d"},
+            {key:"pending_manager",  lbl:locale==="fr"?"Att. Manager":"Pend. Manager", col:"#ffc107"},
+            {key:"approved",         lbl:locale==="fr"?"Approuvee":"Approved",        col:"#198754"},
+            {key:"sent",             lbl:locale==="fr"?"Envoyee":"Sent",             col:"#0d6efd"},
+            {key:"received",         lbl:locale==="fr"?"Recue":"Received",           col:"#20c997"},
+            {key:"closed",           lbl:locale==="fr"?"Cloturee":"Closed",          col:"#0a3622"},
+            {key:"cancelled",        lbl:locale==="fr"?"Annulee":"Cancelled",        col:"#dc3545"},
+          ]; %>
+          <% statuses.forEach(function(s){ %>
+            <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="font-size:.78rem;">
+              <span style="color:<%= s.col %>;font-weight:600;"><%= s.lbl %></span>
+              <span class="badge" style="background:<%= s.col %>;"><%= statusCount[s.key]||0 %></span>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+    </div>
+
+    <%/* By supplier */%>
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+          <i class="fas fa-truck me-2 text-success"></i><%= locale==="fr"?"Par fournisseur":"By Supplier" %>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-light"><tr>
+              <th><%= locale==="fr"?"Fournisseur":"Supplier" %></th>
+              <th class="text-center">BCs</th>
+              <th class="text-end"><%= locale==="fr"?"Valeur":"Value" %></th>
+            </tr></thead>
+            <tbody>
+              <% bySupplier.forEach(function(s){ %>
+                <tr>
+                  <td class="fw-bold" style="font-size:.78rem;"><%= s.name %></td>
+                  <td class="text-center"><%= s.count %></td>
+                  <td class="text-end" style="color:#0a3622;"><%= fmtFCFA(s.total) %> FCFA</td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%/* Monthly trend */%>
+  <div class="card shadow-sm mt-3">
+    <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+      <i class="fas fa-calendar me-2 text-primary"></i><%= locale==="fr"?"Tendance mensuelle":"Monthly Trend" %>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-xs table-hover align-middle mb-0">
+        <thead class="table-dark"><tr>
+          <th><%= locale==="fr"?"Mois":"Month" %></th>
+          <th class="text-center">BCs</th>
+          <th class="text-end"><%= locale==="fr"?"Valeur totale":"Total Value" %></th>
+          <th class="text-end"><%= locale==="fr"?"Montant paye":"Amount Paid" %></th>
+        </tr></thead>
+        <tbody>
+          <% monthly.forEach(function(m){ %>
+            <tr>
+              <td class="fw-bold"><%= m.month %></td>
+              <td class="text-center"><%= m.count %></td>
+              <td class="text-end"><%= fmtFCFA(m.total) %> FCFA</td>
+              <td class="text-end" style="color:#0a3622;"><%= fmtFCFA(m.paid) %> FCFA</td>
+            </tr>
+          <% }); %>
+          <% if (!monthly.length) { %>
+            <tr><td colspan="4" class="text-center text-muted py-3"><%= locale==="fr"?"Aucune commande.":"No orders." %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

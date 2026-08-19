@@ -1,0 +1,337 @@
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 rounded">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex flex-column lh-1" href="/">
+            <span><%= t.nav.brand %></span>
+            <% if (typeof user !== "undefined" && user) { %>
+                <span class="text-white fw-normal" style="font-size:1.25rem;">
+                    <% if (user.facility && user.facility.id) { %>
+                        <i class="fas fa-hospital me-1"></i><%= user.facility.name %>
+                    <% } else { %>
+                        <i class="fas fa-globe me-1"></i><%= locale==="fr" ? "Tous les etablissements" : "All Facilities" %>
+                    <% } %>
+                </span>
+                <%/* Pharmacy unit (Day/Night) -- previously shown nowhere
+                     in the app at all, despite stock/dispensing being
+                     unit-specific. Genuinely null for non-pharmacy staff
+                     and single-unit facilities, so this correctly stays
+                     silent for them rather than showing an empty badge. */%>
+                <% if (user.pharmacyUnit && user.pharmacyUnit.id) { %>
+                    <span class="text-white-50 fw-normal" style="font-size:.85rem;">
+                        <i class="fas fa-prescription-bottle-medical me-1"></i><%= user.pharmacyUnit.name %>
+                    </span>
+                <% } %>
+            <% } %>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain"
+            aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarMain">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+
+                <% if (typeof user !== "undefined" && user && user.permissions && user.permissions.length > 0) { %>
+                    <li class="nav-item">
+                        <a class="nav-link <%= activePage === "home" ? "active" : "" %>" href="/">
+                            <img src="/images/icons/navbar-home-icon.png" alt="<%= t.nav.brand %>" style="height:36px; width:auto;">
+                        </a>
+                    </li>
+                <% } %>
+
+                <%/* ── Patients ── */%>
+                <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Patient.Read.PatientRecord","Patient.Create.PatientRecord","Patient.Update.PatientRecord","Patient.Admit.Inpatient","Patient.Release.Inpatient","MedicalRecord.Read.ClinicalData","Reports.Generate.ConsultationData","Appointment.Read.Appointment","Pharmacy.Create.Prescription","Lab.Send.TestRequest","Imaging.Send.TestRequest"])) { %>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <%= activePage === "patients" ? "active" : "" %>" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-hospital-user"></i> <%= t.nav.patients %>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <% if (hasPermission("Patient.Create.PatientRecord")) { %>
+                                <li><a class="dropdown-item" href="/patients/create"><i class="fas fa-user-plus me-2" style="color:#20c997;"></i><%= t.nav.registration %></a></li>
+                            <% } %>
+                            <% if (hasPermission("Patient.Read.PatientRecord")) { %>
+                                <li><a class="dropdown-item" href="/patients/list"><i class="fas fa-folder-open me-2" style="color:#0d6efd;"></i><%= t.nav.medicalRecords %></a></li>
+                            <% } %>
+                            <% if (hasPermission("Reports.Generate.ConsultationData")) { %>
+                                <li><a class="dropdown-item" href="/encounters/worklist?context=consultations"><i class="fas fa-stethoscope me-2" style="color:#6f42c1;"></i><%= t.nav.consultations %></a></li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Patient.Admit.Inpatient","Patient.Release.Inpatient"])) { %>
+                                <li><a class="dropdown-item" href="/encounters/worklist?context=hospitalization"><i class="fas fa-procedures me-2" style="color:#fd7e14;"></i><%= t.nav.hospitalization %></a></li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Lab.Send.TestRequest","Imaging.Send.TestRequest","Surgery.Request.Procedure"])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#"><i class="fas fa-microscope me-2" style="color:#6f42c1;"></i><%= t.nav.actsExams %></a>
+                                    <ul class="dropdown-menu">
+                                        <% if (hasPermission("Lab.Send.TestRequest")) { %>
+                                            <li><a class="dropdown-item" href="/procedures/acts/lab"><i class="fas fa-flask me-2" style="color:#20c997;"></i><%= t.nav.lab %></a></li>
+                                        <% } %>
+                                        <% if (hasPermission("Imaging.Send.TestRequest")) { %>
+                                            <li><a class="dropdown-item" href="/procedures/acts/imaging"><i class="fas fa-x-ray me-2" style="color:#0dcaf0;"></i><%= t.nav.imaging %></a></li>
+                                        <% } %>
+                                        <% if (hasPermission("Surgery.Request.Procedure")) { %>
+                                            <li><a class="dropdown-item" href="/procedures/acts/surgery"><i class="fas fa-cut me-2" style="color:#dc3545;"></i><%= t.nav.surgery %></a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (hasPermission("Pharmacy.Create.Prescription")) { %>
+                                <li><a class="dropdown-item" href="/encounters/worklist?context=prescriptions"><i class="fas fa-prescription me-2" style="color:#6f42c1;"></i><%= t.nav.prescriptions %></a></li>
+                            <% } %>
+                            <% if (hasPermission("Appointment.Read.Appointment")) { %>
+                                <li><a class="dropdown-item" href="/encounters/worklist?context=appointments"><i class="fas fa-calendar-check me-2" style="color:#198754;"></i><%= t.nav.appointments %></a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+
+                <%/* ── Finances ── */%>
+                <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill","Billing.View.ProformaInvoices","Billing.Read.InsuranceInfo","Billing.View.PendingInvoices","Reports.Generate.FinancialData","Billing.Manage.SupportVoucherConfig","Finance.View.Reimbursements"])) { %>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <%= activePage === "finances" ? "active" : "" %>" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cash-register"></i> <%= t.nav.finances %>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <% if (hasPermission("Billing.Collect.Payment")) { %>
+                                <li><a class="dropdown-item" href="/billing/worklist"><i class="fas fa-cash-register me-2" style="color:#198754;"></i><%= t.nav.payments %></a></li>
+                            <% } %>
+                            <% if (hasPermission("Billing.Create.Bill")) { %>
+                                <li><a class="dropdown-item" href="/finances/invoicing"><i class="fas fa-file-invoice-dollar me-2" style="color:#fd7e14;"></i><%= t.nav.invoicing %></a></li>
+                            <% } %>
+                            <% if (hasPermission("Billing.View.ProformaInvoices")) { %>
+                                <li><a class="dropdown-item" href="/finances/proforma-invoices"><i class="fas fa-file-contract me-2" style="color:#6c757d;"></i><%= t.nav.proforma %></a></li>
+                            <% } %>
+                            <% if (hasPermission("Billing.View.PendingInvoices")) { %>
+                                <li><a class="dropdown-item" href="/finances/pending-invoices"><i class="fas fa-hourglass-half me-2" style="color:#ffc107;"></i><%= t.nav.pendingInvoices %></a></li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Billing.Read.InsuranceInfo","Billing.Manage.SupportVoucherConfig"])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#"><i class="fas fa-shield-alt me-2" style="color:#0d6efd;"></i><%= t.nav.assurances %></a>
+                                    <ul class="dropdown-menu">
+                                        <% if (hasPermission("Billing.Read.InsuranceInfo")) { %>
+                                            <li><a class="dropdown-item" href="/finances/third-parties"><i class="fas fa-building me-2" style="color:#0d6efd;"></i><%= t.nav.insurance %></a></li>
+                                        <% } %>
+                                        <% if (hasPermission("Billing.Manage.SupportVoucherConfig")) { %>
+                                            <li><a class="dropdown-item" href="/finances/support-vouchers"><i class="fas fa-ticket-alt me-2" style="color:#6f42c1;"></i><%= t.nav.vouchers %></a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (hasPermission("Billing.Collect.Payment")) { %>
+                                <li><a class="dropdown-item" href="/finances/collections"><i class="fas fa-coins me-2" style="color:#198754;"></i><%= t.nav.collections %></a></li>
+                            <% } %>
+                            <% if (hasPermission("Reports.Generate.FinancialData")) { %>
+                                <li><a class="dropdown-item" href="/finances/financial-reports"><i class="fas fa-chart-line me-2" style="color:#0d6efd;"></i><%= t.nav.financialReports %></a></li>
+                            <% } %>
+                            <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Finance.Create.Reimbursement","Finance.Approve.Director","Finance.Process.Reimbursement","Finance.View.Reimbursements"])) { %>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/finances/reimbursements"><i class="fas fa-money-check-alt me-2" style="color:#198754;"></i><%= locale==="fr"?"Remboursements":"Reimbursements" %></a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+
+                <%/* ── Pharmacie ── */%>
+                <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Pharmacy.Dispense.Medication","Inventory.Order.ToPharmacy","Inventory.Read.Stock","Pharmacy.Report.Distribution","Pharmacy.View.Reports"])) { %>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <%= activePage === "pharmacy" ? "active" : "" %>" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-pills"></i> <%= t.nav.pharmacy %>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <% if (hasPermission("Pharmacy.Dispense.Medication")) { %>
+                                <li><a class="dropdown-item" href="/pharmacy">
+                                    <i class="fas fa-tachometer-alt me-2" style="color:#20c997;"></i><%= locale==="fr"?"Tableau de bord":"Dashboard" %>
+                                </a></li>
+                                <li><a class="dropdown-item" href="/pharmacy/dispense">
+                                    <i class="fas fa-hand-holding-medical me-2" style="color:#dc3545;"></i><%= locale==="fr"?"File de distribution":"Dispensing Queue" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Inventory.Read.Stock")) { %>
+                                <li><a class="dropdown-item" href="/pharmacy/stock">
+                                    <i class="fas fa-boxes me-2" style="color:#fd7e14;"></i><%= locale==="fr"?"Stock pharmacie":"Pharmacy Stock" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Inventory.Order.ToPharmacy")) { %>
+                                <li><a class="dropdown-item" href="/pharmacy/orders">
+                                    <i class="fas fa-truck me-2" style="color:#0d6efd;"></i><%= locale==="fr"?"Commandes entrepot":"Warehouse Orders" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Pharmacy.Inventory.Count")) { %>
+                                <li><a class="dropdown-item" href="/pharmacy/inventory-counts">
+                                    <i class="fas fa-clipboard-list me-2" style="color:#6f42c1;"></i><%= locale==="fr"?"Comptage inventaire":"Inventory Count" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Pharmacy.View.Reports")) { %>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/pharmacy/reports">
+                                    <i class="fas fa-chart-bar me-2" style="color:#6f42c1;"></i><%= locale==="fr"?"Rapports":"Reports" %>
+                                </a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+
+                <%/* ── Entrepôt / Warehouse ── */%>
+                <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Warehouse.View.Stock","Warehouse.Create.PurchaseOrder","Warehouse.Approve.Director","Warehouse.Approve.Finance","Warehouse.Receive.Delivery","Warehouse.QC.Check","Warehouse.Manage.Suppliers","Warehouse.Fulfil.PharmacyOrder","Warehouse.View.Reports","Warehouse.Create.RFQ","Warehouse.Approve.RFQ","Warehouse.Initiate.InventoryCount","Warehouse.Enter.CountResults","Warehouse.Approve.InventoryCount","Warehouse.Approve.Manager"])) { %>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <%= activePage === "warehouse" ? "active" : "" %>" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-warehouse"></i> <%= t.nav.warehouse %>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/warehouse">
+                                <i class="fas fa-tachometer-alt me-2" style="color:#20c997;"></i><%= locale==="fr" ? "Tableau de bord" : "Dashboard" %>
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <% if (hasAnyPermission(["Warehouse.View.Stock","Warehouse.Create.PurchaseOrder"])) { %>
+                                <li><a class="dropdown-item" href="/warehouse/products">
+                                    <i class="fas fa-boxes me-2" style="color:#fd7e14;"></i><%= locale==="fr" ? "Catalogue produits" : "Product Catalogue" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Warehouse.Manage.Suppliers")) { %>
+                                <li><a class="dropdown-item" href="/warehouse/suppliers">
+                                    <i class="fas fa-truck me-2" style="color:#0d6efd;"></i><%= t.nav.suppliers %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Warehouse.Create.PurchaseOrder")) { %>
+                                <li><a class="dropdown-item" href="/warehouse/purchase-orders">
+                                    <i class="fas fa-file-invoice me-2" style="color:#6f42c1;"></i><%= t.nav.supplierOrders %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Warehouse.View.Stock")) { %>
+                                <li><a class="dropdown-item" href="/warehouse/locations">
+                                    <i class="fas fa-map-marker-alt me-2" style="color:#dc3545;"></i><%= locale==="fr" ? "Emplacements" : "Locations" %>
+                                </a></li>
+                                <li><a class="dropdown-item" href="/warehouse/deliveries">
+                                    <i class="fas fa-truck-loading me-2" style="color:#198754;"></i><%= locale==="fr" ? "Livraisons" : "Deliveries" %>
+                                </a></li>
+                                <li><a class="dropdown-item" href="/warehouse/stock">
+                                    <i class="fas fa-layer-group me-2" style="color:#0d6efd;"></i><%= locale==="fr" ? "État du stock" : "Stock Status" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Warehouse.Create.RFQ","Warehouse.Approve.RFQ"])) { %>
+                                <li><a class="dropdown-item" href="/warehouse/rfq">
+                                    <i class="fas fa-file-alt me-2" style="color:#fd7e14;"></i><%= locale==="fr" ? "Demandes de cotation" : "Quotation Requests" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Warehouse.Initiate.InventoryCount","Warehouse.Enter.CountResults","Warehouse.Approve.InventoryCount"])) { %>
+                                <li><a class="dropdown-item" href="/warehouse/inventory-counts">
+                                    <i class="fas fa-clipboard-list me-2" style="color:#6f42c1;"></i><%= locale==="fr" ? "Inventaires physiques" : "Inventory Counts" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Warehouse.Fulfil.PharmacyOrder","Admin.FullAccess"])) { %>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/warehouse/pharmacy-orders">
+                                    <i class="fas fa-pills me-2" style="color:#20c997;"></i><%= locale==="fr"?"Commandes pharmacie":"Pharmacy Orders" %>
+                                </a></li>
+                            <% } %>
+                            <% if (hasPermission("Warehouse.View.Reports")) { %>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/warehouse/reports">
+                                    <i class="fas fa-chart-bar me-2" style="color:#20c997;"></i><%= locale==="fr"?"Rapports & Analytiques":"Reports & Analytics" %>
+                                </a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+
+                <%/* ── Stats ── */%>
+                <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Reports.Generate.FinancialData","Reports.Generate.ConsultationData","Reports.Generate.HospitalizationData","Reports.Generate.DiagnosticData","Reports.Generate.LabData","Reports.Generate.ImagingData","Reports.Generate.MedicationOrderData"])) { %>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <%= activePage === "stats" ? "active" : "" %>" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-chart-line"></i> <%= t.nav.stats %>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <% if (hasPermission("Reports.Generate.FinancialData")) { %><li><a class="dropdown-item" href="/stats/finances"><i class="fas fa-chart-line me-2" style="color:#198754;"></i><%= t.nav.statsFinances %></a></li><% } %>
+                            <% if (hasPermission("Reports.Generate.ConsultationData")) { %><li><a class="dropdown-item" href="/stats/consultations"><i class="fas fa-stethoscope me-2" style="color:#0d6efd;"></i><%= t.nav.statsConsult %></a></li><% } %>
+                            <% if (hasPermission("Reports.Generate.HospitalizationData")) { %><li><a class="dropdown-item" href="/stats/hospitalisations"><i class="fas fa-procedures me-2" style="color:#fd7e14;"></i><%= t.nav.statsHosp %></a></li><% } %>
+                            <% if (hasPermission("Reports.Generate.DiagnosticData")) { %><li><a class="dropdown-item" href="/stats/diagnostics"><i class="fas fa-microscope me-2" style="color:#6f42c1;"></i><%= t.nav.statsDiag %></a></li><% } %>
+                            <% if (hasPermission("Reports.Generate.LabData")) { %><li><a class="dropdown-item" href="/stats/lab"><i class="fas fa-flask me-2" style="color:#20c997;"></i><%= t.nav.statsLab %></a></li><% } %>
+                            <% if (hasPermission("Reports.Generate.ImagingData")) { %><li><a class="dropdown-item" href="/stats/imaging"><i class="fas fa-x-ray me-2" style="color:#0dcaf0;"></i><%= t.nav.statsImaging %></a></li><% } %>
+                            <% if (hasPermission("Reports.Generate.MedicationOrderData")) { %><li><a class="dropdown-item" href="/stats/medication-orders"><i class="fas fa-pills me-2" style="color:#6f42c1;"></i><%= t.nav.statsMedOrders %></a></li><% } %>
+                        </ul>
+                    </li>
+                <% } %>
+
+                <%/* ── Admin (gear icon) ── */%>
+                <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Admin.FullAccess","Admin.Create.User","Admin.Update.User","Admin.Create.Facility","Admin.Update.Facility","Admin.Manage.CashierConfig","Admin.Manage.PharmacyShelves","Admin.Manage.WarehouseShelves","Admin.Manage.LabConfig","Admin.Manage.ServicesConfig","Admin.Manage.HospitalizationRooms","Admin.Manage.SupportAndMaintenance"])) { %>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle <%= activePage === "admin" ? "active" : "" %>" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog"></i>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <% if (hasAnyPermission(["Admin.Create.User","Admin.Update.User"])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#"><i class="fas fa-users me-2" style="color:#0d6efd;"></i><%= t.nav.users %></a>
+                                    <ul class="dropdown-menu">
+                                        <% if (hasPermission("Admin.Create.User")) { %><li><a class="dropdown-item" href="/admin/users/create"><i class="fas fa-user-plus me-2" style="color:#198754;"></i><%= t.nav.createUser %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Update.User")) { %><li><a class="dropdown-item" href="/admin/users/update"><i class="fas fa-users-cog me-2" style="color:#0d6efd;"></i><%= t.nav.updateUser %></a></li><% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Admin.Create.Facility","Admin.Update.Facility"])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#"><i class="fas fa-hospital me-2" style="color:#fd7e14;"></i><%= t.nav.facilities %></a>
+                                    <ul class="dropdown-menu">
+                                        <% if (hasPermission("Admin.Create.Facility")) { %><li><a class="dropdown-item" href="/admin/facilities/create"><i class="fas fa-hospital me-2" style="color:#198754;"></i><%= t.nav.createFacility %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Update.Facility")) { %><li><a class="dropdown-item" href="/admin/facilities/update"><i class="fas fa-hospital-alt me-2" style="color:#0d6efd;"></i><%= t.nav.updateFacility %></a></li><% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Admin.Manage.CashierConfig","Admin.Manage.PharmacyShelves","Admin.Manage.WarehouseShelves","Admin.Manage.LabConfig","Admin.Manage.ServicesConfig","Admin.Manage.HospitalizationRooms"])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#"><i class="fas fa-cogs me-2" style="color:#6c757d;"></i><%= t.nav.services %></a>
+                                    <ul class="dropdown-menu">
+                                        <% if (hasPermission("Admin.Manage.CashierConfig")) { %><li><a class="dropdown-item" href="/admin/config/cashiers"><i class="fas fa-cash-register me-2" style="color:#fd7e14;"></i><%= t.nav.cashiers %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Manage.PharmacyShelves")) { %><li><a class="dropdown-item" href="/admin/config/pharmacy-shelves"><i class="fas fa-capsules me-2" style="color:#20c997;"></i><%= t.nav.pharmacyShelves %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Manage.WarehouseShelves")) { %><li><a class="dropdown-item" href="/admin/config/warehouse-shelves"><i class="fas fa-warehouse me-2" style="color:#6c757d;"></i><%= t.nav.warehouseShelves %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Manage.LabConfig")) { %><li><a class="dropdown-item" href="/admin/config/lab"><i class="fas fa-vial me-2" style="color:#20c997;"></i><%= t.nav.labConfig %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Manage.ServicesConfig")) { %><li><a class="dropdown-item" href="/admin/config/imaging"><i class="fas fa-camera me-2" style="color:#0dcaf0;"></i><%= t.nav.imagingConfig %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Manage.HospitalizationRooms")) { %><li><a class="dropdown-item" href="/admin/config/hospitalization-rooms"><i class="fas fa-bed me-2" style="color:#6f42c1;"></i><%= t.nav.rooms %></a></li><% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (hasAnyPermission(["Admin.Manage.SupportAndMaintenance","Admin.Manage.EquipmentMaintenance","Admin.Manage.SoftwareMaintenance"])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#"><i class="fas fa-tools me-2" style="color:#dc3545;"></i><%= t.nav.maintenance %></a>
+                                    <ul class="dropdown-menu">
+                                        <% if (hasPermission("Admin.Manage.SoftwareMaintenance")) { %><li><a class="dropdown-item" href="/admin/maintenance/software"><i class="fas fa-code-branch me-2" style="color:#0d6efd;"></i><%= t.nav.softwareMaint %></a></li><% } %>
+                                        <% if (hasPermission("Admin.Manage.EquipmentMaintenance")) { %><li><a class="dropdown-item" href="/admin/maintenance/equipment"><i class="fas fa-wrench me-2" style="color:#fd7e14;"></i><%= t.nav.equipmentMaint %></a></li><% } %>
+                                        <li><a class="dropdown-item" href="/help/guide"><i class="fas fa-question-circle me-2" style="color:#6c757d;"></i><%= t.nav.guide %></a></li>
+                                    </ul>
+                                </li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+
+            </ul>
+
+            <%/* ── Right side: user info + lang switcher + logout ── */%>
+            <% if (typeof user !== "undefined" && user && user.permissions && user.permissions.length > 0) { %>
+                <span class="navbar-text me-3 text-end text-white" style="font-size:1.25rem; line-height:1.3;">
+                    <%= t.nav.welcome %>, <strong><%= user.firstName || user.username %></strong>
+                    <br><span class="text-white" style="font-size:1.25rem;">(<%= user.roleName %>)</span>
+                </span>
+
+                <%/* Language toggle button */%>
+                <% if (locale === "fr") { %>
+                    <a href="/locale/en" class="btn btn-outline-light btn-sm me-2" title="Switch to English">
+                        🇬🇧 EN
+                    </a>
+                <% } else { %>
+                    <a href="/locale/fr" class="btn btn-outline-light btn-sm me-2" title="Passer en Français">
+                        🇫🇷 FR
+                    </a>
+                <% } %>
+
+                <a href="/auth/logout" class="btn btn-outline-light btn-sm" title="<%= t.nav.logout %>">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            <% } %>
+        </div>
+    </div>
+</nav>
+
+
+
+
+

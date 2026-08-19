@@ -1,0 +1,291 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card      { background:#fff !important; }
+  .lbl       { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req       { color:#dc3545; }
+  .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .item-receive-card { background:#f8f9fa; border:1px solid #dee2e6; border-radius:.4rem; padding:12px 14px; margin-bottom:10px; }
+  .item-receive-card .product-name { font-weight:700; font-size:.85rem; }
+  .item-receive-card .product-meta { font-size:.72rem; color:#6c757d; }
+  .ordered-badge { display:inline-block; background:#e9ecef; color:#495057; padding:1px 7px; border-radius:10px; font-size:.70rem; }
+  .already-rcvd  { display:inline-block; background:#d1e7dd; color:#0a3622; padding:1px 7px; border-radius:10px; font-size:.70rem; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:960px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse"><i class="fas fa-warehouse me-1"></i><%= locale==="fr"?"Entrepôt":"Warehouse" %></a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/purchase-orders"><%= locale==="fr"?"Commandes":"Orders" %></a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/purchase-orders/<%= po.po_id %>"><%= po.po_number %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Réception":"Receive" %></li>
+    </ol>
+  </nav>
+
+  <% if (typeof errors !== "undefined" && errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/warehouse/purchase-orders/<%= po.po_id %>/receive">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="row g-3">
+
+      <%/* ── LEFT: Delivery header ── */%>
+      <div class="col-lg-4">
+
+        <%/* PO summary */%>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-file-invoice me-2 text-warning"></i>
+            <%= po.po_number %>
+            <span class="badge <%= po.status==="partial"?"bg-warning text-dark":"bg-info text-white" %> ms-2" style="font-size:.62rem;">
+              <%= po.status === "partial" ? (locale==="fr"?"Partielle":"Partial") : (locale==="fr"?"Envoyée":"Sent") %>
+            </span>
+          </div>
+          <div class="card-body" style="font-size:.82rem;">
+            <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Fournisseur:":"Supplier:" %></span> <strong><%= po.supplier ? po.supplier.name : "—" %></strong></div>
+            <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Total commande:":"Order total:" %></span> <strong class="text-primary"><%= fmtFCFA(po.total_amount) %></strong></div>
+            <div class="mb-1">
+              <span class="text-muted"><%= locale==="fr"?"Articles en attente:":"Items pending:" %></span>
+              <strong><%= po.items ? po.items.length : 0 %></strong>
+            </div>
+          </div>
+        </div>
+
+        <%/* Delivery info */%>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-truck me-2 text-success"></i>
+            <%= locale==="fr"?"Informations livraison":"Delivery Information" %>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"N° bon de livraison":"Delivery Note Ref." %></label>
+              <input type="text" name="delivery_ref" class="form-control form-control-sm"
+                placeholder="<%= locale==="fr"?"Référence du bon fournisseur":"Supplier delivery note number" %>"
+                maxlength="50">
+            </div>
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Livré par (transporteur)":"Delivered by (driver/agent)" %></label>
+              <input type="text" name="delivered_by" class="form-control form-control-sm"
+                maxlength="100">
+            </div>
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Notes":"Notes" %></label>
+              <textarea name="notes" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+            </div>
+            <div class="alert alert-info py-2" style="font-size:.76rem;">
+              <i class="fas fa-info-circle me-1"></i>
+              <%= locale==="fr"
+                ? "Les quantités reçues mettront à jour le stock immédiatement. Entrez 0 pour les articles non livrés."
+                : "Received quantities update stock immediately. Enter 0 for items not delivered." %>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <a href="/warehouse/purchase-orders/<%= po.po_id %>" class="btn btn-outline-secondary btn-sm">
+            <%= locale==="fr"?"Annuler":"Cancel" %>
+          </a>
+          <button type="submit" class="btn btn-success btn-sm flex-fill">
+            <i class="fas fa-truck-loading me-1"></i>
+            <%= locale==="fr"?"Confirmer la réception":"Confirm Receipt" %>
+          </button>
+        </div>
+
+      </div>
+
+      <%/* ── RIGHT: Items to receive ── */%>
+      <div class="col-lg-8">
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-boxes me-2 text-primary"></i>
+            <%= locale==="fr"?"Articles à réceptionner":"Items to Receive" %>
+            <span class="badge bg-secondary ms-1"><%= po.items ? po.items.length : 0 %></span>
+          </div>
+          <div class="card-body p-3">
+
+            <% if (!po.items || po.items.length === 0) { %>
+              <div class="text-center text-muted py-4">
+                <i class="fas fa-check-circle fa-2x text-success mb-2 d-block"></i>
+                <%= locale==="fr"?"Tous les articles ont été réceptionnés.":"All items have been received." %>
+              </div>
+            <% } else { %>
+
+              <% po.items.forEach(function(item, idx) { %>
+                <% var remaining = item.quantity_ordered - (item.quantity_received || 0); %>
+                <div class="item-receive-card">
+                  <input type="hidden" name="items[<%= idx %>][po_item_id]"  value="<%= item.item_id %>">
+                  <input type="hidden" name="items[<%= idx %>][product_id]" value="<%= item.product_id %>">
+
+                  <div class="d-flex align-items-start justify-content-between mb-2 flex-wrap gap-2">
+                    <div>
+                      <div class="product-name"><%= item.product ? item.product.name : "#" + item.product_id %></div>
+                      <% if (item.product) { %>
+                        <div class="product-meta"><code><%= item.product.item_code %></code> &bull; <%= item.product.unit_of_measure %></div>
+                      <% } %>
+                      <div class="mt-1">
+                        <span class="ordered-badge"><%= locale==="fr"?"Commandé":"Ordered" %>: <%= item.quantity_ordered %></span>
+                        <% if (item.quantity_received > 0) { %>
+                          <span class="already-rcvd ms-1"><%= locale==="fr"?"Déjà reçu":"Already rcvd" %>: <%= item.quantity_received %></span>
+                        <% } %>
+                        <span class="ms-1" style="font-size:.70rem;color:#dc3545;font-weight:700;">
+                          <%= locale==="fr"?"Restant":"Remaining" %>: <%= remaining %>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="row g-2">
+                    <div class="col-sm-3">
+                      <label class="lbl"><%= locale==="fr"?"Qté reçue":"Qty Received" %> <span class="req">*</span></label>
+                      <input type="number"
+                        name="items[<%= idx %>][qty_received]"
+                        class="form-control form-control-sm qty-input"
+                        min="0" max="<%= remaining %>"
+                        value="<%= remaining %>"
+                        data-remaining="<%= remaining %>"
+                        required>
+                    </div>
+                    <div class="col-sm-3">
+                      <label class="lbl"><%= locale==="fr"?"N° de lot":"Batch No." %></label>
+                      <input type="text"
+                        name="items[<%= idx %>][batch_number]"
+                        class="form-control form-control-sm"
+                        maxlength="100"
+                        placeholder="<%= locale==="fr"?"Lot":"Batch" %>">
+                    </div>
+                    <div class="col-sm-3">
+                      <label class="lbl"><%= locale==="fr"?"N° de série":"Lot No." %></label>
+                      <input type="text"
+                        name="items[<%= idx %>][lot_number]"
+                        class="form-control form-control-sm"
+                        maxlength="100"
+                        placeholder="<%= locale==="fr"?"Série":"Lot" %>">
+                    </div>
+                    <div class="col-sm-3">
+                      <label class="lbl"><%= locale==="fr"?"Date de péremption":"Expiry Date" %> <span class="req">*</span></label>
+                      <input type="date"
+                        name="items[<%= idx %>][expiry_date]"
+                        class="form-control form-control-sm expiry-input"
+                        min="<%= today %>"
+                        required>
+                    </div>
+                  </div>
+                </div>
+              <% }); %>
+
+            <% } %>
+          </div>
+        </div>
+
+        <%/* Previous deliveries */%>
+        <% if (deliveries && deliveries.length > 0) { %>
+          <div class="card shadow-sm">
+            <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+              <i class="fas fa-history me-2 text-secondary"></i>
+              <%= locale==="fr"?"Livraisons précédentes":"Previous Deliveries" %>
+              <span class="badge bg-secondary ms-1"><%= deliveries.length %></span>
+            </div>
+            <div class="card-body p-0">
+              <table class="table table-xs table-hover align-middle mb-0">
+                <thead class="table-dark">
+                  <tr>
+                    <th><%= locale==="fr"?"Date":"Date" %></th>
+                    <th><%= locale==="fr"?"Réf. BL":"Delivery Ref." %></th>
+                    <th><%= locale==="fr"?"Reçu par":"Received by" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Articles":"Lines" %></th>
+                    <th class="text-center">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% deliveries.forEach(function(d) { %>
+                    <tr>
+                      <td class="text-muted" style="font-size:.76rem;">
+                        <%= new Date(d.received_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                      </td>
+                      <td><%= d.delivery_ref || "—" %></td>
+                      <td class="text-muted"><%= d.received_by %></td>
+                      <td class="text-center"><%= d.items ? d.items.length : "—" %></td>
+                      <td class="text-center">
+                        <span class="badge <%= d.status==="shelved"?"bg-success":d.status==="qc_passed"?"bg-info":"bg-secondary" %>"
+                          style="font-size:.60rem;"><%= d.status %></span>
+                      </td>
+                    </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        <% } %>
+
+      </div>
+    </div>
+  </form>
+
+</div>
+</div>
+
+<script>
+// Warn if qty received > remaining
+document.querySelectorAll('.qty-input').forEach(function(inp) {
+  inp.addEventListener('input', function() {
+    var remaining = parseInt(this.dataset.remaining) || 0;
+    var val       = parseInt(this.value) || 0;
+    if (val > remaining) {
+      this.classList.add('is-invalid');
+    } else {
+      this.classList.remove('is-invalid');
+    }
+  });
+});
+
+// Validate expiry dates are in the future before submit
+document.querySelector('form').addEventListener('submit', function(e) {
+  var today = new Date().toISOString().slice(0, 10);
+  var ok = true;
+  document.querySelectorAll('.expiry-input').forEach(function(inp) {
+    var row = inp.closest('.item-receive-card');
+    var qtyInp = row ? row.querySelector('.qty-input') : null;
+    var qty = qtyInp ? (parseInt(qtyInp.value) || 0) : 1;
+    if (qty > 0 && inp.value && inp.value < today) {
+      inp.classList.add('is-invalid');
+      ok = false;
+    } else {
+      inp.classList.remove('is-invalid');
+    }
+  });
+  if (!ok) {
+    e.preventDefault();
+    alert('<%= locale==="fr" ? "Certaines dates de péremption sont dépassées. Veuillez vérifier." : "Some expiry dates are in the past. Please check." %>');
+  }
+});
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

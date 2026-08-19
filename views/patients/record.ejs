@@ -1,0 +1,2299 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "patients", user: user }) %>
+
+<style>
+  
+
+  /* ── Typography helpers ── */
+  .lbl  { font-size:.68rem; font-weight:700; text-transform:uppercase;
+          letter-spacing:.06em; color:#6c757d; line-height:1.3; }
+  .val  { font-size:.82rem; color:#212529; }
+  .stitle { font-size:.68rem; font-weight:700; text-transform:uppercase;
+            letter-spacing:.07em; color:#6c757d;
+            border-bottom:1px solid #dee2e6; padding-bottom:3px; margin-bottom:8px; }
+  .card { background:#fff !important; }
+
+  /* ── Avatar ── */
+  .avatar   { width:72px; height:72px; object-fit:cover;
+              border-radius:50%; border:3px solid #dee2e6; }
+  .avatar-ph{ width:72px; height:72px; border-radius:50%;
+              background:#e9ecef; display:flex; align-items:center;
+              justify-content:center; font-size:1.6rem; color:#adb5bd; }
+
+  /* ── Encounter cards ── */
+  .enc-active  { border-left:4px solid #28a745; background:#f6fff8 !important; }
+  .enc-past    { border-left:4px solid #dee2e6; }
+  .enc-past:hover { border-left-color:#adb5bd; background:#fafafa !important; cursor:pointer; }
+  .enc-past.selected { border-left-color:#0d6efd; background:#f0f4ff !important; }
+
+  /* ── Split-pane (left list / right detail) ── */
+  .split-pane  { display:flex; gap:0; height:480px; }
+  .split-list  { width:260px; min-width:200px; border-right:1px solid #dee2e6;
+                 overflow-y:auto; flex-shrink:0; }
+  .split-detail{ flex:1; overflow-y:auto; padding:12px 16px; }
+  .list-item   { padding:8px 12px; border-bottom:1px solid #f0f0f0;
+                 cursor:pointer; font-size:.78rem; }
+  .list-item:hover    { background:#f8f9fa; }
+  .list-item.active   { background:#e8f0fe; border-left:3px solid #0d6efd;
+                        padding-left:9px; font-weight:600; }
+  .list-item .enc-ref { font-size:.68rem; color:#6c757d; }
+  .list-item .item-status { font-size:.62rem; }
+
+  /* ── Prescription / bill item rows ── */
+  .prx-item { font-size:.78rem; padding:6px 0; border-bottom:1px solid #f5f5f5; }
+  .prx-item:last-child { border-bottom:none; }
+  .bill-item-row { font-size:.78rem; }
+
+  /* ── Vitals / notes compact ── */
+  .table-xs td, .table-xs th { padding:3px 7px; font-size:.76rem; }
+  .nav-tabs .nav-link {
+    font-size:.8rem; padding:5px 12px;
+    color:#6c757d; background:#e9ecef;
+    border-color:#dee2e6 #dee2e6 transparent;
+    transition: background .15s, color .15s;
+  }
+  .nav-tabs .nav-link:hover { background:#dee2e6; color:#495057; }
+  .nav-tabs .nav-link.active {
+    color:#0d6efd !important; background:#fff !important;
+    border-color:#dee2e6 #dee2e6 #fff;
+    font-weight:600; border-top:2px solid #0d6efd !important;
+  }
+  /* ── 3-panel layout ── */
+  .enc-panels         { margin-top:.5rem; }
+  .panel-card         { background:#fff; border:1px solid #e9ecef;
+                        border-radius:.5rem; overflow:hidden; display:flex;
+                        flex-direction:column; }
+  .panel-header       { padding:6px 10px; background:#f8f9fa;
+                        border-bottom:1px solid #e9ecef;
+                        font-size:.74rem; font-weight:700;
+                        text-transform:uppercase; letter-spacing:.05em; color:#495057; }
+  .panel-body         { padding:8px 10px; font-size:.78rem; flex:1; overflow:hidden; }
+  .panel-add-btn      { line-height:1; }
+  /* Vitals grid */
+  .vitals-grid        { display:grid; grid-template-columns:1fr 1fr;
+                        gap:4px; }
+  .vital-cell         { padding:4px 6px; border-radius:4px;
+                        background:#fafafa; }
+  .vital-label        { font-size:.62rem; text-transform:uppercase;
+                        letter-spacing:.04em; color:#6c757d; margin-bottom:1px; }
+  .vital-value        { font-size:.88rem; font-weight:700; color:#212529; }
+  .vital-unit         { font-size:.62rem; color:#adb5bd; font-weight:400; }
+  .vital-meta         { font-size:.60rem; color:#adb5bd; }
+  /* Notes */
+  .note-item          { border-radius:4px; }
+  /* Dx search */
+  .dx-result-item     { padding:5px 10px; cursor:pointer; font-size:.78rem;
+                        border-bottom:1px solid #f5f5f5; }
+  .dx-result-item:hover { background:#f0f4ff; }
+  .dx-cart-tag        { display:inline-flex; align-items:center; gap:4px;
+                        background:#fff3cd; border:1px solid #ffc107;
+                        border-radius:4px; padding:2px 6px;
+                        font-size:.70rem; margin:2px; }
+
+  /* ── Encounter history toggle ── */
+  .past-header { font-size:.72rem; font-weight:700; text-transform:uppercase;
+                 letter-spacing:.06em; color:#6c757d; padding:6px 0 4px;
+                 border-bottom:1px solid #dee2e6; margin-bottom:6px;
+                 display:flex; align-items:center; justify-content:space-between; }
+  .past-enc-compact { font-size:.76rem; padding:5px 8px;
+                      border-bottom:1px solid #f5f5f5; cursor:pointer; }
+  .past-enc-compact:hover { background:#f8f9fa; }
+  .past-enc-compact.open  { background:#fff9e6; }
+  .past-enc-detail { display:none; background:#fffdf5;
+                     padding:8px 12px; border-bottom:1px solid #f0e8c8;
+                     font-size:.75rem; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <%/* ── Breadcrumb + Actions ── */%>
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <nav style="font-size:.78rem;">
+      <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item">
+          <a href="/patients/list"><i class="fas fa-user-injured me-1"></i>
+            <%= locale==="fr"?"Dossiers":"Records" %></a>
+        </li>
+        <li class="breadcrumb-item active fw-bold">
+          <%= patient.name_last %>, <%= patient.name_first %>
+        </li>
+      </ol>
+    </nav>
+    <div class="d-flex gap-1 flex-wrap">
+      <a href="/patients/<%= patient.pid %>/edit" class="btn btn-sm btn-outline-warning">
+        <i class="fas fa-pen me-1"></i><%= locale==="fr"?"Modifier":"Edit" %>
+      </a>
+      <%
+        // Multi-Facility Phase 2 (§5 item 8) — one shared lookup for the
+        // patient's open encounter (if any), used by both the Admit and
+        // Prescription buttons below, with a facility-ownership check.
+        // System Administrators have no specific facility in session
+        // (currentFacilityId is null, confirmed exempt per §5 item 9) —
+        // for them every encounter reads as "own facility."
+        var _curFacId2 = typeof currentFacilityId !== "undefined" ? currentFacilityId : null;
+        var openEncForPrx = null;
+        if (typeof encounters !== "undefined") {
+          for (var pi = 0; pi < encounters.length; pi++) {
+            var pe = encounters[pi];
+            if (!pe.is_discharged &&
+                (pe.encounter_status === "active" || pe.encounter_status === "pending")) {
+              openEncForPrx = pe;
+              break;
+            }
+          }
+        }
+        var hasOpenEncounter = openEncForPrx !== null;
+        var openEncIsOwnFacility = !openEncForPrx ||
+          _curFacId2 === null || openEncForPrx.facility_id === _curFacId2;
+      %>
+      <% if (hasOpenEncounter && !openEncIsOwnFacility) { %>
+        <%/* Open encounter belongs to a DIFFERENT facility — inert, not
+            simply disabled with the same styling as the "you already have
+            one open" case below. The distinction needs to be visually
+            obvious. */ %>
+        <button class="btn btn-sm btn-secondary" disabled
+          title="<%= locale==="fr"
+            ? "Admis a " + (openEncForPrx.facility ? openEncForPrx.facility.name : "un autre etablissement")
+            : "Admitted at " + (openEncForPrx.facility ? openEncForPrx.facility.name : "another facility") %>">
+          <i class="fas fa-ban me-1"></i>
+          <%= locale==="fr" ? "Admis ailleurs" : "Already admitted elsewhere" %>
+        </button>
+      <% } else if (hasOpenEncounter) { %>
+        <button class="btn btn-sm btn-outline-success" disabled
+          title="<%= locale==="fr"
+            ? "Consultation deja en cours pour ce patient"
+            : "Patient already has a pending or active encounter" %>">
+          <i class="fas fa-hospital-user me-1"></i>
+          <%= locale==="fr" ? "Admission" : "Admit" %>
+          <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">
+            <%= locale==="fr" ? "En cours" : "Open" %>
+          </span>
+        </button>
+      <% } else { %>
+        <a href="/patients/<%= patient.pid %>/admit"
+          class="btn btn-sm btn-outline-success">
+          <i class="fas fa-hospital-user me-1"></i>
+          <%= locale==="fr" ? "Admission" : "Admit" %>
+        </a>
+      <% } %>
+      <% if (hasOpenEncounter && !openEncIsOwnFacility) { %>
+        <button class="btn btn-sm btn-secondary" disabled
+          title="<%= locale==="fr" ? "Admis ailleurs" : "Already admitted elsewhere" %>">
+          <i class="fas fa-ban me-1"></i>
+          <%= locale==="fr" ? "Prescription" : "Prescription" %>
+        </button>
+      <% } else if (openEncForPrx && openEncForPrx.encounter_status === "active") { %>
+        <a href="/prescriptions/encounter/<%= openEncForPrx.encounter_nr %>"
+          class="btn btn-sm btn-outline-secondary"
+          title="<%= locale==="fr" ? "Nouvelle prescription" : "New Prescription" %>">
+          <i class="fas fa-prescription-bottle-alt me-1"></i>
+          <%= locale==="fr" ? "Prescription" : "Prescription" %>
+        </a>
+      <% } else { %>
+        <button class="btn btn-sm btn-outline-secondary" disabled
+          title="<%= locale==="fr"
+            ? (openEncForPrx ? "Activez la consultation avant de prescrire" : "Aucune consultation active")
+            : (openEncForPrx ? "Activate the encounter before prescribing" : "No active encounter") %>">
+          <i class="fas fa-prescription-bottle-alt me-1"></i>
+          <%= locale==="fr" ? "Prescription" : "Prescription" %>
+        </button>
+      <% } %>
+      <%
+        // Patient referral -- MULTI_FACILITY_IMPLEMENTATION_PLAN.md §2.5.
+        // Strictly Doctor/Nurse (matches referralController.js's
+        // REFERRAL_PERMISSIONS exactly), and only meaningful when there's
+        // an active encounter to refer from -- reusing the same
+        // hasOpenEncounter/openEncIsOwnFacility checks already computed
+        // above for Admit/Prescribe, not a separate bespoke check.
+        var canRefer = hasAnyPermission(["MedicalRecord.Create.Diagnosis","MedicalRecord.Create.Note","MedicalRecord.Update.Note"]);
+      %>
+      <% if (canRefer) { %>
+        <% if (openReferral) { %>
+          <button class="btn btn-sm btn-outline-info" disabled
+            title="<%= locale==="fr"
+              ? "Referral deja en cours vers " + openReferral.toFacility.name
+              : "Referral already open to " + openReferral.toFacility.name %>">
+            <i class="fas fa-share-square me-1"></i>
+            <%= locale==="fr" ? "Referer" : "Refer" %>
+          </button>
+        <% } else if (hasOpenEncounter && openEncIsOwnFacility && openEncForPrx.encounter_status === "active") { %>
+          <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#referModal">
+            <i class="fas fa-share-square me-1"></i>
+            <%= locale==="fr" ? "Referer" : "Refer" %>
+          </button>
+        <% } else { %>
+          <button class="btn btn-sm btn-outline-info" disabled
+            title="<%= locale==="fr"
+              ? "Activez la consultation avant de referer"
+              : "Activate the encounter before referring" %>">
+            <i class="fas fa-share-square me-1"></i>
+            <%= locale==="fr" ? "Referer" : "Refer" %>
+          </button>
+        <% } %>
+      <% } %>
+      <a href="/encounters/worklist" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i><%= locale==="fr"?"Retour":"Back" %>
+      </a>
+    </div>
+  </div>
+
+  <% if (openReferral) { %>
+    <%/* Visual indicator -- item 4 from the live-testing feedback: no
+         way to tell a patient is currently referred anywhere. Status
+         labels match incoming_referrals_table.ejs's own labels exactly,
+         so the same status reads the same way everywhere in the app. */%>
+    <div class="alert alert-info d-flex align-items-center py-2 mb-3">
+      <i class="fas fa-share-square me-2"></i>
+      <span>
+        <%= locale==="fr" ? "Referral en cours vers" : "Referral in progress to" %>
+        <strong><%= openReferral.toFacility.name %></strong>
+        &mdash;
+        <% if (openReferral.status === "sent") { %>
+          <span class="badge bg-info text-dark"><%= locale==="fr" ? "Nouveau" : "New" %></span>
+        <% } else if (openReferral.status === "accepted") { %>
+          <span class="badge bg-primary"><%= locale==="fr" ? "Accepte" : "Accepted" %></span>
+        <% } else if (openReferral.status === "seen") { %>
+          <span class="badge bg-success"><%= locale==="fr" ? "Vu" : "Seen" %></span>
+        <% } %>
+      </span>
+    </div>
+  <% } %>
+
+  <% if (canRefer && !openReferral && hasOpenEncounter && openEncIsOwnFacility && openEncForPrx.encounter_status === "active") { %>
+  <!-- Refer-to-another-facility modal -->
+  <div class="modal fade" id="referModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><%= locale==="fr" ? "Referer a un autre etablissement" : "Refer to another facility" %></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label"><%= locale==="fr" ? "Etablissement de destination" : "Receiving facility" %></label>
+            <select id="referToFacility" class="form-select form-select-sm">
+              <% allFacilities.forEach(function(f) { if (f.id !== currentFacilityId) { %>
+                <option value="<%= f.id %>"><%= f.name %></option>
+              <% } }); %>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label"><%= locale==="fr" ? "Urgence" : "Urgency" %></label>
+            <select id="referUrgency" class="form-select form-select-sm">
+              <option value="routine"><%= locale==="fr" ? "Routine" : "Routine" %></option>
+              <option value="urgent"><%= locale==="fr" ? "Urgent" : "Urgent" %></option>
+              <option value="emergency"><%= locale==="fr" ? "Urgence vitale" : "Emergency" %></option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label"><%= locale==="fr" ? "Raison" : "Reason" %></label>
+            <textarea id="referReason" class="form-control form-control-sm" rows="3" required></textarea>
+          </div>
+          <div id="referError" class="text-danger small" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+            <%= locale==="fr" ? "Annuler" : "Cancel" %>
+          </button>
+          <button type="button" class="btn btn-sm btn-info" onclick="submitReferral()">
+            <%= locale==="fr" ? "Envoyer" : "Send Referral" %>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function submitReferral() {
+      var reason = document.getElementById("referReason").value.trim();
+      var errEl  = document.getElementById("referError");
+      if (!reason) {
+        errEl.textContent = "<%= locale==='fr' ? 'La raison est requise.' : 'A reason is required.' %>";
+        errEl.style.display = "block";
+        return;
+      }
+      fetch("/patients/<%= patient.pid %>/refer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "CSRF-Token": "<%= csrfToken %>" },
+        body: JSON.stringify({
+          to_facility_id: document.getElementById("referToFacility").value,
+          urgency: document.getElementById("referUrgency").value,
+          reason: reason,
+          from_encounter_nr: <%= openEncForPrx ? openEncForPrx.encounter_nr : 'null' %>,
+        }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            window.location.reload();
+          } else {
+            errEl.textContent = data.error || "<%= locale==='fr' ? 'Erreur inconnue.' : 'Unknown error.' %>";
+            errEl.style.display = "block";
+          }
+        })
+        .catch(function() {
+          errEl.textContent = "<%= locale==='fr' ? 'Erreur reseau.' : 'Network error.' %>";
+          errEl.style.display = "block";
+        });
+    }
+  </script>
+  <% } %>
+
+  <% if (typeof success !== "undefined" && success) { %>
+    <div class="alert alert-success py-2 mb-2" style="font-size:.8rem;">
+      <i class="fas fa-check-circle me-1"></i>
+      <%= locale==="fr"?"Dossier mis a jour.":"Record updated successfully." %>
+    </div>
+  <% } %>
+  <% if (typeof admitted !== "undefined" && admitted) { %>
+    <div class="alert alert-success d-flex align-items-center gap-2 mb-2 py-2" style="font-size:.8rem;">
+      <i class="fas fa-hospital-user fa-lg"></i>
+      <div>
+        <strong><%= locale==="fr"?"Admission enregistrée !":"Admission recorded!" %></strong>
+        <%= locale==="fr"
+          ? "La consultation a été créée et la facture générée."
+          : "Encounter created and consultation bill generated." %>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+
+    <%/* ════════ LEFT: Identity ════════ */%>
+    <div class="col-lg-3 col-md-4">
+
+      <%/* Photo + name */%>
+      <div class="card shadow-sm mb-2 p-3 text-center">
+        <% if (patient.photo_filename) { %>
+          <img src="/patients/photos/<%= patient.photo_filename %>"
+            alt="photo" class="avatar mx-auto mb-2">
+        <% } else { %>
+          <div class="avatar-ph mx-auto mb-2"><i class="fas fa-user"></i></div>
+        <% } %>
+        <h6 class="mb-0 fw-bold" style="font-size:.9rem;">
+          <%= patient.name_last %>, <%= patient.name_first %>
+        </h6>
+        <% if (patient.name_maiden) { %>
+          <div class="text-muted" style="font-size:.7rem;">
+            (<%= locale==="fr"?"nee":"nee" %> <%= patient.name_maiden %>)
+          </div>
+        <% } %>
+        <div class="mt-2 d-flex justify-content-center gap-1 flex-wrap">
+          <% if (patient.sex==="m") { %><span class="badge" style="background:#17a2b8;">M</span>
+          <% } else if (patient.sex==="f") { %><span class="badge" style="background:#d4537e;">F</span><% } %>
+          <% if (age!==null) { %><span class="badge bg-secondary"><%= age %> <%= locale==="fr"?"ans":"yrs" %></span><% } %>
+          <% if (patient.blood_group) { %><span class="badge bg-danger"><%= patient.blood_group %></span><% } %>
+        </div>
+      </div>
+
+      <%/* Identity */%>
+      <div class="card shadow-sm mb-2 p-3">
+        <p class="stitle"><i class="fas fa-id-card me-1"></i><%= locale==="fr"?"Identite":"Identity" %></p>
+        <%
+          var idRows = [
+            [locale==="fr"?"N° Dossier":"File No.", patient.hospital_file_nr],
+            [locale==="fr"?"Date naissance":"DOB",
+              patient.date_birth ? new Date(patient.date_birth).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : null],
+            [locale==="fr"?"Nationalite":"Nationality", patient.citizenship],
+            [locale==="fr"?"Etat civil":"Civil Status", patient.civil_status],
+            [locale==="fr"?"Profession":"Profession", patient.title],
+            ["Religion", patient.religion],
+            [locale==="fr"?"Tribu":"Tribe", patient.tribe ? patient.tribe.tribe_name : null],
+            ["N° CNI", patient.nat_id_nr],
+            [locale==="fr"?"Enregistre le":"Registered",
+              patient.date_reg ? new Date(patient.date_reg).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : null],
+          ];
+        %>
+        <% idRows.forEach(function(r) { if(r[1]) { %>
+          <div class="mb-1"><div class="lbl"><%= r[0] %></div><div class="val"><%= r[1] %></div></div>
+        <% } }); %>
+      </div>
+
+      <%/* Contact */%>
+      <div class="card shadow-sm mb-2 p-3">
+        <p class="stitle"><i class="fas fa-phone me-1"></i><%= locale==="fr"?"Coordonnees":"Contact" %></p>
+        <% if (patient.cellphone_1_nr||patient.phone_1_nr) { %>
+          <div class="mb-1"><div class="lbl"><%= locale==="fr"?"Tel.1":"Phone 1" %></div>
+            <div class="val"><%= patient.cellphone_1_nr||patient.phone_1_nr %></div></div>
+        <% } %>
+        <% if (patient.cellphone_2_nr||patient.phone_2_nr) { %>
+          <div class="mb-1"><div class="lbl"><%= locale==="fr"?"Tel.2":"Phone 2" %></div>
+            <div class="val"><%= patient.cellphone_2_nr||patient.phone_2_nr %></div></div>
+        <% } %>
+        <% if (patient.email) { %>
+          <div class="mb-1"><div class="lbl">Email</div>
+            <div class="val"><a href="mailto:<%= patient.email %>" style="font-size:.76rem;"><%= patient.email %></a></div></div>
+        <% } %>
+        <% if (patient.addr_str) { %>
+          <div class="mb-1"><div class="lbl"><%= locale==="fr"?"Adresse":"Address" %></div>
+            <div class="val"><%= patient.addr_str %></div></div>
+        <% } %>
+      </div>
+
+      <%/* Emergency */%>
+      <% if (patient.contact_person) { %>
+      <div class="card shadow-sm mb-2 p-3 border-warning">
+        <p class="stitle" style="color:#e67e22;"><i class="fas fa-ambulance me-1"></i>
+          <%= locale==="fr"?"Urgence":"Emergency" %></p>
+        <div class="mb-1"><div class="lbl">Contact</div>
+          <div class="val fw-bold"><%= patient.contact_person %></div></div>
+        <% if (patient.contact_relation) { %>
+          <div class="mb-1"><div class="lbl"><%= locale==="fr"?"Lien":"Relation" %></div>
+            <div class="val"><%= patient.contact_relation %></div></div>
+        <% } %>
+        <% if (patient.relative_phone) { %>
+          <div class="mb-1"><div class="lbl"><%= locale==="fr"?"Telephone":"Phone" %></div>
+            <div class="val"><%= patient.relative_phone %></div></div>
+        <% } %>
+      </div>
+      <% } %>
+
+    </div><%/* end left */%>
+
+    <%/* ════════ RIGHT: Tabs ════════ */%>
+    <div class="col-lg-9 col-md-8">
+
+      <%
+        // Separate active vs past encounters
+        var activeEnc = [];
+        var pastEnc   = [];
+        if (typeof encounters !== "undefined") {
+          encounters.forEach(function(e) {
+            if (e.is_discharged) pastEnc.push(e);
+            else activeEnc.push(e);
+          });
+        }
+        // Multi-Facility Phase 2 (§5 item 8) — does this active encounter
+        // belong to the facility currently in session? System
+        // Administrators have no specific facility (currentFacilityId is
+        // null, confirmed exempt per §5 item 9) — for them every
+        // encounter reads as "own facility" since there's nothing to
+        // compare against.
+        var _curFacId = typeof currentFacilityId !== "undefined" ? currentFacilityId : null;
+        activeEnc.forEach(function(e) {
+          e.isOwnFacility = (_curFacId === null) || (e.facility_id === _curFacId);
+        });
+        // Flatten prescriptions by encounter for left-panel list
+        var prxByEnc = {};
+        if (typeof encounters !== "undefined") {
+          encounters.forEach(function(e) {
+            if (e.prescriptions && e.prescriptions.length > 0) {
+              prxByEnc[e.encounter_nr] = { enc: e, items: e.prescriptions };
+            }
+          });
+        }
+      %>
+
+      <ul class="nav nav-tabs border-bottom-0 mb-0" style="gap:2px;">
+        <li class="nav-item">
+          <a class="nav-link active" data-bs-toggle="tab" href="#tab-enc">
+            <i class="fas fa-stethoscope me-1 text-primary"></i>
+            <%= locale==="fr"?"Consultations":"Encounters" %>
+            <span class="badge bg-primary ms-1" style="font-size:.62rem;"><%= encounters ? encounters.length : 0 %></span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-bs-toggle="tab" href="#tab-prx">
+            <i class="fas fa-prescription me-1" style="color:#6f42c1;"></i>
+            <%= locale==="fr"?"Prescriptions":"Prescriptions" %>
+            <%
+              var prxTotal = 0;
+              Object.values(prxByEnc).forEach(function(pe) {
+                prxTotal += pe.items ? pe.items.filter(function(p){ return !p.is_stopped; }).length : 0;
+              });
+            %>
+            <% if (prxTotal > 0) { %>
+              <span class="badge ms-1" style="font-size:.62rem;background:#6f42c1;"><%= prxTotal %></span>
+            <% } %>
+          </a>
+        </li>
+        <%/* Multi-Facility Billing scoping — previously hid this entire
+            tab whenever the patient's open encounter belonged to a
+            different facility, since billing had no facility_id yet to
+            filter precisely. Now that it does (see patientController.js's
+            record-page query), bills/billItems/billFinals are already
+            correctly filtered to the current facility upstream — so this
+            tab always renders, and simply shows whatever bills are
+            actually accessible, which may legitimately be zero if every
+            bill for this patient belongs elsewhere. */ %>
+        <li class="nav-item">
+          <a class="nav-link" data-bs-toggle="tab" href="#tab-billing">
+            <i class="fas fa-file-invoice-dollar me-1 text-success"></i>
+            <%= locale==="fr"?"Facturation":"Billing" %>
+            <%
+              var billOpenCount = 0;
+              var billPaidCount = 0;
+              if (typeof bills !== "undefined") {
+                bills.forEach(function(b) {
+                  if (b.status === "paid" || b.status === "closed") { billPaidCount++; }
+                  else { billOpenCount++; }
+                });
+              }
+            %>
+            <% if (billOpenCount > 0) { %>
+              <span class="badge bg-warning text-dark ms-1" style="font-size:.62rem;"><%= billOpenCount %> open</span>
+            <% } %>
+            <% if (billPaidCount > 0) { %>
+              <span class="badge bg-success ms-1" style="font-size:.62rem;"><%= billPaidCount %> paid</span>
+            <% } %>
+          </a>
+        </li>
+      </ul>
+
+      <div class="card shadow-sm" style="border-radius:0 .5rem .5rem .5rem;">
+        <div class="card-body p-3">
+          <div class="tab-content">
+
+            <%/* ═══ TAB 1: ENCOUNTERS ═══ */%>
+            <div class="tab-pane fade show active" id="tab-enc">
+
+              <% if (!encounters || encounters.length === 0) { %>
+                <div class="text-center text-muted py-5">
+                  <i class="fas fa-stethoscope fa-2x mb-2 d-block opacity-25"></i>
+                  <%= locale==="fr"?"Aucune consultation.":"No encounters recorded." %>
+                </div>
+              <% } else { %>
+
+                <%/* ── CURRENT ENCOUNTER (active, not discharged) ── */%>
+                <% if (activeEnc.length > 0) { %>
+                  <div class="mb-3">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                      <span class="badge bg-success px-2 py-1" style="font-size:.72rem;">
+                        <i class="fas fa-circle me-1" style="font-size:.5rem;"></i>
+                        <%= locale==="fr"?"Consultation en cours":"Active Encounter" %>
+                      </span>
+                      <small class="text-muted"><%= activeEnc.length %> active</small>
+                    </div>
+
+                    <% activeEnc.forEach(function(enc) { %>
+                    <div class="card enc-active shadow-sm mb-2">
+                      <div class="card-body p-3">
+
+                        <%/* Header row */%>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                          <div>
+                            <span class="fw-bold" style="font-size:.88rem;">
+                              #<%= enc.encounter_nr %>
+                            </span>
+                            <% var classLabel = enc.encounter_class_nr==1
+                                ? (locale==="fr"?"Ambulatoire":"Outpatient")
+                                : (locale==="fr"?"Hospitalise":"Inpatient"); %>
+                            <span class="badge ms-1 <%= enc.encounter_class_nr==2?"bg-primary":"bg-info text-dark" %>"
+                              style="font-size:.68rem;"><%= classLabel %></span>
+                            <% if (enc.encounter_type) { %>
+                              <span class="text-muted ms-1" style="font-size:.78rem;">
+                                — <%= enc.encounter_type %>
+                              </span>
+                            <% } %>
+                            <% if (enc.department) { %>
+                              <span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">
+                                <i class="fas fa-hospital me-1 text-primary"></i>
+                                <%= enc.department.name_short %>
+                              </span>
+                            <% } %>
+                          </div>
+                          <div class="text-end" style="font-size:.72rem;color:#6c757d;">
+                            <i class="fas fa-calendar me-1"></i>
+                            <%= enc.encounter_date
+                              ? new Date(enc.encounter_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB")
+                              : "?" %>
+                            <% if (enc.encounter_date) { %>
+                              <span class="ms-1 text-success">
+                                (<%= Math.floor((new Date()-new Date(enc.encounter_date))/86400000) %>d)
+                              </span>
+                            <% } %>
+                          </div>
+                        </div>
+
+                        <%/* Location row — ward/room if inpatient */%>
+                        <% if (enc.encounter_class_nr==2) { %>
+                        <div class="d-flex gap-3 mb-2 p-2 rounded" style="background:#e8f5e9;font-size:.75rem;">
+                          <span>
+                            <i class="fas fa-bed me-1 text-success"></i>
+                            <strong><%= locale==="fr"?"Ward":"Ward" %>:</strong>
+                            <%= enc.current_ward_nr>0 ? enc.current_ward_nr : "—" %>
+                          </span>
+                          <span>
+                            <i class="fas fa-door-open me-1 text-success"></i>
+                            <strong><%= locale==="fr"?"Chambre":"Room" %>:</strong>
+                            <%= enc.current_room_nr>0 ? enc.current_room_nr : "—" %>
+                          </span>
+                          <span>
+                            <i class="fas fa-hospital me-1 text-success"></i>
+                            <strong>Dept:</strong>
+                            <%= enc.current_dept_nr>0 ? enc.current_dept_nr : "—" %>
+                          </span>
+                          <% if (enc.in_ward) { %>
+                            <span class="badge bg-success" style="font-size:.65rem;">
+                              <i class="fas fa-check me-1"></i>
+                              <%= locale==="fr"?"En ward":"In Ward" %>
+                            </span>
+                          <% } %>
+                        </div>
+                        <% } %>
+
+                        <%/* Clinical info */%>
+                        <div class="row g-2 mb-2">
+                          <% if (enc.consulting_dr) { %>
+                          <div class="col-md-6">
+                            <div class="lbl"><%= locale==="fr"?"Medecin":"Doctor" %></div>
+                            <div class="val"><i class="fas fa-user-md me-1 text-primary"></i><%= enc.consulting_dr %></div>
+                          </div>
+                          <% } %>
+                          <% if (enc.referrer_diagnosis) { %>
+                          <div class="col-md-6">
+                            <div class="lbl"><%= locale==="fr"?"Motif":"Reason" %></div>
+                            <div class="val"><%= enc.referrer_diagnosis %></div>
+                          </div>
+                          <% } %>
+                          <% if (enc.insurance_firm && enc.insurance_firm!=="") { %>
+                          <div class="col-md-6">
+                            <div class="lbl"><%= locale==="fr"?"Assurance":"Insurance" %></div>
+                            <div class="val"><i class="fas fa-building me-1 text-secondary"></i><%= enc.insurance_firm %></div>
+                          </div>
+                          <% } %>
+                          <% if (enc.followup_date) { %>
+                          <div class="col-md-6">
+                            <div class="lbl"><%= locale==="fr"?"Suivi prevu":"Follow-up" %></div>
+                            <div class="val text-warning">
+                              <i class="fas fa-calendar-check me-1"></i>
+                              <%= new Date(enc.followup_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                            </div>
+                          </div>
+                          <% } %>
+                        </div>
+
+                        <%/* ═══ 3-PANEL SECTION ═══ */%>
+                        <%/* Confirmed 2026-08-07: Billing Clerk (and any
+                            other non-clinical role) should not see
+                            Vitals/Diagnoses/Notes at all -- not just be
+                            unable to add to them. Gated on
+                            MedicalRecord.Read.ClinicalData, which Doctor
+                            and Nurse hold and Billing Clerk does not,
+                            even after being granted
+                            Pharmacy.Create.Prescription for insurance
+                            billing purposes. */ %>
+                        <% if (hasPermission("MedicalRecord.Read.ClinicalData")) { %>
+                        <div class="row g-2 mt-2 enc-panels" id="panels-<%= enc.encounter_nr %>">
+
+                          <%/* ── PANEL 1: VITALS ── */%>
+                          <div class="col-lg-4">
+                            <div class="panel-card h-100">
+                              <div class="panel-header d-flex justify-content-between align-items-center">
+                                <span>
+                                  <i class="fas fa-heartbeat me-1 text-danger"></i>
+                                  <%= locale==="fr"?"Constantes":"Vitals" %>
+                                </span>
+                                <% if (hasPermission("MedicalRecord.Create.Note")) { %>
+                                  <button class="btn btn-xs btn-outline-danger"
+                                    onclick="toggleVitalsForm('<%= enc.encounter_nr %>')"
+                                    id="vbtn-<%= enc.encounter_nr %>"
+                                    style="font-size:.62rem;padding:1px 7px;">
+                                    <i class="fas fa-plus"></i>
+                                  </button>
+                                <% } %>
+                              </div>
+
+                              <%/* Add vitals form — all fields at once, save whichever
+                                  were filled in. Field -> msr_type_nr mapping:
+                                  1 temp, 2 systolic, 3 pulse, 4 spo2, 5 weight,
+                                  6 height, 7 resp rate, 8 blood sugar, 9 diastolic,
+                                  10 pain score. (2 was previously a combined "Blood
+                                  Pressure" field; it's now Systolic specifically,
+                                  with Diastolic split out as its own type 9 — see
+                                  §4 fix in PROJECT_BRIEF.md for existing-data note.) */ %>
+                              <div id="vitals-form-<%= enc.encounter_nr %>"
+                                style="display:none;padding:8px 10px;border-bottom:1px solid #f0f0f0;background:#fafafa;">
+                                <div class="row g-1 mb-1">
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Température (°C)":"Temperature (°C)" %>
+                                    </label>
+                                    <input type="number" step="0.1" min="30" max="45"
+                                      class="form-control form-control-sm"
+                                      id="vf-temp-<%= enc.encounter_nr %>"
+                                      placeholder="37.0" style="font-size:.73rem;">
+                                  </div>
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Systolique (mmHg)":"Systolic (mmHg)" %>
+                                    </label>
+                                    <input type="number" step="1" min="40" max="260"
+                                      class="form-control form-control-sm"
+                                      id="vf-sys-<%= enc.encounter_nr %>"
+                                      placeholder="120" style="font-size:.73rem;">
+                                  </div>
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Diastolique (mmHg)":"Diastolic (mmHg)" %>
+                                    </label>
+                                    <input type="number" step="1" min="20" max="160"
+                                      class="form-control form-control-sm"
+                                      id="vf-dia-<%= enc.encounter_nr %>"
+                                      placeholder="80" style="font-size:.73rem;">
+                                  </div>
+                                </div>
+                                <div class="row g-1 mb-1">
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Pouls (bpm)":"Pulse (bpm)" %>
+                                    </label>
+                                    <input type="number" step="1" min="20" max="250"
+                                      class="form-control form-control-sm"
+                                      id="vf-pulse-<%= enc.encounter_nr %>"
+                                      placeholder="80" style="font-size:.73rem;">
+                                  </div>
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      SpO2 (%)
+                                    </label>
+                                    <input type="number" step="1" min="0" max="100"
+                                      class="form-control form-control-sm"
+                                      id="vf-spo2-<%= enc.encounter_nr %>"
+                                      placeholder="98" style="font-size:.73rem;">
+                                  </div>
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"FR (/min)":"Resp. Rate (/min)" %>
+                                    </label>
+                                    <input type="number" step="1" min="4" max="60"
+                                      class="form-control form-control-sm"
+                                      id="vf-rr-<%= enc.encounter_nr %>"
+                                      placeholder="16" style="font-size:.73rem;">
+                                  </div>
+                                </div>
+                                <div class="row g-1 mb-1">
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Poids (kg)":"Weight (kg)" %>
+                                    </label>
+                                    <input type="number" step="0.1" min="0.5" max="300"
+                                      class="form-control form-control-sm"
+                                      id="vf-weight-<%= enc.encounter_nr %>"
+                                      placeholder="70" style="font-size:.73rem;">
+                                  </div>
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Taille (cm)":"Height (cm)" %>
+                                    </label>
+                                    <input type="number" step="0.1" min="20" max="250"
+                                      class="form-control form-control-sm"
+                                      id="vf-height-<%= enc.encounter_nr %>"
+                                      placeholder="170" style="font-size:.73rem;">
+                                  </div>
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Glycémie (g/L)":"Blood Sugar (g/L)" %>
+                                    </label>
+                                    <input type="number" step="0.01" min="0.1" max="10"
+                                      class="form-control form-control-sm"
+                                      id="vf-sugar-<%= enc.encounter_nr %>"
+                                      placeholder="1.0" style="font-size:.73rem;">
+                                  </div>
+                                </div>
+                                <div class="row g-1 mb-1">
+                                  <div class="col-4">
+                                    <label style="font-size:.62rem;font-weight:700;color:#6c757d;">
+                                      <%= locale==="fr"?"Douleur (0-10)":"Pain Score (0-10)" %>
+                                    </label>
+                                    <input type="number" step="1" min="0" max="10"
+                                      class="form-control form-control-sm"
+                                      id="vf-pain-<%= enc.encounter_nr %>"
+                                      placeholder="0" style="font-size:.73rem;">
+                                  </div>
+                                </div>
+                                <div class="d-flex gap-1 mt-1">
+                                  <button class="btn btn-sm btn-danger flex-fill"
+                                    onclick="saveVital('<%= enc.encounter_nr %>')"
+                                    style="font-size:.72rem;padding:3px 0;">
+                                    <i class="fas fa-save me-1"></i>
+                                    <%= locale==="fr"?"Enregistrer":"Save" %>
+                                  </button>
+                                  <button class="btn btn-sm btn-outline-secondary"
+                                    onclick="toggleVitalsForm('<%= enc.encounter_nr %>')"
+                                    style="font-size:.72rem;padding:3px 8px;">
+                                    <i class="fas fa-times"></i>
+                                  </button>
+                                </div>
+                              </div>
+
+                              <%/* Vitals scrollable list */%>
+                              <div class="panel-body p-0">
+                                <%
+                                  var encMsr = (typeof measurements !== "undefined")
+                                    ? measurements.filter(function(m){
+                                        return Number(m.encounter_nr) === Number(enc.encounter_nr);
+                                      })
+                                    : [];
+                                  var vTypeLabel = {1:"Temp",2:"Sys",3:"Pouls",4:"SpO2",5:"Poids",6:"Taille",7:"FR",8:"Glycemie",9:"Dia",10:"Douleur"};
+                                  var vTypeColor = {1:"#dc3545",2:"#dc3545",3:"#e83e8c",4:"#0d6efd",5:"#6f42c1",6:"#20c997",7:"#0dcaf0",8:"#fd7e14",9:"#c82333",10:"#6610f2"};
+                                %>
+                                <% if (encMsr.length === 0) { %>
+                                  <div class="text-center text-muted py-3" style="font-size:.75rem;padding:12px;">
+                                    <i class="fas fa-heartbeat d-block mb-1 opacity-25 fa-lg"></i>
+                                    <%= locale==="fr"?"Aucune constante.":"No vitals recorded." %>
+                                  </div>
+                                <% } else { %>
+                                  <div style="max-height:220px;overflow-y:auto;">
+                                    <table class="table table-xs mb-0" style="font-size:.74rem;">
+                                      <thead class="table-light" style="position:sticky;top:0;">
+                                        <tr>
+                                          <th style="padding:3px 8px;">Type</th>
+                                          <th style="padding:3px 8px;"><%= locale==="fr"?"Valeur":"Value" %></th>
+                                          <th style="padding:3px 8px;"><%= locale==="fr"?"Heure":"Time" %></th>
+                                          <th style="padding:3px 8px;"><%= locale==="fr"?"Par":"By" %></th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        <% encMsr.forEach(function(v) {
+                                             var vcolor = vTypeColor[v.msr_type_nr] || "#6c757d";
+                                             var vlabel = vTypeLabel[v.msr_type_nr] || ("T"+v.msr_type_nr);
+                                        %>
+                                          <tr>
+                                            <td style="padding:3px 8px;">
+                                              <span class="badge" style="font-size:.62rem;background:<%= vcolor %>;">
+                                                <%= vlabel %>
+                                              </span>
+                                            </td>
+                                            <td style="padding:3px 8px;font-weight:600;">
+                                              <%= v.value || "—" %>
+                                            </td>
+                                            <td style="padding:3px 8px;color:#adb5bd;">
+                                              <% if (v.msr_date) { %>
+                                                <%= new Date(v.msr_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB",{day:"2-digit",month:"2-digit"}) %>
+                                              <% } %>
+                                              <% if (v.msr_time) { %>
+                                                <span class="ms-1"><%= v.msr_time.slice(0,5) %></span>
+                                              <% } %>
+                                            </td>
+                                            <td style="padding:3px 8px;color:#adb5bd;font-size:.68rem;">
+                                              <%= v.measured_by || "—" %>
+                                            </td>
+                                          </tr>
+                                        <% }); %>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                <% } %>
+                              </div>
+                            </div>
+                          </div>
+
+                          <%/* ── PANEL 2: DIAGNOSES ── */%>
+                          <div class="col-lg-4">
+                            <div class="panel-card h-100">
+                              <div class="panel-header d-flex justify-content-between align-items-center">
+                                <span>
+                                  <i class="fas fa-diagnoses me-1 text-danger"></i>
+                                  <%= locale==="fr"?"Diagnostics":"Diagnoses" %>
+                                  <% if (enc.diagnoses && enc.diagnoses.length > 0) { %>
+                                    <span class="badge bg-danger ms-1" style="font-size:.58rem;">
+                                      <%= enc.diagnoses.length %>
+                                    </span>
+                                  <% } %>
+                                </span>
+                                <% if ((enc.encounter_status === "active" || enc.encounter_status === "pending") &&
+                                       hasPermission("MedicalRecord.Create.Diagnosis")) { %>
+                                  <a href="/diagnoses/encounter/<%= enc.encounter_nr %>"
+                                    class="btn btn-xs btn-outline-danger"
+                                    style="font-size:.62rem;padding:1px 7px;"
+                                    title="<%= locale==="fr"?"Ajouter des diagnostics":"Add Diagnoses" %>">
+                                    <i class="fas fa-plus"></i>
+                                  </a>
+                                <% } %>
+                              </div>
+                              <div class="panel-body">
+
+                                <%/* Current diagnoses */%>
+                                <div id="dx-display-<%= enc.encounter_nr %>" class="mb-2">
+                                  <% if (!enc.diagnoses || enc.diagnoses.length === 0) { %>
+                                    <div class="text-muted mb-1" style="font-size:.72rem;">
+                                      <%= locale==="fr"?"Aucun diagnostic.":"No diagnoses." %>
+                                    </div>
+                                  <% } else { %>
+                                    <div class="mb-1">
+                                      <% enc.diagnoses.forEach(function(dx) { %>
+                                        <span class="badge bg-light text-dark border me-1 mb-1"
+                                          style="font-size:.68rem;display:inline-flex;align-items:center;gap:3px;"
+                                          id="dx-badge-<%= dx.diagnosis_nr %>">
+                                          <code style="font-size:.65rem;color:#dc3545;"><%= dx.code %></code>
+                                          <span><%= dx.localcode || dx.code %></span>
+                                          <span class="badge ms-1 <%= dx.type==="main"?"bg-danger":"bg-secondary" %>"
+                                            style="font-size:.55rem;"><%= dx.type || "main" %></span>
+                                          <% if ((enc.encounter_status === "active" || enc.encounter_status === "pending") &&
+                                                 hasPermission("MedicalRecord.Create.Diagnosis")) { %>
+                                            <button onclick="deleteDx(<%= dx.diagnosis_nr %>, this)"
+                                              style="background:none;border:none;padding:0;line-height:1;cursor:pointer;color:#adb5bd;font-size:.7rem;"
+                                              title="<%= locale==="fr"?"Supprimer":"Remove" %>">
+                                              <i class="fas fa-times"></i>
+                                            </button>
+                                          <% } %>
+                                        </span>
+                                      <% }); %>
+                                    </div>
+                                  <% } %>
+                                </div>
+
+                                <%/* Past diagnoses read-only */%>
+                                <%
+                                  var pastDxAll = [];
+                                  if (typeof encounters !== "undefined") {
+                                    encounters.forEach(function(pe) {
+                                      if (Number(pe.encounter_nr) !== Number(enc.encounter_nr) &&
+                                          pe.diagnoses && pe.diagnoses.length > 0) {
+                                        pe.diagnoses.forEach(function(dx) {
+                                          pastDxAll.push({ dx: dx, enc_nr: pe.encounter_nr });
+                                        });
+                                      }
+                                    });
+                                  }
+                                %>
+                                <% if (pastDxAll.length > 0) { %>
+                                  <div class="mb-2">
+                                    <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;color:#adb5bd;margin-bottom:3px;">
+                                      <i class="fas fa-history me-1"></i>
+                                      <%= locale==="fr"?"Antecedents":"Past diagnoses" %>
+                                    </div>
+                                    <% pastDxAll.slice(0,5).forEach(function(item) { %>
+                                      <span class="badge bg-light border text-muted me-1 mb-1"
+                                        style="font-size:.64rem;opacity:.8;">
+                                        <code style="font-size:.62rem;color:#adb5bd;"><%= item.dx.code %></code>
+                                        <span><%= (item.dx.localcode || item.dx.code).substring(0,25) %></span>
+                                      </span>
+                                    <% }); %>
+                                    <% if (pastDxAll.length > 5) { %>
+                                      <span class="text-muted" style="font-size:.68rem;">+<%= pastDxAll.length - 5 %></span>
+                                    <% } %>
+                                  </div>
+                                <% } %>
+
+
+                              </div>
+                            </div>
+                          </div>
+
+                          <%/* ── PANEL 3: NOTES ── */%>
+                          <div class="col-lg-4">
+                            <div class="panel-card h-100">
+                              <div class="panel-header">
+                                <i class="fas fa-file-medical me-1 text-warning"></i>
+                                <%= locale==="fr"?"Notes cliniques":"Clinical Notes" %>
+                              </div>
+                              <div class="panel-body d-flex flex-column" style="gap:8px;">
+
+                                <%/* Notes display — scrollable */%>
+                                <% var encNotes = (typeof notesByEnc !== "undefined")
+                                     ? (notesByEnc[Number(enc.encounter_nr)] || [])
+                                     : []; %>
+                                <% if (encNotes.length === 0) { %>
+                                  <div class="text-muted" style="font-size:.72rem;">
+                                    <%= locale==="fr"?"Aucune note.":"No notes." %>
+                                  </div>
+                                <% } else { %>
+                                  <div id="notes-display-<%= enc.encounter_nr %>"
+                                    style="max-height:180px;overflow-y:auto;flex-shrink:0;">
+                                    <% encNotes.forEach(function(n) { %>
+                                      <div class="mb-1 p-2 rounded"
+                                        style="background:#fffbf0;border-left:3px solid #ffc107;font-size:.74rem;">
+                                        <div class="d-flex justify-content-between align-items-start mb-1">
+                                          <strong style="font-size:.72rem;"><%= n.staff_name || "—" %></strong>
+                                          <small class="text-muted" style="font-size:.65rem;">
+                                            <%= n.date ? new Date(n.date).toLocaleDateString(
+                                                locale==="fr"?"fr-FR":"en-GB",
+                                                {day:"2-digit",month:"2-digit",year:"2-digit"}) : "—" %>
+                                            <% if (n.time) { %> <%= n.time.slice(0,5) %><% } %>
+                                          </small>
+                                        </div>
+                                        <div style="white-space:pre-wrap;"><%= n.notes %></div>
+                                      </div>
+                                    <% }); %>
+                                  </div>
+                                <% } %>
+
+                                <%/* Add note — active enc + authorized roles */%>
+                                <% if ((enc.encounter_status === "active" || enc.encounter_status === "pending") &&
+                                       hasPermission("MedicalRecord.Create.Note")) { %>
+                                  <div class="mt-auto">
+                                    <textarea class="form-control" rows="3"
+                                      id="note-text-<%= enc.encounter_nr %>"
+                                      placeholder="<%= locale==="fr"?"Saisir une note clinique...":"Enter clinical note..." %>"
+                                      style="font-size:.73rem;resize:none;"></textarea>
+                                    <button class="btn btn-sm btn-warning w-100 mt-1"
+                                      onclick="saveNote('<%= enc.encounter_nr %>')"
+                                      style="font-size:.72rem;padding:3px 0;">
+                                      <i class="fas fa-save me-1"></i>
+                                      <%= locale==="fr"?"Enregistrer la note":"Save Note" %>
+                                    </button>
+                                  </div>
+                                <% } %>
+
+                              </div>
+                            </div>
+                          </div>
+
+                        </div><%/* end 3-panel row */%>
+                        <% } %><%/* end clinical panels permission check */%>
+
+                      </div>
+                    </div>
+                    <% }); %>
+                  </div>
+                <% } else { %>
+                  <div class="alert alert-light border mb-3 py-2" style="font-size:.78rem;">
+                    <i class="fas fa-info-circle me-1 text-muted"></i>
+                    <%= locale==="fr"?"Aucune consultation active.":"No active encounter." %>
+                  </div>
+                <% } %>
+
+                <%/* ── PAST ENCOUNTERS ── */%>
+                <% if (pastEnc.length > 0) { %>
+                <div class="past-header">
+                  <span>
+                    <i class="fas fa-history me-1"></i>
+                    <%= locale==="fr"?"Historique des consultations":"Encounter History" %>
+                    <span class="badge bg-secondary ms-1" style="font-size:.62rem;"><%= pastEnc.length %></span>
+                  </span>
+                  <button class="btn btn-xs btn-link p-0 text-muted" style="font-size:.7rem;"
+                    onclick="toggleAllPast()">
+                    <%= locale==="fr"?"Tout replier":"Collapse all" %>
+                  </button>
+                </div>
+
+                <% pastEnc.forEach(function(enc, i) { %>
+                <div class="rounded border mb-1">
+                  <%/* Compact header — always visible */%>
+                  <div class="past-enc-compact d-flex justify-content-between align-items-center"
+                    onclick="togglePast(<%= i %>)"
+                    id="past-hdr-<%= i %>">
+                    <div class="d-flex align-items-center gap-2">
+                      <i class="fas fa-chevron-right text-muted" style="font-size:.6rem;"
+                        id="past-ico-<%= i %>"></i>
+                      <div>
+                        <strong>#<%= enc.encounter_nr %></strong>
+                        <% var cl = enc.encounter_class_nr==1
+                          ?(locale==="fr"?"Amb.":"Out.")
+                          :(locale==="fr"?"Hospit.":"Inp."); %>
+                        <span class="badge ms-1 <%= enc.encounter_class_nr==2?"bg-primary":"bg-light text-dark border" %>"
+                          style="font-size:.6rem;"><%= cl %></span>
+                        <% if (enc.department) { %>
+                          <span class="text-muted ms-1" style="font-size:.7rem;">
+                            <%= enc.department.name_short %>
+                          </span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 text-muted" style="font-size:.7rem;">
+                      <% if (enc.prescriptions && enc.prescriptions.length>0) { %>
+                        <span><i class="fas fa-pills me-1"></i><%= enc.prescriptions.length %></span>
+                      <% } %>
+                      <span>
+                        <%= enc.encounter_date
+                          ? new Date(enc.encounter_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB")
+                          : "?" %>
+                      </span>
+                      <% if (enc.discharge_date) { %>
+                        <span class="text-secondary">
+                          → <%= new Date(enc.discharge_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                        </span>
+                      <% } %>
+                      <span class="badge bg-secondary" style="font-size:.6rem;">
+                        <%= locale==="fr"?"Sorti":"Discharged" %>
+                      </span>
+                    </div>
+                  </div>
+
+                  <%/* Expandable detail */%>
+                  <div class="past-enc-detail" id="past-det-<%= i %>">
+                    <div class="row g-2 mb-2">
+                      <% if (enc.consulting_dr) { %>
+                        <div class="col-6">
+                          <div class="lbl"><%= locale==="fr"?"Medecin":"Doctor" %></div>
+                          <div class="val"><%= enc.consulting_dr %></div>
+                        </div>
+                      <% } %>
+                      <% if (enc.referrer_diagnosis) { %>
+                        <div class="col-6">
+                          <div class="lbl"><%= locale==="fr"?"Motif":"Reason" %></div>
+                          <div class="val"><%= enc.referrer_diagnosis %></div>
+                        </div>
+                      <% } %>
+                      <% if (enc.encounter_class_nr==2 && enc.current_ward_nr>0) { %>
+                        <div class="col-6">
+                          <div class="lbl">Ward / Room</div>
+                          <div class="val"><%= enc.current_ward_nr %> / <%= enc.current_room_nr %></div>
+                        </div>
+                      <% } %>
+                      <% if (enc.insurance_firm && enc.insurance_firm!=="") { %>
+                        <div class="col-6">
+                          <div class="lbl">Insurance</div>
+                          <div class="val"><%= enc.insurance_firm %></div>
+                        </div>
+                      <% } %>
+                    </div>
+
+                    <%/* Past encounter diagnoses */%>
+                    <% if (enc.diagnoses && enc.diagnoses.length>0) { %>
+                    <div class="mb-2">
+                      <div class="lbl mb-1">Dx</div>
+                      <% enc.diagnoses.forEach(function(dx) { %>
+                        <span class="badge bg-light text-dark border me-1" style="font-size:.7rem;">
+                          <%= dx.code||dx.localcode||"—" %>
+                        </span>
+                      <% }); %>
+                    </div>
+                    <% } %>
+
+                    <%/* Past encounter prescriptions compact */%>
+                    <% if (enc.prescriptions && enc.prescriptions.length>0) { %>
+                    <div>
+                      <div class="lbl mb-1"><%= locale==="fr"?"Prescriptions":"Prescriptions" %></div>
+                      <table class="table table-xs table-hover mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th><%= locale==="fr"?"Article":"Article" %></th>
+                            <th><%= locale==="fr"?"Dose":"Dosage" %></th>
+                            <th><%= locale==="fr"?"Classe":"Class" %></th>
+                            <th><%= locale==="fr"?"Prix":"Price" %></th>
+                            <th><%= locale==="fr"?"Dispense":"Dispensed" %></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% enc.prescriptions.forEach(function(p) { %>
+                            <tr class="<%= p.is_stopped?"table-secondary":"" %>">
+                              <td>
+                                <%= p.article||"—" %>
+                                <% if(p.is_stopped){%><s class="text-muted"> (<%= locale==="fr"?"arrete":"stopped" %>)</s><%}%>
+                              </td>
+                              <td><%= p.dosage && p.dosage!==0 ? p.dosage : "—" %></td>
+                              <td><%= p.drug_class||"—" %></td>
+                              <td><%= p.price||"—" %></td>
+                              <td class="text-center">
+                                <% if(p.livrer){ %>
+                                  <i class="fas fa-check text-success"></i>
+                                <% } else { %>
+                                  <i class="fas fa-clock text-muted"></i>
+                                <% } %>
+                              </td>
+                            </tr>
+                          <% }); %>
+                        </tbody>
+                      </table>
+                    </div>
+                    <% } %>
+
+                    <% if (enc.post_encounter_notes) { %>
+                      <div class="mt-2 p-2 rounded" style="background:#f8f8f8;font-size:.72rem;">
+                        <%= enc.post_encounter_notes.substring(0,200) %>
+                        <% if(enc.post_encounter_notes.length>200){%>…<%}%>
+                      </div>
+                    <% } %>
+                  </div>
+                </div>
+                <% }); %>
+                <% } %>
+
+              <% } %>
+            </div><%/* end tab-enc */%>
+
+
+            <%/* ═══ TAB 2: PRESCRIPTIONS (split pane) ═══ */%>
+            <div class="tab-pane fade" id="tab-prx">
+              <%
+                var prxKeys = Object.keys(prxByEnc);
+              %>
+
+              <%/* New Prescription button — always visible */%>
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <small class="text-muted">
+                  <% if (prxKeys.length === 0) { %>
+                    <%= locale==="fr"?"Aucune prescription.":"No prescriptions recorded." %>
+                  <% } else { %>
+                    <%= prxKeys.length %> <%= locale==="fr"?"consultation(s)":"encounter(s)" %>
+                  <% } %>
+                </small>
+                <% if (openEncForPrx && !openEncIsOwnFacility) { %>
+                  <button class="btn btn-sm btn-secondary" disabled
+                    style="font-size:.75rem;"
+                    title="<%= locale==="fr" ? "Admis ailleurs" : "Already admitted elsewhere" %>">
+                    <i class="fas fa-ban me-1"></i>
+                    <%= locale==="fr"?"Nouvelle prescription":"New Prescription" %>
+                  </button>
+                <% } else if (openEncForPrx && openEncForPrx.encounter_status === "active") { %>
+                  <a href="/prescriptions/encounter/<%= openEncForPrx.encounter_nr %>"
+                    class="btn btn-sm btn-outline-primary" style="font-size:.75rem;">
+                    <i class="fas fa-plus me-1"></i>
+                    <%= locale==="fr"?"Nouvelle prescription":"New Prescription" %>
+                  </a>
+                <% } else { %>
+                  <button class="btn btn-sm btn-outline-secondary" disabled
+                    style="font-size:.75rem;"
+                    title="<%= locale==="fr"
+                      ? (openEncForPrx?"Activez la consultation avant de prescrire":"Aucune consultation active")
+                      : (openEncForPrx?"Activate the encounter before prescribing":"No active encounter") %>">
+                    <i class="fas fa-plus me-1"></i>
+                    <%= locale==="fr"?"Nouvelle prescription":"New Prescription" %>
+                  </button>
+                <% } %>
+              </div>
+
+              <% if (prxKeys.length === 0) { %>
+                <div class="text-center text-muted py-5">
+                  <i class="fas fa-prescription-bottle-alt fa-2x mb-2 d-block opacity-25"></i>
+                  <%= locale==="fr"?"Aucune prescription enregistree.":"No prescriptions recorded." %>
+                </div>
+              <% } else { %>
+
+                <%/* One accordion per encounter that has prescriptions */%>
+                <div class="accordion" id="prxEncAccordion">
+                  <% prxKeys.forEach(function(encNr, eIdx) {
+                       var pe = prxByEnc[encNr];
+                       // Group items by bill_number (prescription batch)
+                       var batchMap = {};
+                       var batchOrder = [];
+                       pe.items.forEach(function(p) {
+                         var bk = p.bill_number || 0;
+                         if (!batchMap[bk]) { batchMap[bk] = []; batchOrder.push(bk); }
+                         batchMap[bk].push(p);
+                       });
+                       var totalItems  = pe.items.length;
+                       var activeItems = pe.items.filter(function(p){return !p.is_stopped;}).length;
+                       var encAccId    = "prxEnc-" + encNr;
+                  %>
+                    <div class="accordion-item mb-2 border rounded shadow-sm">
+                      <h2 class="accordion-header">
+                        <button class="accordion-button <%= eIdx===0?"":"collapsed" %> py-2"
+                          type="button" data-bs-toggle="collapse"
+                          data-bs-target="#<%= encAccId %>"
+                          style="font-size:.80rem;font-weight:600;background:#f8f9fa;">
+                          <div class="d-flex align-items-center gap-2 w-100 me-2">
+                            <i class="fas fa-stethoscope text-primary" style="font-size:.75rem;"></i>
+                            <span>
+                              <%= locale==="fr"?"Consultation":"Encounter" %> #<%= encNr %>
+                            </span>
+                            <% if (pe.enc.department) { %>
+                              <span class="badge bg-light text-dark border" style="font-size:.60rem;">
+                                <%= pe.enc.department.name_short %>
+                              </span>
+                            <% } %>
+                            <span class="text-muted ms-auto me-2" style="font-size:.70rem;font-weight:400;">
+                              <%= pe.enc.encounter_date
+                                ? new Date(pe.enc.encounter_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB")
+                                : "" %>
+                            </span>
+                            <span class="badge bg-secondary" style="font-size:.60rem;"><%= totalItems %></span>
+                            <span class="badge bg-success"   style="font-size:.60rem;"><%= activeItems %> active</span>
+                          </div>
+                        </button>
+                      </h2>
+                      <div id="<%= encAccId %>"
+                        class="accordion-collapse collapse <%= eIdx===0?"show":"" %>">
+                        <div class="accordion-body p-2">
+
+                          <%/* Inner accordion — one per batch (bill_number) */%>
+                          <div class="accordion accordion-flush" id="prxBatchAcc-<%= encNr %>">
+                            <% batchOrder.forEach(function(bk, bi) {
+                                 var batch   = batchMap[bk];
+                                 var bActive = batch.filter(function(p){return !p.is_stopped;}).length;
+                                 var bDisp   = batch.filter(function(p){return p.livrer;}).length;
+                                 var bPaid   = batch.filter(function(p){return p.bill_status==="paid";}).length;
+                                 var batchId = "prxBatch-" + encNr + "-" + bi;
+                            %>
+                              <div class="accordion-item"
+                                style="border:none;border-bottom:1px solid #f0f0f0;">
+                                <div class="accordion-header">
+                                  <button class="accordion-button collapsed py-2"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#<%= batchId %>"
+                                    style="font-size:.74rem;font-weight:600;background:#fff;
+                                           box-shadow:none;padding-left:8px;padding-right:8px;">
+                                    <i class="fas fa-prescription-bottle-alt me-2"
+                                      style="color:#6f42c1;font-size:.72rem;"></i>
+                                    <%= locale==="fr"?"Ordonnance":"Prescription" %> <%= bi+1 %>
+                                    <% if (bk > 0) { %>
+                                      <span class="badge bg-light text-dark border ms-2"
+                                        style="font-size:.58rem;">
+                                        Bill #<%= bk %>
+                                      </span>
+                                    <% } %>
+                                    <span class="ms-auto d-flex gap-1 me-1">
+                                      <span class="badge bg-success"   style="font-size:.55rem;"><%= bActive %> active</span>
+                                      <% if (bDisp > 0) { %>
+                                        <span class="badge" style="font-size:.55rem;background:#6f42c1;"><%= bDisp %> disp.</span>
+                                      <% } %>
+                                      <% if (bPaid > 0) { %>
+                                        <span class="badge bg-info text-dark" style="font-size:.55rem;"><%= bPaid %> paid</span>
+                                      <% } %>
+                                    </span>
+                                  </button>
+                                </div>
+                                <div id="<%= batchId %>" class="accordion-collapse collapse">
+                                  <div class="accordion-body p-2">
+                                    <% batch.forEach(function(p) { %>
+                                      <div class="prx-item" style="<%= p.is_stopped?"opacity:.55;":"" %>">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                          <div style="flex:1;">
+                                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                              <strong style="font-size:.80rem;">
+                                                <% if(p.is_stopped){%><s><%= p.article||"—" %></s>
+                                                <% } else { %><%= p.article||"—" %><% } %>
+                                              </strong>
+                                              <% if (p.drug_class) { %>
+                                                <span class="badge bg-light text-dark border"
+                                                  style="font-size:.60rem;"><%= p.drug_class %></span>
+                                              <% } %>
+                                              <% if (p.is_stopped) { %>
+                                                <span class="badge bg-secondary" style="font-size:.60rem;">
+                                                  <%= locale==="fr"?"Arrete":"Stopped" %>
+                                                </span>
+                                              <% } else { %>
+                                                <span class="badge bg-success" style="font-size:.60rem;">Active</span>
+                                              <% } %>
+                                              <% if (p.livrer) { %>
+                                                <span class="badge" style="font-size:.60rem;background:#6f42c1;">
+                                                  <i class="fas fa-check me-1"></i>
+                                                  <%= locale==="fr"?"Delivre":"Dispensed" %>
+                                                </span>
+                                              <% } %>
+                                            </div>
+                                            <div class="d-flex gap-3 mt-1 text-muted" style="font-size:.70rem;">
+                                              <% if (p.dosage && p.dosage!==0) { %>
+                                                <span><i class="fas fa-tablets me-1"></i><%= p.dosage %></span>
+                                              <% } %>
+                                              <% if (p.notes) { %>
+                                                <span><i class="fas fa-sticky-note me-1"></i>
+                                                  <%= p.notes.substring(0,60) %></span>
+                                              <% } %>
+                                              <% if (p.prescriber) { %>
+                                                <span><i class="fas fa-user-md me-1"></i><%= p.prescriber %></span>
+                                              <% } %>
+                                            </div>
+                                          </div>
+                                          <div class="text-end ms-2" style="min-width:60px;">
+                                            <div class="fw-bold" style="font-size:.80rem;color:#0d6efd;">
+                                              <%= p.price && p.price!=="" ? p.price : "" %>
+                                            </div>
+                                            <% if (p.bill_status) { %>
+                                              <span class="badge mt-1
+                                                <%= p.bill_status==="paid"?"bg-success":
+                                                    p.bill_status==="billed"?"bg-warning text-dark":"bg-secondary" %>"
+                                                style="font-size:.58rem;"><%= p.bill_status %></span>
+                                            <% } %>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    <% }); %>
+                                  </div>
+                                </div>
+                              </div>
+                            <% }); %>
+                          </div>
+
+                        </div>
+                      </div>
+                    </div>
+                  <% }); %>
+                </div>
+
+              <% } %>
+            </div><%/* end tab-prx */%>
+
+
+            <%/* ═══ BILLS TAB — split pane ═══ */%>
+            <%/* bills/billItems/billFinals are pre-filtered to the current
+                facility in patientController.js's record-page query, so
+                this simply renders whatever came back — no tab-level
+                hiding needed anymore. */ %>
+            <div class="tab-pane fade" id="tab-billing">
+              <% if (!billFinals || billFinals.length === 0) { %>
+                <div class="text-center text-muted py-5">
+                  <i class="fas fa-file-invoice-dollar fa-2x mb-2 d-block opacity-25"></i>
+                  <%= locale==="fr"?"Aucune facture.":"No billing records." %>
+                </div>
+              <% } else { %>
+
+                <%/* Summary strip — sums from billItems, not billFinals.
+                    care_billing_bill_final rows are only ever created
+                    inside collectPayment (see billingController.js), so a
+                    bill that's never had any payment collected on it has
+                    no row there at all yet — summing from billFinals would
+                    silently exclude every still-fully-open bill from
+                    "Total Billed" and "Balance Due", while the detailed
+                    list below (which reads the raw bills table) correctly
+                    still shows it. billItems covers every bill's line
+                    items regardless of payment status, so it doesn't have
+                    this gap. */ %>
+                <%
+                  var totBilled=0, totPaid=0, totDue=0;
+                  billItems.forEach(function(bi){
+                    var amt = bi.amount || 0;
+                    totBilled += amt;
+                    if (bi.status === "paid") {
+                      totPaid += amt;
+                    } else {
+                      totDue += amt;
+                    }
+                  });
+                %>
+                <div class="row g-2 mb-3">
+                  <div class="col-4">
+                    <div class="rounded border text-center py-2" style="background:#f8f9fa;">
+                      <div style="font-size:.62rem;color:#6c757d;text-transform:uppercase;">
+                        <%= locale==="fr"?"Total Facture":"Total Billed" %>
+                      </div>
+                      <div class="fw-bold" style="font-size:.95rem;">
+                        <%= totBilled.toLocaleString() %> FCFA
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-4">
+                    <div class="rounded border text-center py-2" style="background:#f0fff4;">
+                      <div style="font-size:.62rem;color:#6c757d;text-transform:uppercase;">
+                        <%= locale==="fr"?"Total Paye":"Total Paid" %>
+                      </div>
+                      <div class="fw-bold text-success" style="font-size:.95rem;">
+                        <%= totPaid.toLocaleString() %> FCFA
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-4">
+                    <div class="rounded border text-center py-2" style="background:#fff5f5;">
+                      <div style="font-size:.62rem;color:#6c757d;text-transform:uppercase;">
+                        <%= locale==="fr"?"Solde Du":"Balance Due" %>
+                      </div>
+                      <div class="fw-bold <%= totDue>0?"text-danger":"text-success" %>"
+                        style="font-size:.95rem;">
+                        <%= totDue.toLocaleString() %> FCFA
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <% if (typeof bills !== "undefined" && bills.length > 0) { %>
+                  <div class="accordion" id="billingAccordion">
+                    <% bills.forEach(function(b, bIdx) {
+                         var bf     = billFinals.find(function(f){ return f.bill_no == b.bill_no; });
+                         var due    = bf ? (bf.amount_due || 0) : 0;
+                         var paid   = bf ? (bf.amount_recieved || 0) : 0;
+                         var bItems = typeof billItems !== "undefined"
+                           ? billItems.filter(function(i){ return i.bill_no == b.bill_no; })
+                           : [];
+                         var paidItems = bItems.filter(function(i){ return i.status==="paid"; }).length;
+                         var openItems = bItems.filter(function(i){ return i.status==="open"; }).length;
+                         var billAccId = "billAcc-" + b.bill_no;
+                         var isPaid    = b.status === "paid" || b.status === "closed";
+                         var isOpen    = b.status === "open" || b.status === "partial";
+                         var statusClass = isPaid ? "bg-success" : due > 0 ? "bg-danger" : "bg-warning text-dark";
+                         var statusLabel = isPaid
+                           ? (locale==="fr"?"Payee":"Paid")
+                           : due > 0
+                             ? (locale==="fr"?"Impayee":"Unpaid")
+                             : (locale==="fr"?"Ouverte":"Open");
+                    %>
+                      <div class="accordion-item mb-2 border rounded shadow-sm">
+                        <h2 class="accordion-header">
+                          <button class="accordion-button <%= bIdx===0?"":"collapsed" %> py-2"
+                            type="button" data-bs-toggle="collapse"
+                            data-bs-target="#<%= billAccId %>"
+                            style="font-size:.80rem;font-weight:600;background:#f8f9fa;">
+                            <div class="d-flex align-items-center gap-2 w-100 me-2">
+                              <i class="fas fa-file-invoice-dollar text-success"
+                                style="font-size:.75rem;"></i>
+                              <span>
+                                <%= locale==="fr"?"Facture":"Bill" %> #<%= b.bill_no %>
+                              </span>
+                              <span class="text-muted" style="font-size:.70rem;font-weight:400;">
+                                &bull; Enc. #<%= b.encounter_nr %>
+                              </span>
+                              <% if (b.date) { %>
+                                <span class="text-muted ms-1" style="font-size:.70rem;font-weight:400;">
+                                  <%= new Date(b.date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                                </span>
+                              <% } %>
+                              <span class="ms-auto d-flex align-items-center gap-1 me-1">
+                                <span class="fw-bold" style="font-size:.78rem;">
+                                  <%= (b.amount||0).toLocaleString() %> FCFA
+                                </span>
+                                <span class="badge <%= statusClass %>"
+                                  style="font-size:.60rem;"><%= statusLabel %></span>
+                                <% if (openItems > 0) { %>
+                                  <span class="badge bg-warning text-dark"
+                                    style="font-size:.55rem;"><%= openItems %> open</span>
+                                <% } %>
+                                <% if (paidItems > 0) { %>
+                                  <span class="badge bg-success"
+                                    style="font-size:.55rem;"><%= paidItems %> paid</span>
+                                <% } %>
+                              </span>
+                            </div>
+                          </button>
+                        </h2>
+                        <div id="<%= billAccId %>"
+                          class="accordion-collapse collapse <%= bIdx===0?"show":"" %>">
+                          <div class="accordion-body p-3">
+
+                            <% if (bf) { %>
+                              <div class="row g-2 mb-3">
+                                <div class="col-6 col-md-3">
+                                  <div class="rounded border text-center py-1 px-2"
+                                    style="background:#f8f9fa;font-size:.72rem;">
+                                    <div style="font-size:.60rem;color:#6c757d;text-transform:uppercase;">
+                                      <%= locale==="fr"?"Montant":"Amount" %>
+                                    </div>
+                                    <div class="fw-bold">
+                                      <%= (bf.bill_amount||0).toLocaleString() %> FCFA
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                  <div class="rounded border text-center py-1 px-2"
+                                    style="background:#f0fff4;font-size:.72rem;">
+                                    <div style="font-size:.60rem;color:#6c757d;text-transform:uppercase;">
+                                      <%= locale==="fr"?"Paye":"Paid" %>
+                                    </div>
+                                    <div class="fw-bold text-success">
+                                      <%= (bf.amount_recieved||0).toLocaleString() %> FCFA
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                  <div class="rounded border text-center py-1 px-2"
+                                    style="background:<%= due>0?"#fff5f5":"#f0fff4" %>;font-size:.72rem;">
+                                    <div style="font-size:.60rem;color:#6c757d;text-transform:uppercase;">
+                                      <%= locale==="fr"?"Du":"Due" %>
+                                    </div>
+                                    <div class="fw-bold <%= due>0?"text-danger":"text-success" %>">
+                                      <%= (due||0).toLocaleString() %> FCFA
+                                    </div>
+                                  </div>
+                                </div>
+                                <% if (bf.patient_amount>0 || bf.insurance_amount>0) { %>
+                                  <div class="col-6 col-md-3">
+                                    <div class="rounded border text-center py-1 px-2"
+                                      style="background:#f0f4ff;font-size:.72rem;">
+                                      <div style="font-size:.60rem;color:#6c757d;text-transform:uppercase;">
+                                        Ins / Pat
+                                      </div>
+                                      <div class="text-primary">
+                                        <%= (bf.insurance_amount||0).toLocaleString() %>
+                                        / <%= (bf.patient_amount||0).toLocaleString() %>
+                                      </div>
+                                    </div>
+                                  </div>
+                                <% } %>
+                              </div>
+                            <% } %>
+
+                            <% if (isOpen && hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) { %>
+                              <div class="mb-3">
+                                <a href="/billing/bill/<%= b.bill_no %>#payment-section"
+                                  class="btn btn-sm btn-success"
+                                  style="font-size:.76rem;">
+                                  <i class="fas fa-cash-register me-1"></i>
+                                  <%= locale==="fr"?"Encaisser le paiement":"Collect Payment" %>
+                                </a>
+                              </div>
+                            <% } %>
+
+                            <% if (bItems.length > 0) { %>
+                              <div class="table-responsive">
+                                <table class="table table-xs table-hover align-middle mb-0"
+                                  style="font-size:.76rem;">
+                                  <thead class="table-light">
+                                    <tr>
+                                      <th><%= locale==="fr"?"Article":"Item" %></th>
+                                      <th><%= locale==="fr"?"Classe":"Class" %></th>
+                                      <th class="text-center">Qty</th>
+                                      <th class="text-end"><%= locale==="fr"?"P.U.":"Unit" %></th>
+                                      <th class="text-end">Total</th>
+                                      <th>Statut</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <% bItems.forEach(function(item) { %>
+                                      <tr style="<%= item.status==="paid"?"opacity:.75;":"" %>">
+                                        <td>
+                                          <strong style="font-size:.76rem;">
+                                            <%= item.article||"—" %>
+                                          </strong>
+                                          <% if (item.islab) { %>
+                                            <span class="badge bg-info text-dark ms-1"
+                                              style="font-size:.55rem;">Lab</span>
+                                          <% } %>
+                                        </td>
+                                        <td><%= item.class||"—" %></td>
+                                        <td class="text-center"><%= item.units||1 %></td>
+                                        <td class="text-end">
+                                          <%= (item.unit_cost||0).toLocaleString() %>
+                                        </td>
+                                        <td class="text-end fw-bold">
+                                          <%= (item.amount||0).toLocaleString() %> FCFA
+                                        </td>
+                                        <td>
+                                          <span class="badge
+                                            <%= item.status==="paid"?"bg-success":
+                                                item.status==="open"?"bg-warning text-dark":
+                                                "bg-secondary" %>"
+                                            style="font-size:.58rem;">
+                                            <%= item.status||"—" %>
+                                          </span>
+                                          <% if (item.livrer) { %>
+                                            <span class="badge ms-1"
+                                              style="font-size:.55rem;background:#6f42c1;">
+                                              <i class="fas fa-check me-1"></i>Del.
+                                            </span>
+                                          <% } %>
+                                        </td>
+                                      </tr>
+                                    <% }); %>
+                                  </tbody>
+                                  <tfoot class="table-light">
+                                    <tr>
+                                      <td colspan="4" class="text-end fw-bold"
+                                        style="font-size:.76rem;">Total</td>
+                                      <td class="text-end fw-bold text-primary">
+                                        <%= bItems.reduce(function(s,i){
+                                          return s+(i.amount||0);},0).toLocaleString() %> FCFA
+                                      </td>
+                                      <td></td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            <% } else { %>
+                              <div class="text-center text-muted py-3" style="font-size:.78rem;">
+                                <i class="fas fa-receipt me-1"></i>
+                                <%= locale==="fr"?"Aucun article sur cette facture.":"No items for this bill." %>
+                              </div>
+                            <% } %>
+
+                          </div>
+                        </div>
+                      </div>
+                    <% }); %>
+                  </div>
+
+                <% } else { %>
+                  <div class="table-responsive">
+                    <table class="table table-xs table-hover align-middle">
+                      <thead class="table-dark">
+                        <tr>
+                          <th>#<%= locale==="fr"?"Facture":"Bill" %></th>
+                          <th>Enc.</th><th>Date</th>
+                          <th><%= locale==="fr"?"Montant":"Amount" %></th>
+                          <th><%= locale==="fr"?"Paye":"Paid" %></th>
+                          <th><%= locale==="fr"?"Du":"Due" %></th>
+                          <th>Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% billFinals.forEach(function(bf){ %>
+                          <tr>
+                            <td><code>#<%= bf.bill_no %></code></td>
+                            <td><%= bf.encounter_nr %></td>
+                            <td><%= bf.date?new Date(bf.date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB"):"—" %></td>
+                            <td><%= (bf.bill_amount||0).toLocaleString() %> FCFA</td>
+                            <td class="text-success"><%= (bf.amount_recieved||0).toLocaleString() %> FCFA</td>
+                            <td class="<%= bf.amount_due>0?"text-danger fw-bold":"text-success" %>">
+                              <%= (bf.amount_due||0).toLocaleString() %> FCFA</td>
+                            <td><span class="badge
+                              <%= bf.status==="closed"?"bg-success":bf.amount_due>0?"bg-danger":"bg-secondary" %>"
+                              style="font-size:.62rem;"><%= bf.status||"—" %></span></td>
+                          </tr>
+                        <% }); %>
+                      </tbody>
+                    </table>
+                  </div>
+                <% } %>
+
+              <% } %>
+            </div><%/* end tab-billing */%>
+
+          </div><%/* end tab-content */%>
+        </div>
+      </div>
+
+
+  <% if (hasPermission("MedicalRecord.Read.ClinicalData") && typeof referralHistory !== "undefined" && referralHistory.length > 0) { %>
+    <%/* Referral History -- confirmed with the project owner: shows
+         EVERY referral for this patient (not just the currently-open
+         one, which the banner near the top already covers and which
+         disappears once a referral completes/declines). Deliberately
+         visible from either facility involved, matching the existing
+         cross-facility clinical-visibility rule -- a referral inherently
+         involves two facilities. Gated the same way as Vitals/Diagnoses/
+         Notes (§4 fix 41) since referral reasons/notes are clinically
+         sensitive the same way.
+
+         Moved below the encounter form (was previously at the top,
+         pushing clinical content down) per follow-up feedback. Display
+         also changed: 2 or fewer referrals show as a plain table (fits
+         comfortably); more than 2 switches to an accordion, one item
+         per referral, collapsed by default except the most recent --
+         matching the accordion pattern already established elsewhere
+         on this same page (prxEncAccordion) rather than introducing a
+         new one. */%>
+    <div class="card shadow-sm mb-3">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-bold" style="font-size:.85rem;">
+          <i class="fas fa-share-square me-2" style="color:#0dcaf0;"></i>
+          <%= locale==="fr" ? "Historique des referrals" : "Referral History" %>
+          <span class="badge bg-secondary" style="font-size:.65rem;"><%= referralHistory.length %></span>
+        </span>
+      </div>
+      <div class="card-body <%= referralHistory.length <= 2 ? "p-0" : "p-2" %>">
+        <%
+          function referralUrgencyBadge(r) {
+            if (r.urgency === "emergency") return locale==="fr" ? "Urgence vitale" : "Emergency";
+            if (r.urgency === "urgent") return locale==="fr" ? "Urgent" : "Urgent";
+            return locale==="fr" ? "Routine" : "Routine";
+          }
+          function referralUrgencyClass(r) {
+            if (r.urgency === "emergency") return "bg-danger";
+            if (r.urgency === "urgent") return "bg-warning text-dark";
+            return "bg-secondary";
+          }
+          function referralStatusLabel(r) {
+            if (r.status === "sent") return locale==="fr" ? "Envoye" : "Sent";
+            if (r.status === "accepted") return locale==="fr" ? "Accepte" : "Accepted";
+            if (r.status === "seen") return locale==="fr" ? "Vu" : "Seen";
+            if (r.status === "completed") return locale==="fr" ? "Termine" : "Completed";
+            if (r.status === "declined") return locale==="fr" ? "Refuse" : "Declined";
+            return r.status;
+          }
+          function referralStatusClass(r) {
+            if (r.status === "sent") return "bg-info text-dark";
+            if (r.status === "accepted") return "bg-primary";
+            if (r.status === "seen" || r.status === "completed") return "bg-success";
+            if (r.status === "declined") return "bg-danger";
+            return "bg-secondary";
+          }
+        %>
+        <% if (referralHistory.length <= 2) { %>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size:.82rem;">
+              <thead class="table-dark">
+                <tr>
+                  <th class="ps-3"><%= locale==="fr" ? "De" : "From" %></th>
+                  <th><%= locale==="fr" ? "Vers" : "To" %></th>
+                  <th><%= locale==="fr" ? "Urgence" : "Urgency" %></th>
+                  <th><%= locale==="fr" ? "Raison" : "Reason" %></th>
+                  <th><%= locale==="fr" ? "Statut" : "Status" %></th>
+                  <th><%= locale==="fr" ? "Notes cliniques" : "Clinical Notes" %></th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% referralHistory.forEach(function(r) { %>
+                  <tr>
+                    <td class="ps-3"><%= r.fromFacility ? r.fromFacility.name : "—" %></td>
+                    <td><%= r.toFacility ? r.toFacility.name : "—" %></td>
+                    <td><span class="badge <%= referralUrgencyClass(r) %>"><%= referralUrgencyBadge(r) %></span></td>
+                    <td style="max-width:200px;"><%= r.reason %></td>
+                    <td>
+                      <span class="badge <%= referralStatusClass(r) %>" title="<%= r.status === 'declined' ? (r.decline_reason || '') : '' %>">
+                        <%= referralStatusLabel(r) %>
+                      </span>
+                    </td>
+                    <td style="max-width:240px;white-space:pre-line;"><%= r.receiving_notes || "—" %></td>
+                    <td><%= r.created_at ? String(r.created_at).slice(0,10) : "—" %></td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="accordion" id="referralHistoryAccordion">
+            <% referralHistory.forEach(function(r, rIdx) { %>
+              <% var refAccId = "referralHist-" + r.id; %>
+              <div class="accordion-item mb-1 border rounded">
+                <h2 class="accordion-header">
+                  <button class="accordion-button <%= rIdx===0?"":"collapsed" %>"
+                    type="button" data-bs-toggle="collapse"
+                    data-bs-target="#<%= refAccId %>"
+                    style="font-size:.78rem;font-weight:600;background:#f8f9fa;padding:.35rem .75rem;">
+                    <div class="d-flex align-items-center gap-2 w-100 me-2">
+                      <i class="fas fa-share-square text-info" style="font-size:.72rem;"></i>
+                      <span><%= r.fromFacility ? r.fromFacility.name : "—" %> &rarr; <%= r.toFacility ? r.toFacility.name : "—" %></span>
+                      <span class="badge <%= referralStatusClass(r) %>" style="font-size:.60rem;"><%= referralStatusLabel(r) %></span>
+                      <span class="text-muted ms-auto me-2" style="font-size:.68rem;font-weight:400;">
+                        <%= r.created_at ? String(r.created_at).slice(0,10) : "" %>
+                      </span>
+                    </div>
+                  </button>
+                </h2>
+                <div id="<%= refAccId %>" class="accordion-collapse collapse <%= rIdx===0?"show":"" %>"
+                  data-bs-parent="#referralHistoryAccordion">
+                  <div class="accordion-body p-2" style="font-size:.80rem;">
+                    <div class="mb-1">
+                      <span class="badge <%= referralUrgencyClass(r) %>"><%= referralUrgencyBadge(r) %></span>
+                    </div>
+                    <div class="mb-1">
+                      <strong><%= locale==="fr" ? "Raison" : "Reason" %>:</strong> <%= r.reason %>
+                    </div>
+                    <% if (r.status === "declined" && r.decline_reason) { %>
+                      <div class="mb-1 text-danger">
+                        <strong><%= locale==="fr" ? "Raison du refus" : "Decline reason" %>:</strong> <%= r.decline_reason %>
+                      </div>
+                    <% } %>
+                    <div class="mb-0" style="white-space:pre-line;">
+                      <strong><%= locale==="fr" ? "Notes cliniques" : "Clinical Notes" %>:</strong><br>
+                      <% if (r.receiving_notes) { %>
+                        <%= r.receiving_notes %>
+                      <% } else { %>
+                        <span class="text-muted"><%= locale==="fr" ? "Aucune note clinique pour le moment." : "No clinical notes yet." %></span>
+                      <% } %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
+    </div><%/* end right col */%>
+  </div><%/* end row */%>
+</div>
+
+<script>
+// ── Prescription split pane
+function showPrx(encNr, el) {
+  document.querySelectorAll('#prx-list .list-item').forEach(function(li){li.classList.remove('active');});
+  el.classList.add('active');
+  document.querySelectorAll('#prx-detail > div').forEach(function(p){p.style.display='none';});
+  var panel = document.getElementById('prx-panel-' + encNr);
+  if (panel) panel.style.display = 'block';
+}
+
+// ── Record bills tab: load items via JSON when bill clicked ──────
+var _recBillLoaded = {};
+
+function loadBillItems(billNo, el) {
+  // Highlight selected bill
+  document.querySelectorAll('#rec-bill-list .list-item').forEach(function(li) {
+    li.classList.remove('active');
+  });
+  if (el) el.classList.add('active');
+
+  var placeholder = document.getElementById('rec-bill-placeholder');
+  var content     = document.getElementById('rec-bill-content');
+  if (placeholder) placeholder.style.display = 'none';
+  if (content) {
+    content.style.display = '';
+    content.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-muted"></i></div>';
+  }
+
+  // Use cached result if already loaded
+  if (_recBillLoaded[billNo]) {
+    renderBillItems(billNo, _recBillLoaded[billNo]);
+    return;
+  }
+
+  fetch('/billing/bill/' + billNo + '/items-json')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        _recBillLoaded[billNo] = data;
+        renderBillItems(billNo, data);
+      } else {
+        if (content) content.innerHTML = '<div class="text-danger p-3">Error: ' + (data.error||'Failed') + '</div>';
+      }
+    })
+    .catch(function(err) {
+      if (content) content.innerHTML = '<div class="text-danger p-3">Network error: ' + err.message + '</div>';
+    });
+}
+
+function renderBillItems(billNo, data) {
+  var content = document.getElementById('rec-bill-content');
+  if (!content) return;
+
+  var bill    = data.bill;
+  var items   = data.items;
+  var canPay  = <%= (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Billing.Collect.Payment","Billing.Create.Bill"])) ? "true" : "false" %>;
+  var locale  = '<%= locale %>';
+  var isFr    = locale === 'fr';
+
+  var totalAmt = items.reduce(function(s,i){ return s + (i.amount||0); }, 0);
+  var paidAmt  = items.filter(function(i){ return i.status==='paid'; })
+                      .reduce(function(s,i){ return s + (i.amount||0); }, 0);
+  var openAmt  = totalAmt - paidAmt;
+
+  // Header
+  var sClass = bill.status==='paid'   ? 'bg-success' :
+               bill.status==='partial' ? 'bg-primary'  : 'bg-warning text-dark';
+  var sLabel = bill.status==='paid'
+    ? (isFr?'Payee':'Paid')
+    : bill.status==='partial'
+      ? (isFr?'Partielle':'Partial')
+      : (isFr?'Ouverte':'Open');
+
+  var payBtn = (bill.status !== 'paid' && canPay)
+    ? '<a href="/billing/bill/' + billNo + '#payment-section" class="btn btn-sm btn-success" style="font-size:.70rem;padding:2px 8px;">' +
+      '<i class="fas fa-cash-register me-1"></i>' + (isFr?'Payer':'Pay') + '</a>'
+    : '';
+
+  var html = '<div class="d-flex justify-content-between align-items-center mb-2">' +
+    '<span class="fw-bold" style="font-size:.80rem;">' +
+    (isFr?'Facture':'Bill') + ' #' + billNo +
+    ' <span class="badge ' + sClass + ' ms-1" style="font-size:.60rem;">' + sLabel + '</span>' +
+    '</span>' + payBtn + '</div>';
+
+  if (items.length === 0) {
+    html += '<div class="text-muted text-center py-3" style="font-size:.78rem;">' +
+            (isFr?'Aucun article.':'No items.') + '</div>';
+  } else {
+    html += '<table class="table table-xs align-middle mb-2"><thead class="table-light"><tr>' +
+            '<th>' + (isFr?'Article':'Item') + '</th>' +
+            '<th class="text-center">' + (isFr?'Qte':'Qty') + '</th>' +
+            '<th class="text-end">Total</th><th>Statut</th></tr></thead><tbody>';
+
+    items.forEach(function(item) {
+      var isPaid   = item.status === 'paid';
+      var rowStyle = isPaid ? 'opacity:.65;' : '';
+      var badgeCls = isPaid ? 'bg-success' : 'bg-warning text-dark';
+      var badgeLbl = isPaid ? (isFr?'Paye':'Paid') : (isFr?'Ouvert':'Open');
+      html += '<tr style="' + rowStyle + '">' +
+        '<td><div style="font-weight:600;font-size:.78rem;">' + item.article + '</div>' +
+        (item.class ? '<div style="font-size:.63rem;color:#adb5bd;">' + item.class + '</div>' : '') +
+        '</td>' +
+        '<td class="text-center">' + item.units + '</td>' +
+        '<td class="text-end fw-bold" style="font-size:.78rem;">' +
+          Math.round(item.amount||0).toLocaleString('fr-FR') + ' FCFA</td>' +
+        '<td><span class="badge ' + badgeCls + '" style="font-size:.60rem;">' + badgeLbl + '</span></td>' +
+        '</tr>';
+    });
+
+    html += '</tbody><tfoot class="table-light">' +
+      '<tr><td colspan="2" class="text-end" style="font-size:.76rem;">Total</td>' +
+      '<td class="text-end fw-bold" style="font-size:.78rem;">' +
+        Math.round(totalAmt).toLocaleString('fr-FR') + ' FCFA</td><td></td></tr>';
+
+    if (paidAmt > 0) {
+      html += '<tr><td colspan="2" class="text-end text-success" style="font-size:.72rem;">' +
+              (isFr?'Paye':'Paid') + '</td>' +
+              '<td class="text-end text-success fw-bold" style="font-size:.72rem;">' +
+              Math.round(paidAmt).toLocaleString('fr-FR') + ' FCFA</td><td></td></tr>';
+      html += '<tr><td colspan="2" class="text-end text-danger" style="font-size:.72rem;">' +
+              (isFr?'Reste':'Balance') + '</td>' +
+              '<td class="text-end text-danger fw-bold" style="font-size:.72rem;">' +
+              Math.round(openAmt).toLocaleString('fr-FR') + ' FCFA</td><td></td></tr>';
+    }
+    html += '</tfoot></table>';
+  }
+
+  content.innerHTML = html;
+}
+
+// Auto-load the first bill when tab is clicked
+document.addEventListener('DOMContentLoaded', function() {
+
+  // Activate tab from ?tab= query param (e.g. after prescription submit)
+  var urlParams = new URLSearchParams(window.location.search);
+  var tabParam  = urlParams.get('tab');
+  if (tabParam) {
+    var tabLink = document.querySelector('[href="#tab-' + tabParam + '"]');
+    if (tabLink && typeof bootstrap !== 'undefined') {
+      var bsTab = new bootstrap.Tab(tabLink);
+      bsTab.show();
+    }
+  }
+
+  // When Billing tab opens: auto-select first bill
+  var billingTabEl = document.querySelector('[href="#tab-billing"]');
+  if (billingTabEl) {
+    billingTabEl.addEventListener('shown.bs.tab', function() {
+      var firstItem = document.querySelector('#bill-list .list-item');
+      if (firstItem) {
+        var billNo = parseInt(firstItem.id.replace('bill-li-',''));
+        if (billNo) showBill(billNo, firstItem);
+      }
+    });
+  }
+});
+
+// ── CSRF token for fetch ──────────────────────────────────────────
+var _recCsrf = '<%= csrfToken %>';
+
+// ── VITALS ────────────────────────────────────────────────────────
+function toggleVitalsForm(encNr) {
+  var form = document.getElementById('vitals-form-' + encNr);
+  if (!form) return;
+  var visible = form.style.display !== 'none';
+  form.style.display = visible ? 'none' : '';
+  if (!visible) {
+    var firstEl = document.getElementById('vf-temp-' + encNr);
+    if (firstEl) firstEl.focus();
+  }
+}
+function saveVital(encNr) {
+  // Field id suffix -> msr_type_nr. Only fields the user actually filled in
+  // get sent — this is an "enter what you measured" form, not a form that
+  // requires every field every time.
+  var fieldMap = {
+    'temp':   1,  // Temperature
+    'sys':    2,  // Systolic BP
+    'pulse':  3,  // Pulse
+    'spo2':   4,  // SpO2
+    'weight': 5,  // Weight
+    'height': 6,  // Height
+    'rr':     7,  // Respiratory rate
+    'sugar':  8,  // Blood sugar
+    'dia':    9,  // Diastolic BP
+    'pain':   10, // Pain score
+  };
+
+  var vitals = [];
+  for (var suffix in fieldMap) {
+    var el = document.getElementById('vf-' + suffix + '-' + encNr);
+    if (el && el.value !== '' && el.value !== null) {
+      vitals.push({ msr_type_nr: fieldMap[suffix], value: el.value });
+    }
+  }
+
+  if (vitals.length === 0) {
+    alert('<%= locale==="fr"?"Veuillez saisir au moins une valeur.":"Please enter at least one value." %>');
+    return;
+  }
+
+  fetch('/encounters/' + encNr + '/vitals?_csrf=' + encodeURIComponent(_recCsrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vitals: vitals }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      window.location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown'));
+    }
+  });
+}
+
+// ── NOTES ─────────────────────────────────────────────────────────
+function saveNote(encNr) {
+  var ta = document.getElementById('note-text-' + encNr);
+  var text = ta ? ta.value.trim() : '';
+  if (!text) { alert('<%= locale==="fr"?"Veuillez saisir une note.":"Please enter a note." %>'); return; }
+
+  fetch('/encounters/' + encNr + '/notes?_csrf=' + encodeURIComponent(_recCsrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes: text }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      if (ta) ta.value = '';
+      window.location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown'));
+    }
+  });
+}
+
+// ── DIAGNOSES ─────────────────────────────────────────────────────
+var _dxCarts   = {};  // { encNr: [ {code, label, type} ] }
+var _dxTimers  = {};
+
+function dxSearch(encNr, q) {
+  clearTimeout(_dxTimers[encNr]);
+  var resultsEl = document.getElementById('dx-results-' + encNr);
+  if (!q || q.length < 2) {
+    if (resultsEl) resultsEl.style.display = 'none';
+    return;
+  }
+  _dxTimers[encNr] = setTimeout(function() {
+    fetch('/encounters/cim10/search?q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!resultsEl) return;
+        if (!data.ok || data.results.length === 0) {
+          resultsEl.innerHTML = '<div class="dx-result-item text-muted"><%= locale==="fr"?"Aucun resultat.":"No results." %></div>';
+          resultsEl.style.display = '';
+          return;
+        }
+        var html = '';
+        data.results.forEach(function(r) {
+          html += '<div class="dx-result-item" onclick="addDxToCart(' + encNr + ',' +
+            JSON.stringify(r).replace(/"/g,'&quot;') + ')">' +
+            '<code style="color:#dc3545;font-size:.72rem;">' + r.code + '</code>' +
+            ' <span>' + r.label + '</span>' +
+            '</div>';
+        });
+        resultsEl.innerHTML = html;
+        resultsEl.style.display = '';
+      });
+  }, 300);
+}
+
+function addDxToCart(encNr, item) {
+  if (!_dxCarts[encNr]) _dxCarts[encNr] = [];
+  var already = _dxCarts[encNr].some(function(d){ return d.code === item.code; });
+  if (already) return;
+  _dxCarts[encNr].push({ code: item.code, label: item.label, type: 'main' });
+  renderDxCart(encNr);
+  // Clear search
+  var inp = document.getElementById('dx-search-' + encNr);
+  var res = document.getElementById('dx-results-' + encNr);
+  if (inp) inp.value = '';
+  if (res) res.style.display = 'none';
+}
+
+function removeDxFromCart(encNr, code) {
+  if (!_dxCarts[encNr]) return;
+  _dxCarts[encNr] = _dxCarts[encNr].filter(function(d){ return d.code !== code; });
+  renderDxCart(encNr);
+}
+
+function renderDxCart(encNr) {
+  var cartEl   = document.getElementById('dx-cart-' + encNr);
+  var saveWrap = document.getElementById('dx-save-wrap-' + encNr);
+  if (!cartEl) return;
+  var cart = _dxCarts[encNr] || [];
+  if (cart.length === 0) {
+    cartEl.innerHTML = '';
+    if (saveWrap) saveWrap.style.display = 'none';
+    return;
+  }
+  if (saveWrap) saveWrap.style.display = '';
+  var html = '';
+  cart.forEach(function(d) {
+    html += '<span class="dx-cart-tag">' +
+      '<code style="color:#dc3545;">' + d.code + '</code>' +
+      ' ' + d.label +
+      '<button onclick="removeDxFromCart(' + encNr + ',\'' + d.code + '\')" ' +
+      'style="background:none;border:none;padding:0;cursor:pointer;font-size:.7rem;color:#6c757d;">' +
+      '<i class="fas fa-times"></i></button>' +
+      '</span>';
+  });
+  cartEl.innerHTML = html;
+}
+
+function saveDiagnoses(encNr) {
+  var cart = _dxCarts[encNr] || [];
+  if (cart.length === 0) return;
+
+  fetch('/encounters/' + encNr + '/diagnoses?_csrf=' + encodeURIComponent(_recCsrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ diagnoses: cart }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      _dxCarts[encNr] = [];
+      window.location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown'));
+    }
+  });
+}
+
+function deleteDx(dxNr, btn) {
+  if (!confirm('<%= locale==="fr"?"Supprimer ce diagnostic ?":"Remove this diagnosis?" %>')) return;
+  fetch('/encounters/diagnoses/' + dxNr + '?_csrf=' + encodeURIComponent(_recCsrf), {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      var badge = document.getElementById('dx-badge-' + dxNr);
+      if (badge) badge.remove();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown'));
+    }
+  });
+}
+
+// Close dx dropdown on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.dx-search-wrap')) {
+    document.querySelectorAll('.dx-results').forEach(function(el) {
+      el.style.display = 'none';
+    });
+  }
+});
+
+// ── Billing split pane
+// showBill removed — accordion handles billing display
+
+// ── Past encounter expand/collapse
+function togglePast(i) {
+  var det = document.getElementById('past-det-' + i);
+  var ico = document.getElementById('past-ico-' + i);
+  var hdr = document.getElementById('past-hdr-' + i);
+  if (det.style.display === 'block') {
+    det.style.display = 'none';
+    ico.className = 'fas fa-chevron-right text-muted';
+    ico.style.fontSize = '.6rem';
+    hdr.parentElement.classList.remove('open');
+  } else {
+    det.style.display = 'block';
+    ico.className = 'fas fa-chevron-down text-primary';
+    ico.style.fontSize = '.6rem';
+    hdr.parentElement.classList.add('open');
+  }
+}
+
+function toggleAllPast() {
+  document.querySelectorAll('[id^="past-det-"]').forEach(function(d){d.style.display='none';});
+  document.querySelectorAll('[id^="past-ico-"]').forEach(function(i){
+    i.className = 'fas fa-chevron-right text-muted'; i.style.fontSize='.6rem';
+  });
+}
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

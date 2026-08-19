@@ -1,0 +1,355 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card     { background: #fff !important; }
+  .lbl      { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req      { color:#dc3545; }
+  .item-row { background:#fff; border:1px solid #dee2e6; border-radius:.4rem;
+              padding:10px 12px; margin-bottom:8px; position:relative; }
+  .item-row .remove-btn { position:absolute; top:8px; right:8px; }
+  .low-badge { font-size:.60rem; }
+  .table-xs td, .table-xs th { padding:5px 8px; font-size:.80rem; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:1000px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse"><i class="fas fa-warehouse me-1"></i><%= locale==="fr"?"Entrepôt":"Warehouse" %></a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/purchase-orders"><%= locale==="fr"?"Commandes":"Orders" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Nouveau":"New" %></li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <i class="fas fa-exclamation-circle me-2"></i>
+      <% errors.forEach(function(e){ %><div><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <% if (prefillItems && prefillItems.length > 0) { %>
+    <div class="alert alert-warning py-2 mb-3 d-flex align-items-center gap-2" style="font-size:.82rem;">
+      <i class="fas fa-exclamation-triangle text-warning"></i>
+      <span>
+        <strong><%= prefillItems.length %></strong>
+        <%= locale==="fr"
+          ? " produit(s) en dessous du seuil de réapprovisionnement ont été ajoutés automatiquement."
+          : " product(s) below reorder level have been pre-filled. Review quantities and add more products as needed." %>
+      </span>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/warehouse/purchase-orders/new" id="poForm">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="row g-3">
+
+      <%/* ── LEFT: PO header ── */%>
+      <div class="col-lg-4">
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-file-invoice me-2 text-warning"></i>
+            <%= locale==="fr" ? "Informations commande" : "Order Details" %>
+          </div>
+          <div class="card-body">
+
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Fournisseur":"Supplier" %> <span class="req">*</span></label>
+              <select name="supplier_id" class="form-select form-select-sm" required>
+                <option value="">-- <%= locale==="fr"?"Choisir un fournisseur":"Select supplier" %> --</option>
+                <% suppliers.forEach(function(s) { %>
+                  <option value="<%= s.supplier_id %>"
+                    <%= (po && parseInt(po.supplier_id) === s.supplier_id) ? "selected" : "" %>>
+                    <%= s.name %>
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Livraison prévue":"Expected Delivery" %></label>
+              <input type="date" name="expected_delivery_date" class="form-control form-control-sm"
+                value="<%= po ? (po.expected_delivery_date || "") : "" %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="lbl"><%= locale==="fr"?"Notes internes":"Internal Notes" %></label>
+              <textarea name="notes" class="form-control form-control-sm" rows="3"
+                maxlength="1000"><%= po ? (po.notes || "") : "" %></textarea>
+            </div>
+
+            <%/* Running total */%>
+            <div class="border-top pt-2 mt-2">
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="lbl"><%= locale==="fr"?"Total estimé":"Estimated Total" %></span>
+                <span class="fw-bold text-primary" id="grandTotal">0 FCFA</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <%/* Add product */%>
+        <div class="card shadow-sm">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-plus-circle me-2 text-success"></i>
+            <%= locale==="fr"?"Ajouter un produit":"Add a Product" %>
+          </div>
+          <div class="card-body" style="font-size:.82rem;">
+            <label class="lbl"><%= locale==="fr"?"Produit":"Product" %></label>
+            <select id="addProductSel" class="form-select form-select-sm mb-2">
+              <option value="">-- <%= locale==="fr"?"Choisir":"Select" %> --</option>
+              <% allProducts.forEach(function(p) { %>
+                <option value="<%= p.product_id %>"
+                  data-name="<%= p.name %>"
+                  data-code="<%= p.item_code %>"
+                  data-unit="<%= p.unit_of_measure %>"
+                  data-qty="<%= p.reorder_quantity || 1 %>">
+                  <%= p.item_code %> — <%= p.name %>
+                </option>
+              <% }); %>
+            </select>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="lbl"><%= locale==="fr"?"Quantité":"Qty" %></label>
+                <input type="number" id="addQty" class="form-control form-control-sm" min="1" value="1">
+              </div>
+              <div class="col-6">
+                <label class="lbl"><%= locale==="fr"?"Prix unitaire (FCFA)":"Unit Price (FCFA)" %></label>
+                <input type="number" id="addPrice" class="form-control form-control-sm" min="0" step="0.01" value="0">
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-success w-100" id="addProductBtn">
+              <i class="fas fa-plus me-1"></i>
+              <%= locale==="fr"?"Ajouter à la commande":"Add to Order" %>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <%/* ── RIGHT: Line items ── */%>
+      <div class="col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-bold" style="font-size:.85rem;">
+              <i class="fas fa-list me-2 text-primary"></i>
+              <%= locale==="fr"?"Lignes de commande":"Order Lines" %>
+              <span class="badge bg-secondary ms-1" id="itemCount">0</span>
+            </span>
+          </div>
+          <div class="card-body p-3" id="itemsContainer">
+
+            <%/* Pre-filled low-stock items */%>
+            <% if (prefillItems && prefillItems.length > 0) { %>
+              <% prefillItems.forEach(function(p, idx) { %>
+                <div class="item-row" id="item-row-<%= p.product_id %>">
+                  <button type="button" class="btn btn-xs btn-outline-danger remove-btn"
+                    onclick="removeItem(<%= p.product_id %>, this)">
+                    <i class="fas fa-times"></i>
+                  </button>
+                  <input type="hidden" name="product_ids[]" value="<%= p.product_id %>">
+                  <div class="d-flex align-items-start gap-3 flex-wrap">
+                    <div style="flex:1; min-width:160px;">
+                      <div class="fw-bold" style="font-size:.82rem;"><%= p.name %></div>
+                      <div class="text-muted" style="font-size:.70rem;">
+                        <code><%= p.item_code %></code> &bull; <%= p.unit_of_measure %>
+                      </div>
+                      <% if (p.current_stock <= p.reorder_level) { %>
+                        <span class="badge bg-danger low-badge mt-1">
+                          <%= locale==="fr"?"Stock bas":"Low Stock" %>: <%= p.current_stock %> / <%= p.reorder_level %>
+                        </span>
+                      <% } %>
+                    </div>
+                    <div style="width:90px;">
+                      <div class="lbl"><%= locale==="fr"?"Qté":"Qty" %></div>
+                      <input type="number" name="quantities[]"
+                        class="form-control form-control-sm qty-input"
+                        data-pid="<%= p.product_id %>"
+                        value="<%= p.reorder_quantity > 0 ? p.reorder_quantity : 1 %>"
+                        min="1" required>
+                    </div>
+                    <div style="width:130px;">
+                      <div class="lbl"><%= locale==="fr"?"Prix unit. (FCFA)":"Unit Price (FCFA)" %></div>
+                      <input type="number" name="unit_prices[]"
+                        class="form-control form-control-sm price-input"
+                        data-pid="<%= p.product_id %>"
+                        value="<%= p.unit_price %>"
+                        min="0" step="0.01">
+                    </div>
+                    <div style="width:110px;">
+                      <div class="lbl">Total</div>
+                      <div class="fw-bold text-primary line-total" style="font-size:.82rem;padding-top:6px;"
+                        id="total-<%= p.product_id %>">
+                        <%= ((p.reorder_quantity > 0 ? p.reorder_quantity : 1) * p.unit_price).toLocaleString("fr-FR") %> FCFA
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              <% }); %>
+            <% } else { %>
+              <div class="text-center text-muted py-4" id="emptyMsg" style="font-size:.82rem;">
+                <i class="fas fa-inbox fa-2x mb-2 d-block opacity-25"></i>
+                <%= locale==="fr"?"Aucun produit ajouté.":"No products added yet." %>
+                <%= locale==="fr"?"Utilisez le panneau gauche.":"Use the panel on the left." %>
+              </div>
+            <% } %>
+
+          </div>
+
+          <%/* Submit buttons */%>
+          <div class="card-footer d-flex justify-content-between align-items-center gap-2">
+            <a href="/warehouse/purchase-orders" class="btn btn-outline-secondary btn-sm">
+              <%= locale==="fr"?"Annuler":"Cancel" %>
+            </a>
+            <button type="submit" class="btn btn-primary btn-sm" id="submitBtn">
+              <i class="fas fa-save me-1"></i>
+              <%= locale==="fr"?"Enregistrer comme brouillon":"Save as Draft" %>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </form>
+
+</div>
+</div>
+
+<script>
+var _locale = '<%= locale %>';
+var _csrf   = '<%= csrfToken %>';
+
+// Track product IDs already in the PO
+var usedIds = new Set([
+  <% if (prefillItems && prefillItems.length > 0) { %>
+    <% prefillItems.forEach(function(p,i){ %><%= p.product_id %><%= i < prefillItems.length-1 ? "," : "" %><% }); %>
+  <% } %>
+]);
+
+// Remove available options already in order
+function refreshDropdown() {
+  var sel = document.getElementById('addProductSel');
+  Array.from(sel.options).forEach(function(opt) {
+    opt.hidden = opt.value && usedIds.has(parseInt(opt.value));
+  });
+  updateCount();
+  updateTotal();
+}
+
+function updateCount() {
+  var rows = document.querySelectorAll('#itemsContainer .item-row');
+  document.getElementById('itemCount').textContent = rows.length;
+  var empty = document.getElementById('emptyMsg');
+  if (empty) empty.style.display = rows.length ? 'none' : '';
+}
+
+function updateTotal() {
+  var total = 0;
+  document.querySelectorAll('#itemsContainer .item-row').forEach(function(row) {
+    var pid   = row.id.replace('item-row-','');
+    var qty   = parseFloat(row.querySelector('.qty-input').value)   || 0;
+    var price = parseFloat(row.querySelector('.price-input').value) || 0;
+    var line  = qty * price;
+    total += line;
+    var el = document.getElementById('total-' + pid);
+    if (el) el.textContent = line.toLocaleString('fr-FR') + ' FCFA';
+  });
+  document.getElementById('grandTotal').textContent = total.toLocaleString('fr-FR') + ' FCFA';
+}
+
+function removeItem(pid, btn) {
+  var row = document.getElementById('item-row-' + pid);
+  if (row) row.remove();
+  usedIds.delete(pid);
+  refreshDropdown();
+}
+
+// Live recalc on qty/price change
+document.addEventListener('input', function(e) {
+  if (e.target.classList.contains('qty-input') || e.target.classList.contains('price-input')) {
+    updateTotal();
+  }
+});
+
+// Fetch preferred price when product selected
+document.getElementById('addProductSel').addEventListener('change', function() {
+  var pid = parseInt(this.value);
+  if (!pid) return;
+  var opt = this.options[this.selectedIndex];
+  document.getElementById('addQty').value = parseInt(opt.dataset.qty) || 1;
+  // Fetch price
+  fetch('/warehouse/purchase-orders/product/' + pid + '/price?_csrf=' + encodeURIComponent(_csrf))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (d.ok) document.getElementById('addPrice').value = d.unit_price || 0; })
+    .catch(function(){});
+});
+
+document.getElementById('addProductBtn').addEventListener('click', function() {
+  var sel   = document.getElementById('addProductSel');
+  var pid   = parseInt(sel.value);
+  if (!pid || usedIds.has(pid)) return;
+
+  var opt   = sel.options[sel.selectedIndex];
+  var name  = opt.dataset.name;
+  var code  = opt.dataset.code;
+  var unit  = opt.dataset.unit;
+  var qty   = parseInt(document.getElementById('addQty').value)   || 1;
+  var price = parseFloat(document.getElementById('addPrice').value) || 0;
+  var line  = qty * price;
+
+  var html =
+    '<div class="item-row" id="item-row-' + pid + '">' +
+      '<button type="button" class="btn btn-xs btn-outline-danger remove-btn" onclick="removeItem(' + pid + ', this)">' +
+        '<i class="fas fa-times"></i>' +
+      '</button>' +
+      '<input type="hidden" name="product_ids[]" value="' + pid + '">' +
+      '<div class="d-flex align-items-start gap-3 flex-wrap">' +
+        '<div style="flex:1;min-width:160px;">' +
+          '<div class="fw-bold" style="font-size:.82rem;">' + name + '</div>' +
+          '<div class="text-muted" style="font-size:.70rem;"><code>' + code + '</code> &bull; ' + unit + '</div>' +
+        '</div>' +
+        '<div style="width:90px;">' +
+          '<div class="lbl">' + (_locale==='fr'?'Qté':'Qty') + '</div>' +
+          '<input type="number" name="quantities[]" class="form-control form-control-sm qty-input" data-pid="' + pid + '" value="' + qty + '" min="1" required>' +
+        '</div>' +
+        '<div style="width:130px;">' +
+          '<div class="lbl">' + (_locale==='fr'?'Prix unit. (FCFA)':'Unit Price (FCFA)') + '</div>' +
+          '<input type="number" name="unit_prices[]" class="form-control form-control-sm price-input" data-pid="' + pid + '" value="' + price + '" min="0" step="0.01">' +
+        '</div>' +
+        '<div style="width:110px;">' +
+          '<div class="lbl">Total</div>' +
+          '<div class="fw-bold text-primary line-total" style="font-size:.82rem;padding-top:6px;" id="total-' + pid + '">' +
+            line.toLocaleString('fr-FR') + ' FCFA' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  // Remove empty message
+  var empty = document.getElementById('emptyMsg');
+  if (empty) empty.style.display = 'none';
+
+  document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+  usedIds.add(pid);
+  sel.value = '';
+  document.getElementById('addQty').value = 1;
+  document.getElementById('addPrice').value = 0;
+  refreshDropdown();
+});
+
+// Init
+refreshDropdown();
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

@@ -1,0 +1,105 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req { color:#dc3545; }
+</style>
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:600px;">
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse">Warehouse</a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/locations"><%= locale==="fr"?"Emplacements":"Locations" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= mode==="edit"?(locale==="fr"?"Modifier":"Edit"):(locale==="fr"?"Nouveau":"New") %></li>
+    </ol>
+  </nav>
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+  <div class="card shadow-sm">
+    <div class="card-header py-2 fw-bold" style="font-size:.88rem;">
+      <i class="fas fa-map-marker-alt me-2 text-secondary"></i><%= title %>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/warehouse/locations/<%= mode==="edit" ? loc.location_id+"/edit" : "new" %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <% if (mode === "edit" && loc && !loc.is_active) { %>
+          <input type="hidden" name="is_active" value="0">
+        <% } %>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr"?"Étiquette (code unique)":"Label (unique code)" %> <span class="req">*</span></label>
+            <input type="text" name="label" class="form-control form-control-sm text-uppercase"
+              value="<%= loc ? (loc.label||"") : "" %>" maxlength="30" required
+              placeholder="ex: COLD-1, DRY-A1, PHARM">
+            <div class="form-text" style="font-size:.70rem;"><%= locale==="fr"?"Code court imprimé sur les étiquettes.":"Short code printed on shelf labels." %></div>
+          </div>
+          <div class="col-md-3">
+            <label class="lbl"><%= locale==="fr"?"Allée":"Aisle" %> <span class="req">*</span></label>
+            <input type="text" name="aisle" class="form-control form-control-sm text-uppercase"
+              value="<%= loc ? (loc.aisle||"") : "" %>" maxlength="10" required
+              placeholder="ex: A, COLD">
+          </div>
+          <div class="col-md-3">
+            <label class="lbl"><%= locale==="fr"?"Rayon":"Shelf" %></label>
+            <input type="text" name="shelf" class="form-control form-control-sm text-uppercase"
+              value="<%= loc ? (loc.shelf||"") : "" %>" maxlength="10"
+              placeholder="ex: 1, 2A">
+          </div>
+          <div class="col-12">
+            <label class="lbl"><%= locale==="fr"?"Description":"Description" %></label>
+            <input type="text" name="description" class="form-control form-control-sm"
+              value="<%= loc ? (loc.description||"") : "" %>" maxlength="255"
+              placeholder="<%= locale==="fr"?"ex: Refrigere, Stupefiants, Reserve Pharmacie":"e.g. Refrigerated, Narcotics, Pharmacy Reserve" %>">
+          </div>
+          <% if (zones && zones.length > 0) { %>
+          <div class="col-12">
+            <label class="lbl"><%= locale==="fr"?"Zone parente (optionnel)":"Parent Zone (optional)" %></label>
+            <select name="parent_id" class="form-select form-select-sm">
+              <option value=""><%= locale==="fr"?"-- Aucune (emplacement racine)":"-- None (root location)" %></option>
+              <% zones.forEach(function(z) { %>
+                <option value="<%= z.location_id %>" <%= loc && loc.parent_id == z.location_id ? "selected" : "" %>>
+                  <%= z.label %><%= z.description ? " — " + z.description.substring(0,40) : "" %>
+                </option>
+              <% }); %>
+            </select>
+            <div class="form-text" style="font-size:.70rem;">
+              <%= locale==="fr"?"Groupez cet emplacement sous une zone (ex: SEC-A1 sous la zone SEC).":"Group this location under a zone (e.g. SEC-A1 under zone SEC)." %>
+            </div>
+          </div>
+          <% } %>
+          <% if (mode === "edit") { %>
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActive"
+                  <%= loc && loc.is_active ? "checked" : "" %>>
+                <label class="form-check-label" for="isActive" style="font-size:.82rem;">
+                  <%= locale==="fr"?"Emplacement actif":"Active location" %>
+                </label>
+              </div>
+            </div>
+          <% } %>
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-secondary btn-sm">
+            <i class="fas fa-save me-1"></i><%= mode==="edit"?(locale==="fr"?"Enregistrer":"Save"):(locale==="fr"?"Créer":"Create") %>
+          </button>
+          <a href="/warehouse/locations" class="btn btn-outline-secondary btn-sm"><%= locale==="fr"?"Annuler":"Cancel" %></a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,173 @@
+
+<%- include("../partials/header", { title: t.facilities.createTitle }) %>
+<%- include("../partials/navbar") %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+
+  .form-wrapper { max-width: 860px; margin: 0 auto; }
+  .form-label   { font-size: 0.75rem; font-weight: 600; margin-bottom: 2px; }
+  .form-control, .form-select { font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+  .section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; color: #6c757d; border-bottom: 1px solid #dee2e6;
+    padding-bottom: 3px; margin-bottom: 8px; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="card shadow-sm form-wrapper">
+    <div class="card-header bg-primary text-white py-2">
+      <h6 class="mb-0"><i class="fas fa-hospital me-2"></i><%= t.facilities.createTitle %></h6>
+    </div>
+    <div class="card-body p-3">
+
+      <% if (success) { %>
+        <div class="alert alert-success py-2 mb-2" style="font-size:0.8rem;"><%= t.facilities.successCreate %></div>
+      <% } %>
+      <% if (errors && errors.length > 0) { %>
+        <div class="alert alert-danger py-2 mb-2" style="font-size:0.8rem;">
+          <ul class="mb-0"><% errors.forEach(e => { %><li><%= e %></li><% }) %></ul>
+        </div>
+      <% } %>
+
+      <form action="/admin/facilities/create" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+        <%/* ── Identity ── */%>
+        <p class="section-title"><i class="fas fa-info-circle me-1"></i><%= locale === "fr" ? "Identification" : "Identification" %></p>
+        <div class="row g-2 mb-3">
+          <div class="col-md-5">
+            <label class="form-label"><%= t.facilities.name %> <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control form-control-sm"
+              value="<%= typeof name !== "undefined" ? name : "" %>" required>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label"><%= t.facilities.code %> <span class="text-danger">*</span></label>
+            <input type="text" name="code" class="form-control form-control-sm"
+              value="<%= typeof code !== "undefined" ? code : "" %>" maxlength="10" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label"><%= t.facilities.type %> <span class="text-danger">*</span></label>
+            <select name="type" class="form-select form-select-sm" required>
+              <option value=""><%= t.facilities.selectType %></option>
+              <option value="Hospital"      <%= typeof type !== "undefined" && type === "Hospital"      ? "selected" : "" %>><%= t.facilities.hospital %></option>
+              <option value="Health Center" <%= typeof type !== "undefined" && type === "Health Center" ? "selected" : "" %>><%= t.facilities.healthCenter %></option>
+              <option value="Clinic"        <%= typeof type !== "undefined" && type === "Clinic"        ? "selected" : "" %>><%= t.facilities.clinic %></option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label"><%= t.facilities.facilityType %></label>
+            <select id="facility-type" name="facility_type" class="form-select form-select-sm">
+              <option value="main"      <%= typeof facility_type !== "undefined" && facility_type === "main"      ? "selected" : "" %>><%= t.facilities.main %></option>
+              <option value="satellite" <%= typeof facility_type !== "undefined" && facility_type === "satellite" ? "selected" : "" %>><%= t.facilities.satellite %></option>
+            </select>
+          </div>
+        </div>
+
+        <%/* Parent facility — only for satellite */%>
+        <div class="row g-2 mb-3" id="parent-facility-field" style="display:none;">
+          <div class="col-md-6">
+            <label class="form-label"><%= t.facilities.parent %> <span class="text-danger">*</span></label>
+            <select name="parent_id" class="form-select form-select-sm">
+              <option value=""><%= t.facilities.selectParent %></option>
+              <% if (typeof mainFacilities !== "undefined") { mainFacilities.forEach(f => { %>
+                <option value="<%= f.id %>" <%= typeof parent_id !== "undefined" && String(parent_id) === String(f.id) ? "selected" : "" %>><%= f.name %></option>
+              <% }) } %>
+            </select>
+          </div>
+        </div>
+
+        <%/* ── Staff ── */%>
+        <p class="section-title"><i class="fas fa-users me-1"></i><%= locale === "fr" ? "Responsables" : "Responsible Staff" %></p>
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <label class="form-label"><%= t.facilities.director %></label>
+            <select name="director_id" class="form-select form-select-sm">
+              <option value=""><%= t.facilities.selectStaff %></option>
+              <% if (typeof staff !== "undefined") { staff.forEach(s => { %>
+                <option value="<%= s.nr %>" <%= typeof director_id !== "undefined" && String(director_id) === String(s.nr) ? "selected" : "" %>>
+                  <%= s.person ? s.person.name_first + " " + s.person.name_last : (s.job_function_title || s.nr) %>
+                </option>
+              <% }) } %>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label"><%= t.facilities.headNurse %></label>
+            <select name="head_nurse_id" class="form-select form-select-sm">
+              <option value=""><%= t.facilities.selectStaff %></option>
+              <% if (typeof staff !== "undefined") { staff.forEach(s => { %>
+                <option value="<%= s.nr %>" <%= typeof head_nurse_id !== "undefined" && String(head_nurse_id) === String(s.nr) ? "selected" : "" %>>
+                  <%= s.person ? s.person.name_first + " " + s.person.name_last : (s.job_function_title || s.nr) %>
+                </option>
+              <% }) } %>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label"><%= t.facilities.financeOfficer %></label>
+            <select name="finance_officer_id" class="form-select form-select-sm">
+              <option value=""><%= t.facilities.selectStaff %></option>
+              <% if (typeof staff !== "undefined") { staff.forEach(s => { %>
+                <option value="<%= s.nr %>" <%= typeof finance_officer_id !== "undefined" && String(finance_officer_id) === String(s.nr) ? "selected" : "" %>>
+                  <%= s.person ? s.person.name_first + " " + s.person.name_last : (s.job_function_title || s.nr) %>
+                </option>
+              <% }) } %>
+            </select>
+          </div>
+        </div>
+
+        <%/* ── Address ── */%>
+        <p class="section-title"><i class="fas fa-map-marker-alt me-1"></i><%= locale === "fr" ? "Localisation" : "Location" %></p>
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <label class="form-label"><%= t.facilities.address %></label>
+            <input type="text" name="address" class="form-control form-control-sm"
+              value="<%= typeof address !== "undefined" ? address : "" %>">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label"><%= t.facilities.city %></label>
+            <input type="text" name="city" class="form-control form-control-sm"
+              value="<%= typeof city !== "undefined" ? city : "" %>">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label"><%= t.facilities.region %></label>
+            <input type="text" name="region" class="form-control form-control-sm"
+              value="<%= typeof region !== "undefined" ? region : "" %>">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label"><%= t.facilities.country %></label>
+            <input type="text" name="country" class="form-control form-control-sm"
+              value="<%= typeof country !== "undefined" ? country : "Cameroon" %>">
+          </div>
+        </div>
+
+        <div class="text-end mt-2 pt-2 border-top">
+          <a href="/" class="btn btn-sm btn-outline-secondary me-1"><%= t.common.close %></a>
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="fas fa-save me-1"></i><%= t.facilities.submit %>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const typeSelect   = document.getElementById('facility-type');
+  const parentField  = document.getElementById('parent-facility-field');
+  const parentSelect = parentField.querySelector('select[name="parent_id"]');
+  const toggle = () => {
+    const isSat = typeSelect.value === 'satellite';
+    parentField.style.display = isSat ? 'flex' : 'none';
+    isSat ? parentSelect.setAttribute('required','required') : parentSelect.removeAttribute('required');
+    if (!isSat) parentSelect.value = '';
+  };
+  typeSelect.addEventListener('change', toggle);
+  toggle();
+});
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+

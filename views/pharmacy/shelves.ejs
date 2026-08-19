@@ -1,0 +1,93 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .shelf-chip { display:inline-flex; align-items:center; gap:6px; background:#f0f4ff; border:1px solid #dbe4ff;
+    border-radius:20px; padding:4px 6px 4px 12px; font-size:.82rem; }
+  .shelf-chip button { border:none; background:none; color:#dc3545; cursor:pointer; padding:2px 6px; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <h5 class="mb-3 fw-bold">
+    <i class="fas fa-th-large me-2" style="color:#fd7e14;"></i>
+    <%= locale==="fr" ? "Rayons de pharmacie" : "Pharmacy Shelves" %>
+  </h5>
+  <p class="text-muted" style="font-size:.85rem;">
+    <%= locale==="fr"
+      ? "Liste des rayons/etageres pour votre unite de pharmacie."
+      : "Aisle/shelf reference list for your pharmacy unit." %>
+  </p>
+
+  <div class="alert alert-danger d-none" id="errorBox" style="font-size:.85rem;"></div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <form id="addShelfForm" class="d-flex gap-2">
+        <input type="text" name="label" class="form-control form-control-sm" style="max-width:260px;"
+          placeholder="<%= locale==='fr' ? 'Ex: Rayon A, Frigo 1' : 'e.g. Aisle A, Fridge 1' %>" required>
+        <button type="submit" class="btn btn-sm" style="background:#1a9e72;color:#fff;">
+          <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Ajouter":"Add" %>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div id="shelfList" class="d-flex flex-wrap gap-2">
+        <% shelves.forEach(function(s) { %>
+          <span class="shelf-chip" data-id="<%= s.id %>">
+            <%= s.label %>
+            <button onclick="deleteShelf(<%= s.id %>, this)"><i class="fas fa-times"></i></button>
+          </span>
+        <% }); %>
+        <% if (shelves.length === 0) { %>
+          <span class="text-muted" style="font-size:.85rem;">
+            <%= locale==="fr" ? "Aucun rayon configure." : "No shelves configured yet." %>
+          </span>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const _csrf = <%- JSON.stringify(csrfToken) %>;
+
+document.getElementById('addShelfForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const errorBox = document.getElementById('errorBox');
+  errorBox.classList.add('d-none');
+  const formData = new URLSearchParams(new FormData(this));
+  fetch('/pharmacy/shelves?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formData,
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        window.location.reload();
+      } else {
+        errorBox.textContent = data.error || 'Error';
+        errorBox.classList.remove('d-none');
+      }
+    });
+});
+
+function deleteShelf(id, btn) {
+  if (!confirm(<%- JSON.stringify(locale === "fr" ? "Supprimer ce rayon ?" : "Delete this shelf?") %>)) return;
+  fetch('/pharmacy/shelves/' + id + '/delete?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) btn.closest('.shelf-chip').remove();
+    });
+}
+</script>
+
+<%- include("../partials/footer") %>

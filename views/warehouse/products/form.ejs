@@ -1,0 +1,247 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card     { background: #fff !important; }
+  .lbl      { font-size: .68rem; font-weight: 700; text-transform: uppercase;
+              letter-spacing: .06em; color: #6c757d; }
+  .req      { color: #dc3545; }
+  .supplier-row { font-size: .80rem; padding: 8px 0; border-bottom: 1px solid #f5f5f5; }
+  .supplier-row:last-child { border-bottom: none; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:860px;">
+
+  <%/* Breadcrumb */%>
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/warehouse"><i class="fas fa-warehouse me-1"></i><%= locale==="fr"?"Entrepôt":"Warehouse" %></a></li>
+      <li class="breadcrumb-item"><a href="/warehouse/products"><%= locale==="fr"?"Catalogue":"Catalogue" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= product ? (locale==="fr"?"Modifier":"Edit") : (locale==="fr"?"Nouveau":"New") %></li>
+    </ol>
+  </nav>
+
+  <%/* Error messages */%>
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <i class="fas fa-exclamation-circle me-2"></i>
+      <% errors.forEach(function(e){ %><div><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <form method="POST"
+    action="<%= product && product.product_id ? "/warehouse/products/" + product.product_id + "/edit" : "/warehouse/products/new" %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="row g-3">
+
+      <%/* ── LEFT: Product details ── */%>
+      <div class="col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 fw-bold" style="font-size:.88rem;">
+            <i class="fas fa-box me-2 text-primary"></i>
+            <%= locale==="fr" ? "Informations produit" : "Product Information" %>
+          </div>
+          <div class="card-body">
+
+            <div class="row g-3">
+              <div class="col-md-5">
+                <label class="lbl"><%= locale==="fr" ? "Code interne" : "Internal Code" %> <span class="req">*</span></label>
+                <input type="text" name="item_code" class="form-control form-control-sm"
+                  value="<%= product ? (product.item_code || "") : "" %>"
+                  placeholder="e.g. AMOX-500-100"
+                  <%= product && product.product_id ? "readonly" : "" %>
+                  required maxlength="50">
+                <% if (!product || !product.product_id) { %>
+                  <div class="text-muted" style="font-size:.68rem;margin-top:2px;">
+                    <%= locale==="fr" ? "Unique, non modifiable après création" : "Unique, cannot be changed after creation" %>
+                  </div>
+                <% } %>
+              </div>
+              <div class="col-md-7">
+                <label class="lbl"><%= locale==="fr" ? "Nom du produit" : "Product Name" %> <span class="req">*</span></label>
+                <input type="text" name="name" class="form-control form-control-sm"
+                  value="<%= product ? (product.name || "") : "" %>"
+                  placeholder="<%= locale==="fr" ? "ex. Amoxicilline 500mg (boîte de 100)" : "e.g. Amoxicillin 500mg (box of 100)" %>"
+                  required maxlength="255">
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <label class="lbl"><%= locale==="fr" ? "Nom générique / DCI" : "Generic Name / INN" %></label>
+              <input type="text" name="generic_name" class="form-control form-control-sm"
+                value="<%= product ? (product.generic_name || "") : "" %>"
+                placeholder="<%= locale==="fr" ? "ex. Amoxicilline" : "e.g. Amoxicillin" %>"
+                maxlength="255">
+            </div>
+
+            <div class="row g-3 mt-0">
+              <div class="col-md-6">
+                <label class="lbl"><%= locale==="fr" ? "Catégorie" : "Category" %> <span class="req">*</span></label>
+                <select name="category_id" class="form-select form-select-sm" required>
+                  <option value="">-- <%= locale==="fr" ? "Choisir une catégorie" : "Select category" %> --</option>
+                  <%
+                    var topCats = categories.filter(function(c){ return !c.parent_id; });
+                    var subCats = categories.filter(function(c){ return c.parent_id; });
+                    topCats.forEach(function(top) {
+                      var subs = subCats.filter(function(s){ return s.parent_id === top.category_id; });
+                  %>
+                    <optgroup label="<%= top.name %>">
+                      <% subs.forEach(function(sub) { %>
+                        <option value="<%= sub.category_id %>"
+                          <%= (product && parseInt(product.category_id)===sub.category_id) ? "selected" : "" %>>
+                          <%= sub.name %>
+                        </option>
+                      <% }); %>
+                      <option value="<%= top.category_id %>"
+                        <%= (product && parseInt(product.category_id)===top.category_id) ? "selected" : "" %>
+                        style="font-style:italic;">
+                        <%= locale==="fr" ? "— Général (" : "— General (" %><%= top.name %>)
+                      </option>
+                    </optgroup>
+                  <% }); %>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="lbl"><%= locale==="fr" ? "Unité de mesure" : "Unit of Measure" %> <span class="req">*</span></label>
+                <input type="text" name="unit_of_measure" class="form-control form-control-sm"
+                  value="<%= product ? (product.unit_of_measure || "") : "" %>"
+                  placeholder="<%= locale==="fr" ? "ex. Boîte de 100 comprimés" : "e.g. Box of 100 tablets" %>"
+                  required maxlength="50">
+              </div>
+            </div>
+
+            <div class="row g-3 mt-0">
+              <div class="col-md-6">
+                <label class="lbl"><%= locale==="fr" ? "Seuil de réappro. (unités)" : "Reorder Level (units)" %></label>
+                <input type="number" name="reorder_level" class="form-control form-control-sm"
+                  value="<%= product ? (product.reorder_level || 0) : 0 %>"
+                  min="0" step="1">
+                <div class="text-muted" style="font-size:.68rem;margin-top:2px;">
+                  <%= locale==="fr" ? "Déclenche l\"alerte stock bas" : "Triggers the low stock alert" %>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="lbl"><%= locale==="fr" ? "Qté suggestion commande" : "Suggested Order Qty" %></label>
+                <input type="number" name="reorder_quantity" class="form-control form-control-sm"
+                  value="<%= product ? (product.reorder_quantity || 0) : 0 %>"
+                  min="0" step="1">
+                <div class="text-muted" style="font-size:.68rem;margin-top:2px;">
+                  <%= locale==="fr" ? "Pré-remplit le bon de commande automatique" : "Pre-fills the auto-suggested purchase order" %>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <%/* ── RIGHT: Supplier link (new product only) ── */%>
+      <div class="col-lg-4">
+
+        <% if (!product || !product.product_id) { %>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-truck me-2 text-success"></i>
+            <%= locale==="fr" ? "Fournisseur initial" : "Initial Supplier" %>
+          </div>
+          <div class="card-body" style="font-size:.82rem;">
+            <p class="text-muted" style="font-size:.74rem;">
+              <%= locale==="fr"
+                ? "Optionnel — vous pouvez ajouter des fournisseurs plus tard."
+                : "Optional — you can add suppliers later." %>
+            </p>
+            <label class="lbl"><%= locale==="fr" ? "Fournisseur" : "Supplier" %></label>
+            <select name="supplier_id" class="form-select form-select-sm mb-2">
+              <option value="">-- <%= locale==="fr" ? "Aucun" : "None" %> --</option>
+              <% suppliers.forEach(function(s) { %>
+                <option value="<%= s.supplier_id %>"><%= s.name %></option>
+              <% }); %>
+            </select>
+
+            <label class="lbl"><%= locale==="fr" ? "Prix unitaire (FCFA)" : "Unit Price (FCFA)" %></label>
+            <input type="number" name="unit_price" class="form-control form-control-sm mb-2"
+              min="0" step="0.01" placeholder="0.00">
+
+            <label class="lbl"><%= locale==="fr" ? "Délai livraison (jours)" : "Lead Time (days)" %></label>
+            <input type="number" name="lead_time_days" class="form-control form-control-sm"
+              min="0" step="1" placeholder="7">
+          </div>
+        </div>
+        <% } %>
+
+        <%/* Existing product — show linked suppliers */%>
+        <% if (product && product.product_id && product.productSuppliers && product.productSuppliers.length > 0) { %>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-truck me-2 text-success"></i>
+            <%= locale==="fr" ? "Fournisseurs liés" : "Linked Suppliers" %>
+            <span class="badge bg-secondary ms-1"><%= product.productSuppliers.length %></span>
+          </div>
+          <div class="card-body py-2 px-3">
+            <% product.productSuppliers.forEach(function(ps) { %>
+              <div class="supplier-row">
+                <div class="fw-bold"><%= ps.supplier ? ps.supplier.name : "#" + ps.supplier_id %></div>
+                <div class="text-muted" style="font-size:.72rem;">
+                  <%= (ps.unit_price || 0).toLocaleString("fr-FR") %> FCFA
+                  <% if (ps.lead_time_days) { %> &bull; <%= ps.lead_time_days %> <%= locale==="fr"?"j":"d" %><% } %>
+                  <% if (ps.is_preferred) { %>
+                    <span class="badge bg-primary ms-1" style="font-size:.55rem;">
+                      <%= locale==="fr" ? "Préféré" : "Preferred" %>
+                    </span>
+                  <% } %>
+                </div>
+              </div>
+            <% }); %>
+            <div class="mt-2">
+              <a href="/warehouse/suppliers" class="text-primary" style="font-size:.72rem;">
+                <%= locale==="fr" ? "+ Gérer les fournisseurs" : "+ Manage suppliers" %> →
+              </a>
+            </div>
+          </div>
+        </div>
+        <% } %>
+
+        <%/* Info box */%>
+        <div class="card shadow-sm" style="border-left:4px solid #0d6efd;">
+          <div class="card-body py-2 px-3" style="font-size:.76rem;">
+            <div class="fw-bold text-primary mb-1">
+              <i class="fas fa-info-circle me-1"></i>
+              <%= locale==="fr" ? "Note" : "Note" %>
+            </div>
+            <%= locale==="fr"
+              ? "La création d\"un produit l\"ajoute automatiquement au catalogue de la pharmacie (care_drugsandservices) avec le code MED ou SUP selon la catégorie."
+              : "Creating a product automatically adds it to the pharmacy dispensing catalogue (care_drugsandservices) with item code MED or SUP based on the category." %>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <%/* ── Form buttons ── */%>
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-primary btn-sm">
+        <i class="fas fa-save me-1"></i>
+        <%= product && product.product_id
+          ? (locale==="fr" ? "Enregistrer les modifications" : "Save Changes")
+          : (locale==="fr" ? "Créer le produit" : "Create Product") %>
+      </button>
+      <a href="/warehouse/products" class="btn btn-outline-secondary btn-sm">
+        <%= locale==="fr" ? "Annuler" : "Cancel" %>
+      </a>
+    </div>
+
+  </form>
+</div>
+</div>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

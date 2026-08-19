@@ -1,0 +1,194 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "billing", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card       { background: #fff !important; }
+  .lbl        { font-size:.68rem; font-weight:700; text-transform:uppercase;
+                letter-spacing:.06em; color:#6c757d; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.80rem; }
+  .dept-header { background:#e9ecef; font-size:.75rem; font-weight:700;
+                 text-transform:uppercase; letter-spacing:.05em; color:#495057; }
+  .subtotal-row { background:#f8f9fa; font-weight:600; }
+  @media print {
+    .no-print { display:none !important; }
+    .card     { box-shadow:none !important; border:1px solid #dee2e6 !important; }
+  }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <%/* Breadcrumb */%>
+  <nav style="font-size:.78rem;" class="mb-2 no-print">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item">
+        <a href="/billing/worklist">
+          <i class="fas fa-file-invoice-dollar me-1"></i>
+          <%= locale==="fr"?"Facturation":"Billing" %>
+        </a>
+      </li>
+      <li class="breadcrumb-item active fw-bold">
+        <%= locale==="fr"?"Rapport des ventes":"Sales Report" %>
+      </li>
+    </ol>
+  </nav>
+
+  <%/* Filter bar */%>
+  <div class="card shadow-sm mb-3 no-print">
+    <div class="card-body py-2">
+      <form method="GET" action="/billing/sales-report"
+            class="d-flex align-items-end gap-3 flex-wrap">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div>
+          <label class="lbl d-block mb-1">
+            <%= locale==="fr"?"Du":"From" %>
+          </label>
+          <input type="date" name="from" class="form-control form-control-sm"
+            value="<%= fromStr %>" style="width:150px;">
+        </div>
+        <div>
+          <label class="lbl d-block mb-1">
+            <%= locale==="fr"?"Au":"To" %>
+          </label>
+          <input type="date" name="to" class="form-control form-control-sm"
+            value="<%= toStr %>" style="width:150px;">
+        </div>
+        <div>
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="fas fa-search me-1"></i>
+            <%= locale==="fr"?"Actualiser":"Refresh" %>
+          </button>
+        </div>
+        <div class="ms-auto">
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+            onclick="window.print()">
+            <i class="fas fa-print me-1"></i>
+            <%= locale==="fr"?"Imprimer":"Print" %>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <%/* Report header */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+      <div>
+        <span class="fw-bold" style="font-size:.88rem;">
+          <i class="fas fa-chart-bar me-2 text-success"></i>
+          <%= locale==="fr"?"Rapport des ventes":"Sales Report" %>
+        </span>
+        <% if (isCashierOnly) { %>
+          <span class="badge bg-secondary ms-2" style="font-size:.65rem;">
+            <%= cashierName %>
+          </span>
+        <% } %>
+      </div>
+      <div style="font-size:.75rem;" class="text-muted">
+        <%= fromStr === toStr
+          ? (locale==="fr" ? "Date : " : "Date: ") + fromStr
+          : (locale==="fr" ? "Période : " : "Period: ") + fromStr + " → " + toStr %>
+      </div>
+    </div>
+
+    <div class="card-body p-0">
+      <% var deptKeys = Object.keys(byDept); %>
+      <% if (deptKeys.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-chart-bar fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr"?"Aucune vente pour cette période.":"No sales for this period." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th class="ps-3">
+                  <%= locale==="fr"?"N° Article":"Item No." %>
+                </th>
+                <th><%= locale==="fr"?"Description":"Description" %></th>
+                <th class="text-center">
+                  <%= locale==="fr"?"Qte":"Count" %>
+                </th>
+                <th class="text-end pe-3">
+                  <%= locale==="fr"?"Total encaisse":"Total Collected" %>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <% deptKeys.forEach(function(deptKey) {
+                   var dept = byDept[deptKey]; %>
+                <%/* Department header row */%>
+                <tr class="dept-header">
+                  <td colspan="4" class="ps-3 py-2">
+                    <i class="fas fa-building me-2"></i>
+                    <%= dept.name %>
+                  </td>
+                </tr>
+                <%/* Items for this department */%>
+                <% dept.items.forEach(function(item) { %>
+                  <tr>
+                    <td class="ps-3">
+                      <code style="font-size:.72rem;">
+                        <%= item.item_number || "-" %>
+                      </code>
+                    </td>
+                    <td style="font-size:.80rem;">
+                      <%= item.item_description || item.article || "-" %>
+                    </td>
+                    <td class="text-center fw-bold">
+                      <%= item.item_count %>
+                    </td>
+                    <td class="text-end pe-3 fw-bold" style="color:#198754;">
+                      <%= Math.round(Number(item.total_amount)||0).toLocaleString("fr-FR") %> FCFA
+                    </td>
+                  </tr>
+                <% }); %>
+                <%/* Department subtotal */%>
+                <tr class="subtotal-row">
+                  <td colspan="2" class="text-end ps-3 text-muted" style="font-size:.75rem;">
+                    <%= locale==="fr"?"Sous-total":"Subtotal" %>
+                    <%= dept.name %>
+                  </td>
+                  <td class="text-center fw-bold"><%= dept.subcount %></td>
+                  <td class="text-end pe-3 fw-bold text-primary">
+                    <%= Math.round(dept.subtotal).toLocaleString("fr-FR") %> FCFA
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+            <tfoot class="table-dark">
+              <tr>
+                <td colspan="2" class="text-end ps-3 fw-bold py-2">
+                  TOTAL
+                </td>
+                <td class="text-center fw-bold"><%= grandCount %></td>
+                <td class="text-end pe-3 fw-bold" style="font-size:1rem;">
+                  <%= Math.round(grandTotal).toLocaleString("fr-FR") %> FCFA
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+

@@ -1,0 +1,134 @@
+
+<%/* partials/incoming_referrals_table.ejs
+     Reusable embedded incoming-referrals table for the clinical (Doctor/
+     Nurse) dashboard -- same shape as pending_dispense_table.ejs for
+     pharmacy. Shows every non-terminal referral (sent/accepted/seen),
+     not just newly-sent ones -- an accepted referral still needs to be
+     marked seen, and a seen one still needs to be marked completed;
+     showing only 'sent' would make a referral disappear the moment it's
+     accepted, with no way left to advance it. Expects:
+     incomingReferralsList, locale, csrfToken.
+*/%>
+<div class="card shadow-sm">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center">
+    <span class="fw-bold" style="font-size:.85rem;">
+      <i class="fas fa-share-square me-2" style="color:#0dcaf0;"></i>
+      <%= locale==="fr" ? "Referrals entrants" : "Incoming Referrals" %>
+      <span class="badge" style="background:#0dcaf0;font-size:.65rem;">
+        <%= incomingReferralsList.length %>
+      </span>
+    </span>
+    <a href="/referrals/outgoing" class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;">
+      <%= locale==="fr" ? "Referrals envoyes" : "Sent Referrals" %>
+    </a>
+  </div>
+  <div class="card-body p-0">
+    <% if (!incomingReferralsList || incomingReferralsList.length === 0) { %>
+      <div class="text-center text-muted py-4" style="font-size:.82rem;">
+        <i class="fas fa-check-circle fa-2x mb-2 d-block text-success opacity-50"></i>
+        <%= locale==="fr" ? "Aucun referral en attente." : "No pending referrals." %>
+      </div>
+    <% } else { %>
+      <div class="table-responsive" style="max-height:380px;overflow-y:auto;">
+        <table class="table table-hover align-middle mb-0" style="font-size:.80rem;">
+          <thead class="table-light" style="position:sticky;top:0;">
+            <tr>
+              <th class="ps-3"><%= locale==="fr" ? "Patient" : "Patient" %></th>
+              <th><%= locale==="fr" ? "De" : "From" %></th>
+              <th><%= locale==="fr" ? "Urgence" : "Urgency" %></th>
+              <th><%= locale==="fr" ? "Raison" : "Reason" %></th>
+              <th><%= locale==="fr" ? "Statut" : "Status" %></th>
+              <th class="text-center"><%= locale==="fr" ? "Actions" : "Actions" %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% incomingReferralsList.forEach(function(r) { %>
+              <tr id="referral-row-<%= r.id %>">
+                <td class="ps-3">
+                  <%= r.patient ? (r.patient.name_first + " " + r.patient.name_last) : "—" %>
+                </td>
+                <td><%= r.fromFacility ? r.fromFacility.name : "—" %></td>
+                <td>
+                  <% if (r.urgency === "emergency") { %>
+                    <span class="badge bg-danger"><%= locale==="fr" ? "Urgence vitale" : "Emergency" %></span>
+                  <% } else if (r.urgency === "urgent") { %>
+                    <span class="badge bg-warning text-dark"><%= locale==="fr" ? "Urgent" : "Urgent" %></span>
+                  <% } else { %>
+                    <span class="badge bg-secondary"><%= locale==="fr" ? "Routine" : "Routine" %></span>
+                  <% } %>
+                </td>
+                <td style="max-width:220px;"><%= r.reason %></td>
+                <td>
+                  <% if (r.status === "sent") { %>
+                    <span class="badge bg-info text-dark"><%= locale==="fr" ? "Nouveau" : "New" %></span>
+                  <% } else if (r.status === "accepted") { %>
+                    <span class="badge bg-primary"><%= locale==="fr" ? "Accepte" : "Accepted" %></span>
+                  <% } else if (r.status === "seen") { %>
+                    <span class="badge bg-success"><%= locale==="fr" ? "Vu" : "Seen" %></span>
+                  <% } %>
+                </td>
+                <td class="text-center">
+                  <% if (r.status === "sent") { %>
+                    <button class="btn btn-sm btn-outline-success" style="font-size:.68rem;"
+                      onclick="respondToReferral(<%= r.id %>, 'accept')">
+                      <%= locale==="fr" ? "Accepter" : "Accept" %>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" style="font-size:.68rem;"
+                      onclick="respondToReferral(<%= r.id %>, 'decline')">
+                      <%= locale==="fr" ? "Refuser" : "Decline" %>
+                    </button>
+                  <% } else if (r.status === "accepted") { %>
+                    <button class="btn btn-sm btn-outline-primary" style="font-size:.68rem;"
+                      onclick="respondToReferral(<%= r.id %>, 'mark-seen')">
+                      <%= locale==="fr" ? "Marquer vu" : "Mark Seen" %>
+                    </button>
+                  <% } else if (r.status === "seen") { %>
+                    <button class="btn btn-sm btn-outline-success" style="font-size:.68rem;"
+                      onclick="respondToReferral(<%= r.id %>, 'complete')">
+                      <%= locale==="fr" ? "Marquer termine" : "Mark Completed" %>
+                    </button>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>
+<script>
+  function respondToReferral(id, action) {
+    var reason = null;
+    var notes = null;
+    if (action === "decline") {
+      reason = prompt("<%= locale==='fr' ? 'Raison du refus :' : 'Reason for declining:' %>");
+      if (!reason || !reason.trim()) return;
+    } else if (action === "mark-seen" || action === "complete") {
+      // Optional -- confirmed with the project owner: referral and
+      // admission stay fully separate, but the receiving doctor still
+      // needs somewhere to record clinical/report notes about the
+      // referral itself. Cancelling the prompt still proceeds (notes
+      // are optional, not required, unlike decline's reason).
+      notes = prompt("<%= locale==='fr'
+        ? 'Notes cliniques (optionnel) :'
+        : 'Clinical notes (optional):' %>");
+    }
+    fetch("/referrals/" + id + "/" + action, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CSRF-Token": "<%= csrfToken %>" },
+      body: JSON.stringify({ reason: reason, notes: notes }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          window.location.reload();
+        } else {
+          alert(data.error || "<%= locale==='fr' ? 'Erreur inconnue.' : 'Unknown error.' %>");
+        }
+      })
+      .catch(function() {
+        alert("<%= locale==='fr' ? 'Erreur reseau.' : 'Network error.' %>");
+      });
+  }
+</script>

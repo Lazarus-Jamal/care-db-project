@@ -1,0 +1,36 @@
+
+<%# views/partials/documentHeader.ejs
+   Reusable branded header for printable/official documents (receipts,
+   purchase orders, RFQs, count sheets, reports). Expects a local variable
+   `facility` -- the full care_facilities row (or null/undefined if the
+   session has no specific facility, e.g. an admin in "all facilities"
+   mode). Falls back gracefully either way; never assumes facility exists.
+
+   Include this partial passing facility as a local, adjusting the
+   relative path to partials/ depending on how deep the including view
+   sits (e.g. from a sub-sub-folder like warehouse/reports/print/, the
+   path needs an extra "../").
+%>
+<div class="doc-header" style="display:flex; align-items:center; gap:14px; padding-bottom:12px; margin-bottom:14px; border-bottom:2px solid #0A50A0;">
+  <img src="/images/icons/icon-192.png" alt="Oseel Care"
+       style="width:56px; height:56px; object-fit:contain; flex-shrink:0;">
+  <div style="flex:1; min-width:0;">
+    <div style="font-weight:700; font-size:1rem; color:#0A50A0; line-height:1.2;">
+      <%= (typeof facility !== "undefined" && facility && facility.name) ? facility.name : "Oseel Care" %>
+    </div>
+    <% if (typeof facility !== "undefined" && facility) { %>
+      <% if (facility.address || facility.city || facility.region) { %>
+        <div style="font-size:.72rem; color:#495057; line-height:1.3;">
+          <%= [facility.address, facility.city, facility.region].filter(Boolean).join(", ") %>
+        </div>
+      <% } %>
+      <% if (facility.phone || facility.email) { %>
+        <div style="font-size:.70rem; color:#6c757d; line-height:1.3;">
+          <% if (facility.phone) { %><i class="fas fa-phone-alt me-1" style="font-size:.65rem;"></i><%= facility.phone %><% } %>
+          <% if (facility.phone && facility.email) { %> &nbsp;&middot;&nbsp; <% } %>
+          <% if (facility.email) { %><i class="fas fa-envelope me-1" style="font-size:.65rem;"></i><%= facility.email %><% } %>
+        </div>
+      <% } %>
+    <% } %>
+  </div>
+</div>

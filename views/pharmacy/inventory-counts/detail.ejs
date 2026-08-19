@@ -1,0 +1,287 @@
+
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "pharmacy", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .sp { display:inline-block; padding:3px 10px; border-radius:20px; font-size:.68rem; font-weight:700; text-transform:uppercase; }
+  .s-draft{background:#e9ecef;color:#495057} .s-in_progress{background:#cfe2ff;color:#084298}
+  .s-pending_approval{background:#fff3cd;color:#856404} .s-approved{background:#d1e7dd;color:#0a3622}
+  .var-pos { background:#d1f2eb; color:#0a3622; font-weight:700; }
+  .var-neg { background:#f8d7da; color:#842029; font-weight:700; }
+  .var-zero { color:#6c757d; }
+  .uncounted { background:#fff9e6; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/pharmacy">Pharmacy</a></li>
+      <li class="breadcrumb-item"><a href="/pharmacy/inventory-counts"><%= locale==="fr"?"Inventaires":"Counts" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= count.count_number %></li>
+    </ol>
+  </nav>
+
+  <% if (success) { %>
+    <div class="alert alert-success py-2 mb-3 alert-dismissible" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= success==="created" ? (locale==="fr"?"Inventaire cree.":"Count created.") : (locale==="fr"?"Operation realisee.":"Done.") %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: Info + Actions ── */%>
+    <div class="col-lg-3">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.85rem;"><%= count.count_number %></span>
+          <%
+            var sLabel={draft:"Draft",in_progress:locale==="fr"?"En cours":"In Progress",
+              pending_approval:locale==="fr"?"Att. approbation":"Pending Approval",
+              approved:locale==="fr"?"Approuve":"Approved",cancelled:locale==="fr"?"Annule":"Cancelled"};
+            var typeLabel={cycle_20pct:"Cycle 20%",full:locale==="fr"?"Complet":"Full",year_end:locale==="fr"?"Fin d'annee":"Year-End"};
+          %>
+          <span class="sp s-<%= count.status %>"><%= sLabel[count.status]||count.status %></span>
+        </div>
+        <div class="card-body" style="font-size:.82rem;">
+          <div class="mb-1"><span class="text-muted">Type:</span> <strong><%= typeLabel[count.count_type]||count.count_type %></strong></div>
+          <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Date:":"Date:" %></span> <%= new Date(count.count_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></div>
+          <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Initie par:":"Initiated by:" %></span> <%= count.initiated_by %></div>
+          <% if (count.approved_by) { %>
+            <div class="mb-1"><span class="text-muted"><%= locale==="fr"?"Approuve par:":"Approved by:" %></span> <%= count.approved_by %></div>
+          <% } %>
+          <% if (count.is_locked) { %>
+            <div class="mt-2">
+              <span class="badge bg-danger"><i class="fas fa-lock me-1"></i><%= locale==="fr"?"Un autre comptage ne peut demarrer":"Another count can't start yet" %></span>
+            </div>
+          <% } %>
+          <div class="border-top pt-2 mt-2">
+            <div class="text-muted" style="font-size:.76rem;">
+              <%= count.items ? count.items.length : 0 %> <%= locale==="fr"?"article(s)":"item(s)" %>
+              &bull;
+              <% var countedN = (count.items||[]).filter(function(i){ return i.counted_qty !== null; }).length; %>
+              <%= countedN %> <%= locale==="fr"?"comptes":"counted" %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-header py-2 fw-bold" style="font-size:.82rem;"><i class="fas fa-bolt me-2 text-warning"></i>Actions</div>
+        <div class="card-body py-2 d-flex flex-column gap-2">
+
+          <% if (count.status === "draft" && typeof hasPermission !== "undefined" && hasPermission("Pharmacy.Inventory.Count")) { %>
+            <button class="btn btn-sm btn-primary" onclick="startCount()">
+              <i class="fas fa-play me-1"></i><%= locale==="fr"?"Demarrer l'inventaire":"Start Count" %>
+            </button>
+          <% } %>
+
+          <% if (["in_progress","pending_approval"].indexOf(count.status) !== -1) { %>
+            <a href="/pharmacy/inventory-counts/<%= count.count_id %>/print" target="_blank"
+              class="btn btn-sm btn-outline-secondary">
+              <i class="fas fa-print me-1"></i><%= locale==="fr"?"Imprimer la fiche":"Print Count Sheet" %>
+            </a>
+          <% } %>
+
+          <% if (count.status === "in_progress" && typeof hasPermission !== "undefined" && hasPermission("Pharmacy.Inventory.Count")) { %>
+            <button class="btn btn-sm btn-success" onclick="saveAllResults()">
+              <i class="fas fa-save me-1"></i><%= locale==="fr"?"Enregistrer les resultats":"Save Results" %>
+            </button>
+            <button class="btn btn-sm btn-warning" onclick="submitCount()">
+              <i class="fas fa-check-double me-1"></i><%= locale==="fr"?"Soumettre pour approbation":"Submit for Approval" %>
+            </button>
+          <% } %>
+
+          <% if (count.status === "pending_approval" && typeof hasPermission !== "undefined" && hasPermission("Pharmacy.Approve.InventoryCount")) { %>
+            <button class="btn btn-sm btn-success" onclick="approveCount()">
+              <i class="fas fa-check me-1"></i><%= locale==="fr"?"Approuver et appliquer":"Approve & Apply Adjustments" %>
+            </button>
+          <% } %>
+
+          <% if (["approved","cancelled"].indexOf(count.status) === -1 &&
+                typeof hasPermission !== "undefined" && hasPermission("Pharmacy.Inventory.Count")) { %>
+            <button class="btn btn-sm btn-outline-danger mt-1" onclick="cancelCount()">
+              <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Annuler":"Cancel Count" %>
+            </button>
+          <% } %>
+
+        </div>
+      </div>
+    </div>
+
+    <%/* ── RIGHT: Items table ── */%>
+    <div class="col-lg-9">
+      <div class="card shadow-sm">
+        <div class="card-header py-2 fw-bold" style="font-size:.88rem;">
+          <i class="fas fa-list me-2 text-primary"></i>
+          <%= locale==="fr"?"Liste de comptage":"Count List" %>
+        </div>
+        <div class="card-body p-0">
+          <% if (!count.items || count.items.length === 0) { %>
+            <div class="text-center text-muted py-4"><%= locale==="fr"?"Aucun article.":"No items." %></div>
+          <% } else { %>
+            <div class="table-responsive">
+              <table class="table table-xs table-hover align-middle mb-0" id="countTable">
+                <thead class="table-dark">
+                  <tr>
+                    <th><%= locale==="fr"?"Article":"Item" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Stock systeme":"System Qty" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Compte":"Counted" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Ecart":"Variance" %></th>
+                    <th><%= locale==="fr"?"Raison de l'ecart":"Variance Reason" %></th>
+                    <th class="text-center"><%= locale==="fr"?"Compte par":"Counted by" %></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% count.items.forEach(function(item) {
+                    var descr = item.drug ? (locale==="fr" ? item.drug.item_description : (item.drug.item_description_en || item.drug.item_description)) : ("#" + item.item_id);
+                    var variance = item.counted_qty !== null ? (item.counted_qty - item.system_qty) : null;
+                    var varClass = variance === null ? "" : variance > 0 ? "var-pos" : variance < 0 ? "var-neg" : "var-zero";
+                    var isEditable = count.status === "in_progress";
+                  %>
+                    <tr class="<%= item.counted_qty === null && count.status === "in_progress" ? "uncounted" : "" %>">
+                      <td>
+                        <div class="fw-bold" style="font-size:.80rem;"><%= descr %></div>
+                      </td>
+                      <td class="text-center fw-bold"><%= item.system_qty %></td>
+                      <td class="text-center">
+                        <% if (isEditable) { %>
+                          <input type="number" min="0"
+                            class="form-control form-control-sm text-center counted-qty"
+                            style="width:80px;margin:auto;"
+                            data-item-id="<%= item.id %>"
+                            value="<%= item.counted_qty !== null ? item.counted_qty : "" %>"
+                            placeholder="—"
+                            oninput="updateVariance(this)">
+                        <% } else { %>
+                          <span class="<%= item.counted_qty === null ? "text-muted" : "fw-bold" %>">
+                            <%= item.counted_qty !== null ? item.counted_qty : "—" %>
+                          </span>
+                        <% } %>
+                      </td>
+                      <td class="text-center">
+                        <span class="<%= varClass %> variance-cell" id="var-<%= item.id %>"
+                          style="padding:2px 6px;border-radius:4px;font-size:.80rem;">
+                          <%= variance !== null ? (variance > 0 ? "+" + variance : variance) : "—" %>
+                        </span>
+                      </td>
+                      <td>
+                        <% if (isEditable) { %>
+                          <input type="text" class="form-control form-control-sm variance-reason"
+                            data-item-id="<%= item.id %>"
+                            value="<%= item.variance_reason||"" %>"
+                            placeholder="<%= locale==="fr"?"Raison si ecart...":"Reason if variance..." %>"
+                            style="font-size:.76rem;">
+                        <% } else { %>
+                          <span class="text-muted" style="font-size:.76rem;"><%= item.variance_reason||"" %></span>
+                        <% } %>
+                      </td>
+                      <td class="text-center" style="font-size:.72rem;color:#6c757d;">
+                        <%= item.counted_by || "" %>
+                        <% if (item.counted_at) { %><div><%= new Date(item.counted_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></div><% } %>
+                      </td>
+                    </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+var _csrf    = '<%= csrfToken %>';
+var _countId = <%= count.count_id %>;
+var _locale  = '<%= locale %>';
+
+function apiPost(url, body) {
+  return fetch(url + '?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).then(function(r){ return r.json(); });
+}
+
+function updateVariance(inp) {
+  var row    = inp.closest('tr');
+  var sysQty = parseInt(row.cells[1].textContent.trim()) || 0;
+  var cntQty = parseInt(inp.value);
+  var varEl  = row.querySelector('[id^="var-"]');
+  if (isNaN(cntQty)) { varEl.textContent = '—'; varEl.className = 'variance-cell'; return; }
+  var v = cntQty - sysQty;
+  varEl.textContent = v > 0 ? '+' + v : v;
+  varEl.className   = 'variance-cell ' + (v > 0 ? 'var-pos' : v < 0 ? 'var-neg' : 'var-zero');
+  varEl.style.cssText = 'padding:2px 6px;border-radius:4px;font-size:.80rem;';
+}
+
+function collectResults() {
+  var results = [];
+  document.querySelectorAll('.counted-qty').forEach(function(inp) {
+    var itemId = inp.dataset.itemId;
+    var cntQty = inp.value;
+    var reason = (document.querySelector('.variance-reason[data-item-id="' + itemId + '"]') || {}).value || '';
+    if (cntQty !== '') results.push({ item_id: itemId, counted_qty: cntQty, variance_reason: reason });
+  });
+  return results;
+}
+
+function startCount() {
+  if (!confirm(_locale==='fr'?'Demarrer l\'inventaire ?':'Start the count?')) return;
+  apiPost('/pharmacy/inventory-counts/' + _countId + '/start')
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function saveAllResults() {
+  var results = collectResults();
+  if (results.length === 0) { alert(_locale==='fr'?'Aucune valeur saisie.':'No values entered.'); return; }
+  apiPost('/pharmacy/inventory-counts/' + _countId + '/results', { results: results })
+    .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+}
+
+function submitCount() {
+  var results = collectResults();
+  var doSubmit = function() {
+    apiPost('/pharmacy/inventory-counts/' + _countId + '/submit')
+      .then(function(d){ if (d.ok) location.reload(); else alert(d.error); });
+  };
+  if (results.length > 0) {
+    apiPost('/pharmacy/inventory-counts/' + _countId + '/results', { results: results })
+      .then(function(d){ if (d.ok) doSubmit(); else alert(d.error); });
+  } else { doSubmit(); }
+}
+
+function approveCount() {
+  if (!confirm(_locale==='fr'?'Approuver et appliquer tous les ajustements de stock ?':'Approve and apply all stock adjustments?')) return;
+  apiPost('/pharmacy/inventory-counts/' + _countId + '/approve')
+    .then(function(d){
+      if (d.ok) {
+        alert((d.adjustments || 0) + (_locale==='fr'?' ajustement(s) applique(s).':' adjustment(s) applied.'));
+        location.reload();
+      } else { alert(d.error); }
+    });
+}
+
+function cancelCount() {
+  var reason = prompt(_locale === 'fr' ? 'Raison de l\'annulation:' : 'Reason for cancellation:');
+  if (reason === null) return;
+  apiPost('/pharmacy/inventory-counts/' + _countId + '/cancel', { reason: reason })
+    .then(function(d) { if (d.ok) location.reload(); else alert(d.error); });
+}
+</script>
+
+<%- include("../../partials/footer") %>

@@ -1,0 +1,151 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .sp { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.62rem; font-weight:700; text-transform:uppercase; white-space:nowrap; }
+  .s-pending             { background:#fff3cd; color:#856404; }
+  .s-in_transit          { background:#d1f0fb; color:#0a4d6e; }
+  .s-partially_collected { background:#ffe5cc; color:#7a3e00; }
+  .s-collected           { background:#d0d3f8; color:#1a1f8c; }
+  .s-cancelled           { background:#dee2e6; color:#6c757d; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-shopping-cart me-2 text-success"></i>
+        <%= locale==="fr"?"Commandes pharmacie":"Pharmacy Orders" %>
+      </h5>
+      <small class="text-muted"><%= count %> <%= locale==="fr"?"commande(s)":"order(s)" %></small>
+    </div>
+    <% if (typeof hasPermission !== "undefined" && hasAnyPermission(["Inventory.Order.ToPharmacy","Pharmacy.Dispense.Medication","Admin.FullAccess"])) { %>
+      <a href="/pharmacy/orders/new" class="btn btn-sm btn-success">
+        <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Nouvelle commande":"New Request" %>
+      </a>
+    <% } %>
+  </div>
+
+  <%
+    var tabs = [
+      { key:"",                    label: locale==="fr"?"Toutes":"All" },
+      { key:"pending",             label: locale==="fr"?"En attente":"Pending" },
+      { key:"in_transit",          label: locale==="fr"?"En transit":"In Transit" },
+      { key:"partially_collected", label: locale==="fr"?"Incomplete":"Incomplete" },
+      { key:"collected",           label: locale==="fr"?"Collectee":"Collected" },
+      { key:"cancelled",           label: locale==="fr"?"Annulee":"Cancelled" },
+    ];
+  %>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3 d-flex gap-1 flex-wrap">
+    <% tabs.forEach(function(t){ %>
+      <a href="/pharmacy/orders?status=<%= t.key %>"
+         class="btn btn-xs <%= statusFilter===t.key?"btn-success":"btn-outline-secondary" %>">
+        <%= t.label %>
+        <% if (t.key && countMap[t.key]) { %>
+          <span class="badge bg-secondary ms-1" style="font-size:.58rem;"><%= countMap[t.key] %></span>
+        <% } %>
+      </a>
+    <% }); %>
+  </div></div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!orders || orders.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-shopping-cart fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr"?"Aucune commande.":"No orders." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"N° Commande":"Order No." %></th>
+              <th class="text-center"><%= locale==="fr"?"Statut":"Status" %></th>
+              <th class="text-center"><%= locale==="fr"?"Articles":"Items" %></th>
+              <th><%= locale==="fr"?"Demande par":"Requested by" %></th>
+              <th><%= locale==="fr"?"Date":"Date" %></th>
+              <th class="text-center">Actions</th>
+            </tr></thead>
+            <tbody>
+              <% orders.forEach(function(o) { %>
+                <%
+                  var sLabel = {
+                    pending:"En attente", in_transit:"En transit",
+                    partially_collected:"Incomplete", collected:"Collectee", cancelled:"Annulee"
+                  };
+                  if (locale !== "fr") Object.assign(sLabel, {
+                    pending:"Pending", in_transit:"In Transit",
+                    partially_collected:"Incomplete", collected:"Collected", cancelled:"Cancelled"
+                  });
+                  var itemCount = o.items ? o.items.length : 0;
+                  var readyCount = o.items ? o.items.filter(function(i){return i.status==="issued"||i.status==="partial";}).length : 0;
+                %>
+                <tr>
+                  <td class="fw-bold">
+                    <a href="/pharmacy/orders/<%= o.order_id %>" class="text-decoration-none">
+                      <%= o.order_number %>
+                    </a>
+                  </td>
+                  <td class="text-center">
+                    <span class="sp s-<%= o.status %>"><%= sLabel[o.status]||o.status %></span>
+                  </td>
+                  <td class="text-center">
+                    <span class="badge bg-secondary" style="font-size:.62rem;"><%= itemCount %> art.</span>
+                    <% if (o.status==="in_transit" && readyCount > 0) { %>
+                      <span class="badge bg-success ms-1" style="font-size:.62rem;"><%= readyCount %> OK</span>
+                    <% } %>
+                  </td>
+                  <td class="text-muted"><%= o.requested_by %></td>
+                  <td class="text-muted" style="font-size:.74rem;">
+                    <%= new Date(o.requested_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                  </td>
+                  <td class="text-center">
+                    <a href="/pharmacy/orders/<%= o.order_id %>" class="btn btn-xs btn-outline-secondary">
+                      <i class="fas fa-eye"></i>
+                    </a>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+        <% if (totalPages > 1) { %>
+          <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+            <small class="text-muted">Page <%= currentPage %> / <%= totalPages %></small>
+            <div class="d-flex gap-1">
+              <% if (currentPage > 1) { %><a href="?page=<%= currentPage-1 %>&status=<%= statusFilter %>" class="btn btn-xs btn-outline-secondary">&#8249;</a><% } %>
+              <% if (currentPage < totalPages) { %><a href="?page=<%= currentPage+1 %>&status=<%= statusFilter %>" class="btn btn-xs btn-outline-secondary">&#8250;</a><% } %>
+            </div>
+          </div>
+        <% } %>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

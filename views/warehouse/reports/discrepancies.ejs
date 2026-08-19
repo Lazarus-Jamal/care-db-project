@@ -1,0 +1,145 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.78rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6;
+              padding:14px 16px; text-align:center; }
+  .stat-val  { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl  { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-balance-scale me-2" style="color:#dc3545;"></i>
+        <%= locale==="fr"?"Ecarts inventaire":"Inventory Discrepancies" %>
+      </h5>
+      <small class="text-muted"><%= locale==="fr"?"Genere le":"Generated" %> <%= new Date().toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></small>
+    </div>
+    <a href="/warehouse/reports" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i><%= locale==="fr"?"Rapports":"Reports" %>
+    </a>
+  </div>
+
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/warehouse/reports/discrepancies" class="d-flex gap-2 flex-wrap align-items-end">
+      <div><label class="lbl"><%= locale==="fr"?"Du":"From" %></label>
+        <input type="date" name="date_from" value="<%= dateFrom %>" class="form-control form-control-sm"></div>
+      <div><label class="lbl"><%= locale==="fr"?"Au":"To" %></label>
+        <input type="date" name="date_to" value="<%= dateTo %>" class="form-control form-control-sm"></div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter"></i></button>
+      <a href="/warehouse/reports/discrepancies?print=1&date_from=<%= dateFrom %>&date_to=<%= dateTo %>"
+         target="_blank" class="btn btn-sm btn-outline-primary ms-auto">
+        <i class="fas fa-print me-1"></i><%= locale==="fr"?"Imprimer":"Print" %>
+      </a>
+    </form>
+  </div></div>
+
+  <%/* Count summary */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+      <i class="fas fa-clipboard-list me-2 text-danger"></i><%= locale==="fr"?"Inventaires approuves":"Approved Counts" %>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-xs table-hover align-middle mb-0">
+        <thead class="table-light"><tr>
+          <th><%= locale==="fr"?"N° Inventaire":"Count No." %></th>
+          <th><%= locale==="fr"?"Date":"Date" %></th>
+          <th><%= locale==="fr"?"Par":"By" %></th>
+          <th class="text-center"><%= locale==="fr"?"Articles totaux":"Total Items" %></th>
+          <th class="text-center"><%= locale==="fr"?"Avec ecart":"With Variance" %></th>
+          <th class="text-center"><%= locale==="fr"?"Ecart total":"Total Variance" %></th>
+        </tr></thead>
+        <tbody>
+          <% if (!countSummary.length) { %>
+            <tr><td colspan="6" class="text-center text-muted py-3"><%= locale==="fr"?"Aucun inventaire.":"No counts." %></td></tr>
+          <% } else { countSummary.forEach(function(c){ %>
+            <tr>
+              <td class="fw-bold"><%= c.count_number %></td>
+              <td class="text-muted"><%= new Date(c.count_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+              <td class="text-muted"><%= c.initiated_by %></td>
+              <td class="text-center"><%= c.total_items %></td>
+              <td class="text-center">
+                <span class="badge <%= c.with_variance>0?"bg-danger":"bg-success" %>" style="font-size:.62rem;">
+                  <%= c.with_variance %>
+                </span>
+              </td>
+              <td class="text-center fw-bold" style="color:<%= c.total_variance>0?"#dc3545":"#198754" %>;">
+                <%= c.total_variance > 0 ? "+"+c.total_variance : c.total_variance %>
+              </td>
+            </tr>
+          <% }); } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <%/* All variance items */%>
+  <div class="card shadow-sm">
+    <div class="card-header py-2 fw-bold" style="font-size:.82rem;">
+      <i class="fas fa-exclamation-triangle me-2 text-danger"></i>
+      <%= locale==="fr"?"Tous les ecarts":"All Variances" %>
+      <span class="badge bg-danger ms-1"><%= allItems.length %></span>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-xs table-hover align-middle mb-0">
+        <thead class="table-dark"><tr>
+          <th><%= locale==="fr"?"Inventaire":"Count" %></th>
+          <th><%= locale==="fr"?"Produit":"Product" %></th>
+          <th class="text-center"><%= locale==="fr"?"Qte systeme":"System Qty" %></th>
+          <th class="text-center"><%= locale==="fr"?"Qte comptee":"Counted Qty" %></th>
+          <th class="text-center"><%= locale==="fr"?"Ecart":"Variance" %></th>
+          <th><%= locale==="fr"?"Motif":"Reason" %></th>
+          <th class="text-center"><%= locale==="fr"?"Ajuste":"Adjusted" %></th>
+        </tr></thead>
+        <tbody>
+          <% if (!allItems.length) { %>
+            <tr><td colspan="7" class="text-center text-muted py-4"><%= locale==="fr"?"Aucun ecart.":"No variances." %></td></tr>
+          <% } else { allItems.forEach(function(item){ %>
+            <tr class="<%= item.variance<0?"table-danger":item.variance>0?"table-warning":"" %>">
+              <td style="font-size:.72rem;"><%= item.count_number %></td>
+              <td><span class="fw-bold" style="font-size:.76rem;"><%= item.product %></span>
+                <code class="ms-1" style="font-size:.64rem;color:#6c757d;"><%= item.item_code %></code></td>
+              <td class="text-center"><%= item.system_qty %></td>
+              <td class="text-center"><%= item.counted_qty %></td>
+              <td class="text-center fw-bold" style="color:<%= item.variance<0?"#dc3545":item.variance>0?"#856404":"#198754" %>">
+                <%= item.variance > 0 ? "+"+item.variance : item.variance %>
+              </td>
+              <td class="text-muted" style="font-size:.72rem;"><%= item.variance_reason || "—" %></td>
+              <td class="text-center">
+                <span class="badge <%= item.adjusted?"bg-success":"bg-secondary" %>" style="font-size:.60rem;">
+                  <%= item.adjusted ? (locale==="fr"?"Oui":"Yes") : (locale==="fr"?"Non":"No") %>
+                </span>
+              </td>
+            </tr>
+          <% }); } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

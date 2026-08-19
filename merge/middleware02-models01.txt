@@ -1,0 +1,667 @@
+// File: c:\Users\Public\Projects\care-db-project\middleware\isAdminMiddleware.js
+// middleware/isAdminMiddleware.js
+const logActivity = require('../utils/activityLogger');
+
+/**
+ * Middleware to check if the user has the necessary administrative permissions.
+ * This is an updated version that checks for a set of permissions rather than a single one,
+ * allowing for more granular control over what an "admin" can do.
+ * * The middleware checks for permissions related to managing users, roles, and facilities.
+ * This allows both a "System Administrator" (with full access) and a more
+ * restricted "Application Administrator" (with a subset of these permissions) to pass.
+ */
+module.exports = async (req, res, next) => {
+  // Define an array of permissions that grant administrative access.
+  // We check for any of these to determine if a user is an admin.
+  // This can be expanded as needed to include other admin-related tasks.
+  const requiredAdminPermissions = [
+    'Admin.Create.User',
+    'Admin.Update.User',
+    'Admin.Assign.Role',
+    'Admin.Create.Role',
+    'Admin.Audit.Logs',
+    'Admin.Create.Facility',
+    'Admin.Update.Facility',
+    'Admin.Manage.Users', // The original permission
+    'Admin.Manage.ServicesConfig',
+    'Admin.Manage.PharmacyConfig',
+    'Admin.Manage.LabConfig',
+    // ... add any other relevant permissions for admin-level access here
+  ];
+
+  // Check if the user is authenticated and has permissions.
+  // We use .some() to check if the user's permissions array contains at least one
+  // of the required administrative permissions.
+  const hasAdminPermission = req.user && req.user.permissions && req.user.permissions.some(permission =>
+    requiredAdminPermissions.includes(permission)
+  );
+
+  if (hasAdminPermission) {
+    // If the user has at least one required permission, grant access.
+    return next();
+  }
+
+  // Log the denied access attempt for auditing.
+  const lognote = `Access denied for '${req.user?.username}' to '${req.originalUrl}': Insufficient privileges.`;
+  await logActivity(req, lognote, false, 'isAdminMiddleware.js');
+
+  // If no required permission is found, deny access.
+  // Use a status code of 403 (Forbidden) for unauthorized access.
+  return res.status(403).send('Access denied: Insufficient privileges.');
+};
+
+
+
+// File: c:\Users\Public\Projects\care-db-project\middleware\permissionsMiddleware.js
+const user = require("../models/user");
+
+/**
+ * Middleware to make user and permission-based helper functions available to all EJS templates.
+ * This middleware should be used after your authentication middleware has attached the user object to the request (e.g., req.user).
+ */
+function permissionsMiddleware(req, res, next) {
+    res.locals.user = req.user || null;
+    // Check for a single, specific permission.
+    // Grants full access if the user has the 'Admin.FullAccess' permission.
+    if (res.locals.user && res.locals.user.roleName){
+
+        res.locals.isAdmin = res.locals.user.roleName === 'System Administrator';
+
+        const userPermissions = res.locals.user.permissions || [];
+
+        // Check if the user has a specific permission.
+        res.locals.hasPermission = function(permissionName) {
+            return userPermissions.includes('Admin.FullAccess') || userPermissions.includes(permissionName);
+        };
+
+        // Check if the user has at least one permission from a given list.
+        res.locals.hasAnyPermission = function(permissionNames) {
+            if (userPermissions.includes ('Admin.FullAccess')) {
+                return true;
+            }
+            return permissionNames.some(p => userPermissions.includes(p));
+        };
+      
+        // A flag to check if the user is an application administrator (can manage users, facilities, etc.)
+        res.locals.isAppAdmin = res.locals.hasAnyPermission([
+            'Admin.Create.User',
+            'Admin.Update.User',
+            'Admin.Create.Facility',
+            'Admin.Update.Facility',
+            'Admin.Manage.CashierConfig',
+            'Admin.Manage.PharmacyShelves',
+            'Admin.Manage.WarehouseShelves',
+            'Admin.Manage.LabConfig',
+            'Admin.Manage.ServicesConfig',
+            'Admin.Manage.HospitalizationRooms'
+        ]);
+
+        // //debug
+        // console.log('Permissions middleware executed:', {
+        //     user: res.locals.user, 
+        //     // userPermissions: userPermissions,
+        //     isAdmin: res.locals.isAdmin,
+        //     isAppAdmin: res.locals.isAppAdmin
+        // });
+    } else {
+        res.locals.hasPermission = () => false;
+        res.locals.hasAnyPermission = () => false;
+        res.locals.isAdmin = false;
+        res.locals.isAppAdmin = false;7 
+    }
+    // Continue to the next middleware or route handler
+
+    next();
+}
+
+module.exports = permissionsMiddleware;
+
+// File: c:\Users\Public\Projects\care-db-project\middleware\registrationValidator.js
+
+// middleware/registrationValidator.js
+const { body, validationResult } = require('express-validator');
+const logActivity = require('../utils/activityLogger');
+const { User, care_user_roles, care_facilities, care_department, care_person } = require('../models');
+
+const renderErrorPage = async (req, res, errors) => {
+  const [roles, facilities, departments] = await Promise.all([
+    care_user_roles.findAll(),
+    care_facilities.findAll({ order: [['name', 'ASC']] }),
+    care_department.findAll({ where: { is_inactive: false }, order: [['name_formal', 'ASC']] })
+  ]);
+
+  try {
+    const lognote = `Admin '${req.user.username}' failed to create user '${req.body.username}': ${errors.join(', ')}`;
+    await logActivity(req, lognote, false, '/admin/users/create');
+  } catch (logError) {
+    console.error('Failed to log failed registration attempt:', logError);
+  }
+
+  return res.render('users/register', {
+    title: 'Register User',
+    roles,
+    facilities,
+    departments,
+    care_person: [], // Pass an empty array as the frontend handles the search
+    success: false,
+    errors,
+    user: req.user,
+    activePage: 'admin-users-create'
+  });
+};
+
+const registrationValidator = [
+  body('username')
+    .trim()
+    .escape()
+    .notEmpty().withMessage('Username is required.')
+    .isLength({ min: 4, max: 255 }).withMessage('Username must be between 4 and 255 characters.')
+    .isAlphanumeric().withMessage('Username must be alphanumeric.')
+    .custom(async (value) => {
+      const existingUser = await User.findOne({ where: { username: value } });
+      if (existingUser) {
+        throw new Error('Username already exists.');
+      }
+    }),
+
+  body('password')
+    .notEmpty().withMessage('Password is required.')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
+
+  body('role_id')
+    .escape()
+    .notEmpty().withMessage('Role is required.')
+    .isInt().withMessage('Invalid role ID.'),
+
+  body('person_id')
+    .escape()
+    .notEmpty().withMessage('Personnel is required.')
+    .isInt().withMessage('Invalid personnel ID.')
+    .custom(async (value) => {
+      const person = await care_person.findByPk(value);
+      if (!person) {
+        throw new Error('Selected personnel not found.');
+      }
+    }),
+
+  body('facility_id')
+    .escape()
+    .notEmpty().withMessage('Facility is required.')
+    .isInt().withMessage('Invalid facility ID.')
+    .custom(async (value) => {
+      const facility = await care_facilities.findByPk(value);
+      if (!facility) {
+        throw new Error('Selected facility not found.');
+      }
+    }),
+
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const errorMessages = errors.array().map(e => e.msg);
+      return renderErrorPage(req, res, errorMessages);
+    }
+    
+    next();
+  }
+];
+
+module.exports = registrationValidator;
+
+
+
+// File: c:\Users\Public\Projects\care-db-project\middleware\userUpdateValidator.js
+// middleware/userUpdateValidator.js
+const { body, validationResult } = require('express-validator');
+const logActivity = require('../utils/activityLogger');
+const { User, care_user_roles, care_department, care_facilities, care_staff } = require('../models');
+
+const renderErrorPage = async (req, res, errors) => {
+  const users = await User.findAll({
+    order: [['username', 'ASC']],
+    include: [{ model: care_user_roles, as: 'userRole' }]
+  });
+  const roles = await care_user_roles.findAll();
+  const departments = await care_department.findAll({ where: { is_inactive: false } });
+  const facilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+  const userToEdit = await User.findByPk(req.body.user_id);
+  
+  // Log the failed update attempt
+  const lognote = `Admin '${req.user.username}' failed to update user '${req.body.username}': ${errors.join(', ')}`;
+  await logActivity(req, lognote, false, '/admin/users/update/edit');
+
+  return res.render('users/updateUser', {
+    title: 'Update Account',
+    users,
+    userToEdit,
+    roles,
+    departments,
+    facilities,
+    errors,
+    success: false,
+    user: req.user,
+    activePage: 'admin-update-user'
+  });
+};
+
+const userUpdateValidator = [
+  body('user_id')
+    .escape()
+    .notEmpty().withMessage('User ID is required.')
+    .isInt().withMessage('Invalid user ID.'),
+    
+  body('username')
+    .trim()
+    .escape()
+    .notEmpty().withMessage('Username is required.'),
+
+  body('email')
+    .trim()
+    .escape()
+    .optional({ checkFalsy: true })
+    .isEmail().withMessage('Invalid email address.'),
+    
+  body('password')
+    .optional({ checkFalsy: true })
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
+    
+  body('role_id')
+    .escape()
+    .notEmpty().withMessage('Role is required.'),
+    
+  body('dept_nr')
+    .escape()
+    .optional({ checkFalsy: true }),
+
+  body('facility_id')
+    .escape()
+    .notEmpty().withMessage('Facility is required.'),
+
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const errorMessages = errors.array().map(e => e.msg);
+      return renderErrorPage(req, res, errorMessages);
+    }
+    next();
+  }
+];
+
+module.exports = userUpdateValidator;
+
+// File: c:\Users\Public\Projects\care-db-project\models\care_accesslog.js
+// models/care_accesslog.js
+module.exports = (sequelize, DataTypes) => {
+  return sequelize.define('care_accesslog', {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    datetime: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+    ip: {
+      type: DataTypes.STRING(45),
+      allowNull: false,
+    },
+    lognote: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    userid: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    username: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    thisfile: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    fileforward: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    login_success: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+  }, {
+    tableName: 'care_accesslog',
+    timestamps: false,
+  });
+};
+
+
+// File: c:\Users\Public\Projects\care-db-project\models\care_department.js
+module.exports = (sequelize, DataTypes) => {
+  const care_department = sequelize.define('care_department', {
+    nr: {
+      type: DataTypes.MEDIUMINT.UNSIGNED,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    id: {
+      type: DataTypes.STRING(60),
+      allowNull: false,
+    },
+    type: {
+      type: DataTypes.STRING(25),
+      allowNull: false,
+    },
+    name_formal: {
+      type: DataTypes.STRING(60),
+      allowNull: false,
+    },
+    name_short: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    name_alternate: {
+      type: DataTypes.STRING(225),
+      allowNull: true,
+    },
+    LD_var: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    admit_inpatient: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    admit_outpatient: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    has_oncall_doc: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    has_oncall_nurse: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    does_surgery: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    this_institution: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    is_sub_dept: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    parent_dept_nr: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      defaultValue: 0,
+    },
+    work_hours: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    consult_hours: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    is_inactive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    sort_order: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      defaultValue: 0,
+    },
+    address: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    sig_line: {
+      type: DataTypes.STRING(60),
+      allowNull: true,
+    },
+    sig_stamp: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    logo_mime_type: {
+      type: DataTypes.STRING(5),
+      allowNull: true,
+    },
+    status: {
+      type: DataTypes.STRING(25),
+      allowNull: false,
+    },
+    history: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    modify_id: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    modify_time: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    create_id: {
+      type: DataTypes.STRING(35),
+      allowNull: false,
+    },
+    create_time: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    is_pharmacy: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+    },
+    pharma_dept_nr: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      defaultValue: 0,
+    },
+  }, {
+    tableName: 'care_department',
+    timestamps: false,
+  });
+
+    // FIXED: Added the associate method to handle relationships
+  care_department.associate = (models) => {
+    // A care_department can have many Users
+    care_department.hasMany(models.User, {
+      foreignKey: 'dept_nr',
+      sourceKey: 'nr', // Add sourceKey to explicitly link to the primary key of this model
+      as: 'users',
+    });
+
+    // A care_department can have many care_staff members
+    care_department.hasMany(models.care_staff, {
+      foreignKey: 'dept_nr',
+      sourceKey: 'nr', // Add sourceKey to explicitly link to the primary key of this model
+      as: 'staff_members',
+    });
+  };
+  
+  return care_department;
+};
+
+
+// File: c:\Users\Public\Projects\care-db-project\models\care_facilities.js
+module.exports = (sequelize, DataTypes) => {
+  const care_facilities = sequelize.define('care_facilities', {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    name: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    code: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      unique: true,
+    },
+    type: {
+      type: DataTypes.ENUM('Hospital', 'Health Center', 'Clinic'),
+      allowNull: false,
+    },
+    parent_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    director_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    head_nurse_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    finance_officer_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    address: DataTypes.TEXT,
+    city: DataTypes.STRING(100),
+    region: DataTypes.STRING(100),
+    country: {
+      type: DataTypes.STRING(100),
+      defaultValue: 'Cameroon',
+    },
+    latitude: DataTypes.DECIMAL(10, 8),
+    longitude: DataTypes.DECIMAL(11, 8),
+    created_at: {
+      type: DataTypes.DATE(3),
+      defaultValue: DataTypes.NOW,
+    },
+    updated_at: {
+      type: DataTypes.DATE(3),
+      defaultValue: DataTypes.NOW,
+    },
+  }, {
+    tableName: 'care_facilities',
+    timestamps: false,
+    underscored: true,
+  });
+
+  care_facilities.associate = (models) => {
+    care_facilities.belongsTo(models.care_facilities, {
+      foreignKey: 'parent_id',
+      as: 'parentFacility',
+    });
+
+    care_facilities.hasMany(models.care_staff, {
+      foreignKey: 'facility_id',
+      as: 'staff',
+    });
+    
+    care_facilities.belongsTo(models.care_staff, {
+      foreignKey: 'director_id',
+      targetKey: 'nr',
+      as: 'director',
+    });
+    care_facilities.belongsTo(models.care_staff, {
+      foreignKey: 'head_nurse_id',
+      targetKey: 'nr',
+      as: 'headNurse',
+    });
+    care_facilities.belongsTo(models.care_staff, {
+      foreignKey: 'finance_officer_id',
+      targetKey: 'nr',
+      as: 'financeOfficer',
+    });
+
+    care_facilities.hasMany(models.User, {
+      foreignKey: 'facility_id',
+      as: 'users',
+    });
+  };
+
+  return care_facilities;
+};
+
+// File: c:\Users\Public\Projects\care-db-project\models\care_person.js
+
+module.exports = (sequelize, DataTypes) => {
+  const care_person = sequelize.define('care_person', {
+    pid: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    hospital_file_nr: DataTypes.STRING(50),
+    date_reg: DataTypes.DATE,
+    name_first: DataTypes.STRING(60),
+    name_2: DataTypes.STRING(60),
+    name_3: DataTypes.STRING(60),
+    name_middle: DataTypes.STRING(60),
+    name_last: DataTypes.STRING(60),
+    name_maiden: DataTypes.STRING(60),
+    name_others: DataTypes.TEXT,
+    date_birth: DataTypes.DATEONLY,
+    blood_group: DataTypes.STRING(2),
+    addr_str: DataTypes.STRING(60),
+    addr_str_nr: DataTypes.STRING(10),
+    addr_zip: DataTypes.STRING(15),
+    addr_citytown_nr: DataTypes.INTEGER.UNSIGNED,
+    addr_is_valid: DataTypes.TINYINT,
+    citizenship: DataTypes.STRING(35),
+    phone_1_code: DataTypes.STRING(15),
+    phone_1_nr: DataTypes.STRING(35),
+    phone_2_code: DataTypes.STRING(15),
+    phone_2_nr: DataTypes.STRING(35),
+    cellphone_1_nr: DataTypes.STRING(35),
+    cellphone_2_nr: DataTypes.STRING(35),
+    fax: DataTypes.STRING(35),
+    email: DataTypes.STRING(60),
+    civil_status: DataTypes.STRING(35),
+    sex: DataTypes.STRING(1),
+    title: DataTypes.STRING(25),
+    photo: DataTypes.BLOB,
+    photo_filename: DataTypes.STRING(60),
+    ethnic_orig: DataTypes.INTEGER.UNSIGNED,
+    org_id: DataTypes.STRING(60),
+    sss_nr: DataTypes.STRING(60),
+    nat_id_nr: DataTypes.STRING(60),
+    religion: DataTypes.STRING(125),
+    mother_pid: DataTypes.INTEGER.UNSIGNED,
+    father_pid: DataTypes.INTEGER.UNSIGNED,
+    contact_person: DataTypes.STRING(255),
+    contact_pid: DataTypes.INTEGER.UNSIGNED,
+    contact_relation: DataTypes.STRING(25),
+    death_date: DataTypes.DATEONLY,
+    death_encounter_nr: DataTypes.INTEGER.UNSIGNED,
+    death_cause: DataTypes.STRING(255),
+    death_cause_code: DataTypes.STRING(15),
+    date_update: DataTypes.DATE,
+    status: DataTypes.STRING(20),
+    history: DataTypes.TEXT,
+    modify_id: DataTypes.STRING(35),
+    modify_time: DataTypes.DATE,
+    create_id: DataTypes.STRING(35),
+    create_time: DataTypes.DATE,
+    relative_name_first: DataTypes.STRING(60),
+    relative_name_last: DataTypes.STRING(60),
+    relative_phone: DataTypes.STRING(35)
+  }, {
+    tableName: 'care_person',
+    timestamps: false
+  });
+
+  return care_person;
+};
+
+

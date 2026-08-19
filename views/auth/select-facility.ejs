@@ -1,0 +1,45 @@
+
+<%- include("../partials/header") %>
+
+<div class="form-wrapper mx-auto bg-white p-8 rounded-lg shadow-lg" style="font-size: 0.875rem; max-width: 480px;">
+    <h2 class="mb-2 text-center text-lg font-semibold">Choisir un établissement</h2>
+    <p class="text-center text-muted mb-4" style="font-size:0.82rem;">
+        Bonjour <strong><%= username %></strong> — vous êtes autorisé(e) à travailler
+        dans plusieurs établissements. Sélectionnez celui pour cette session.
+    </p>
+
+    <% if (typeof errors !== "undefined" && errors.length > 0) { %>
+        <div class="alert alert-danger" role="alert" style="font-size: 0.8rem;">
+            <% errors.forEach(function(error) { %><%= error %><br><% }); %>
+        </div>
+    <% } %>
+
+    <form action="/auth/select-facility" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+        <div class="d-flex flex-column gap-2 mb-3">
+            <% facilities.forEach(function(f) { %>
+                <label class="facility-option d-flex align-items-center gap-2 p-2 border rounded"
+                    style="cursor:pointer;">
+                    <input type="radio" name="facility_id" value="<%= f.id %>" required>
+                    <span><%= f.name %></span>
+                </label>
+            <% }); %>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100" style="font-size:0.9rem;">
+            Continuer <i class="fas fa-arrow-right"></i>
+        </button>
+    </form>
+
+    <div class="text-center mt-3">
+        <a href="/auth/logout" style="font-size:0.8rem;">Se déconnecter</a>
+    </div>
+</div>
+
+<style>
+  .facility-option:hover { background-color: #f0f6ff; border-color: #0d6efd !important; }
+  .facility-option input:checked ~ span { font-weight: 700; }
+</style>
+
+<%- include("../partials/footer") %>

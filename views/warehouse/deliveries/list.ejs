@@ -1,0 +1,105 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .sp { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.62rem; font-weight:700; text-transform:uppercase; white-space:nowrap; }
+  .s-pending_qc     { background:#fff3cd; color:#856404; }
+  .s-qc_partial     { background:#fde8d8; color:#7a3200; }
+  .s-qc_passed      { background:#d1e7dd; color:#0a3622; }
+  .s-qc_failed      { background:#f8d7da; color:#842029; }
+  .s-shelved        { background:#d0d3f8; color:#1a1f8c; }
+  .s-shelved_partial{ background:#cfe2ff; color:#084298; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-truck-loading me-2 text-info"></i><%= locale==="fr"?"Livraisons":"Deliveries" %></h5>
+      <small class="text-muted"><%= deliveries.length %> <%= locale==="fr"?"livraison(s)":"delivery(ies)" %></small>
+    </div>
+    <a href="/warehouse" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Dashboard</a>
+  </div>
+  <%
+    var tabs = [
+      {key:"", label:locale==="fr"?"Toutes":"All"},
+      {key:"pending_qc",      label:locale==="fr"?"Att. QC":"Pending QC"},
+      {key:"qc_passed",       label:locale==="fr"?"QC OK":"QC Passed"},
+      {key:"qc_partial",      label:locale==="fr"?"QC partiel":"QC Partial"},
+      {key:"qc_failed",       label:locale==="fr"?"QC echoue":"QC Failed"},
+      {key:"shelved",         label:locale==="fr"?"Range":"Shelved"},
+      {key:"shelved_partial", label:locale==="fr"?"Range partiel":"Partial Shelved"},
+    ];
+  %>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3 d-flex gap-1 flex-wrap">
+    <% tabs.forEach(function(t){ %>
+      <a href="/warehouse/deliveries?status=<%= t.key %>"
+        class="btn btn-xs <%= statusFilter===t.key?"btn-primary":"btn-outline-secondary" %>"><%= t.label %></a>
+    <% }); %>
+  </div></div>
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!deliveries || deliveries.length === 0) { %>
+        <div class="text-center text-muted py-5"><i class="fas fa-truck-loading fa-2x mb-2 d-block opacity-25"></i><%= locale==="fr"?"Aucune livraison.":"No deliveries." %></div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th>#</th><th>PO</th><th><%= locale==="fr"?"Fournisseur":"Supplier" %></th>
+              <th class="text-center">Statut</th><th><%= locale==="fr"?"Reçu par":"Received by" %></th>
+              <th><%= locale==="fr"?"Date":"Date" %></th><th class="text-center">Actions</th>
+            </tr></thead>
+            <tbody>
+              <% deliveries.forEach(function(d) { %>
+                <%
+                  var sLabel = {
+                    pending_qc:"Pending QC", qc_passed:"QC Passed", qc_partial:"QC Partial",
+                    qc_failed:"QC Failed", shelved:"Shelved", shelved_partial:"Partial Shelved"
+                  };
+                  if (locale==="fr") Object.assign(sLabel, {
+                    pending_qc:"Att. QC", qc_passed:"QC OK", qc_partial:"QC partiel",
+                    qc_failed:"QC echoue", shelved:"Range", shelved_partial:"Range partiel"
+                  });
+                %>
+                <tr>
+                  <td class="text-muted">#<%= d.delivery_id %></td>
+                  <td><a href="/warehouse/purchase-orders/<%= d.po_id %>" class="text-decoration-none fw-bold"><%= d.po ? d.po.po_number : "#"+d.po_id %></a></td>
+                  <td class="text-muted"><%= d.po && d.po.supplier ? d.po.supplier.name : "—" %></td>
+                  <td class="text-center"><span class="sp s-<%= d.status %>"><%= sLabel[d.status]||d.status %></span></td>
+                  <td class="text-muted"><%= d.received_by %></td>
+                  <td class="text-muted" style="font-size:.76rem;"><%= new Date(d.received_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+                  <td class="text-center">
+                    <a href="/warehouse/deliveries/<%= d.delivery_id %>" class="btn btn-xs btn-outline-secondary"><i class="fas fa-eye"></i></a>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

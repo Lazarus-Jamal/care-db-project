@@ -1,0 +1,2086 @@
+// File: c:\Users\Public\Projects\care-db-project\views\admin\logs.ejs
+
+<%- include('../partials/header', { title: 'Access Logs' }) %>
+<%- include('../partials/navbar', { activePage: 'admin-logs', user: user }) %>
+
+<div class="container mt-4">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Access Logs</h5>
+      <a href="/" class="btn btn-sm btn-light">Close</a>
+    </div>
+    <div class="card-body">
+      <!-- Filters and Export -->
+      <form id="filterForm" class="row g-3 mb-3">
+        <div class="col-md-3">
+          <label for="usernameFilter" class="form-label">Username</label>
+          <select id="usernameFilter" class="form-select" multiple>
+            <% const usernames = [...new Set(logs.map(log => log.username))]; %>
+            <% usernames.forEach(name => { %>
+              <option value="<%= name %>"><%= name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="lognoteFilter" class="form-label">Log Note</label>
+          <select id="lognoteFilter" class="form-select" multiple>
+            <% const notes = [...new Set(logs.map(log => log.lognote))]; %>
+            <% notes.forEach(note => { %>
+              <option value="<%= note %>"><%= note %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="startDate" class="form-label">Start Date</label>
+          <input type="date" id="startDate" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label for="endDate" class="form-label">End Date</label>
+          <input type="date" id="endDate" class="form-control">
+        </div>
+        <div class="col-md-2 d-flex align-items-end justify-content-end gap-2">
+          <button type="button" class="btn btn-primary w-100" onclick="applyFilters()">Apply Filters</button>
+          <button type="button" class="btn btn-secondary w-100" onclick="resetFilters()">Reset</button>
+        </div>
+      </form>
+
+      <div class="mb-3 d-flex justify-content-between">
+        <div>
+          <button class="btn btn-outline-secondary btn-sm me-2" onclick="exportToCSV()">Export CSV</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="exportToExcel()">Export Excel</button>
+        </div>
+        <div>
+          <span class="me-2">Sort by:</span>
+          <button class="btn btn-outline-secondary btn-sm me-1" onclick="sortByColumn('username')">Username</button>
+          <button class="btn btn-outline-secondary btn-sm me-1" onclick="sortByColumn('action')">Action</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="sortByColumn('timestamp')">Timestamp</button>
+        </div>
+      </div>
+
+      <!-- Logs Table -->
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover table-striped align-middle" id="logsTable">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Username</th>
+              <th>Action</th>
+              <th>IP Address</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="logsBody">
+            <% logs.forEach((log, index) => { %>
+              <tr data-username="<%= log.username %>" data-action="<%= log.lognote %>" data-timestamp="<%= new Date(log.datetime).toISOString() %>">
+                <td><%= index + 1 %></td>
+                <td><%= log.username %></td>
+                <td><%= log.lognote %></td>
+                <td><%= log.ip %></td>
+                <td><%= new Date(log.datetime).toLocaleString() %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div id="pagination" class="mt-3 d-flex flex-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentPage = 1;
+const rowsPerPage = 10;
+let currentSort = { column: null, ascending: true };
+
+function applyFilters() {
+  const selectedUsernames = Array.from(document.getElementById('usernameFilter').selectedOptions).map(opt => opt.value);
+  const selectedNotes = Array.from(document.getElementById('lognoteFilter').selectedOptions).map(opt => opt.value);
+  const startDate = document.getElementById('startDate').value;
+  const endDate = document.getElementById('endDate').value;
+
+  const rows = document.querySelectorAll('#logsBody tr');
+  rows.forEach(row => {
+    const username = row.dataset.username;
+    const action = row.dataset.action;
+    const timestamp = row.dataset.timestamp;
+    const date = new Date(timestamp).toISOString().split('T')[0];
+
+    const matchUser = selectedUsernames.length === 0 || selectedUsernames.includes(username);
+    const matchNote = selectedNotes.length === 0 || selectedNotes.includes(action);
+    const matchStart = !startDate || date >= startDate;
+    const matchEnd = !endDate || date <= endDate;
+
+    row.classList.toggle('filtered-in', matchUser && matchNote && matchStart && matchEnd);
+  });
+
+  currentPage = 1;
+  renderTable();
+  renderPagination();
+}
+
+function resetFilters() {
+  document.getElementById('filterForm').reset();
+  Array.from(document.querySelectorAll('#filterForm select')).forEach(select => select.selectedIndex = -1);
+  document.querySelectorAll('#logsBody tr').forEach(row => row.classList.add('filtered-in'));
+  currentPage = 1;
+  renderTable();
+  renderPagination();
+}
+
+function renderTable() {
+  const rows = Array.from(document.querySelectorAll('#logsBody tr'));
+  const filteredRows = rows.filter(row => row.classList.contains('filtered-in'));
+  const start = (currentPage - 1) * rowsPerPage;
+  const end = start + rowsPerPage;
+
+  rows.forEach(row => row.style.display = 'none');
+
+  filteredRows.forEach((row, index) => {
+    if (index >= start && index < end) {
+      row.style.display = '';
+      row.children[0].textContent = index + 1;
+    }
+  });
+
+  if (filteredRows.length === 0) {
+    document.getElementById('logsBody').innerHTML = '<tr><td colspan="5" class="text-center text-muted">No logs found for the selected filters.</td></tr>';
+  }
+}
+
+function renderPagination() {
+  const rows = Array.from(document.querySelectorAll('#logsBody tr.filtered-in'));
+  const totalPages = Math.ceil(rows.length / rowsPerPage);
+  const container = document.getElementById('pagination');
+  container.innerHTML = '';
+
+  for (let i = 1; i <= totalPages; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i;
+    btn.className = 'btn btn-sm btn-outline-primary me-1';
+    if (i === currentPage) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      currentPage = i;
+      renderTable();
+      renderPagination();
+    });
+    container.appendChild(btn);
+  }
+}
+
+function sortByColumn(column) {
+  const tbody = document.getElementById('logsBody');
+  const rows = Array.from(tbody.querySelectorAll('tr.filtered-in'));
+  const ascending = currentSort.column === column ? !currentSort.ascending : true;
+  currentSort = { column, ascending };
+
+  rows.sort((a, b) => {
+    let valA = a.dataset[column];
+    let valB = b.dataset[column];
+    if (column === 'timestamp') {
+      valA = new Date(valA);
+      valB = new Date(valB);
+    }
+    return ascending ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+  });
+
+  rows.forEach(row => tbody.appendChild(row));
+  currentPage = 1;
+  renderTable();
+  renderPagination();
+}
+
+function exportToCSV() {
+  const rows = Array.from(document.querySelectorAll('#logsBody tr.filtered-in')).filter(row => row.style.display !== 'none');
+  let csv = 'Username,Action,IP Address,Timestamp\n';
+  rows.forEach(row => {
+    const cols = row.querySelectorAll('td');
+    csv += Array.from(cols).slice(1).map(td => `"${td.textContent.trim()}"`).join(',') + '\n';
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'access_logs.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportToExcel() {
+  const table = document.getElementById('logsTable');
+  const rows = Array.from(document.querySelectorAll('#logsBody tr.filtered-in')).filter(row => row.style.display !== 'none');
+  const html = '<table>' + table.querySelector('thead').outerHTML + '<tbody>' + rows.map(row => row.outerHTML).join('') + '</tbody></table>';
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'access_logs.xls';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#logsBody tr').forEach(row => row.classList.add('filtered-in'));
+  renderTable();
+  renderPagination();
+});
+</script>
+
+
+<%- include('../partials/footer') %>
+
+
+// File: c:\Users\Public\Projects\care-db-project\views\auth\login.ejs
+<%- include('../partials/header') %>
+
+<div class="form-wrapper mx-auto bg-white p-8 rounded-lg shadow-lg" style="font-size: 0.875rem;">
+    <h2 class="mb-4 text-center text-lg font-semibold">Connexion</h2>
+    
+    <% if (typeof errors !== 'undefined' && errors.length > 0) { %>
+        <div class="alert alert-danger" role="alert" style="font-size: 0.8rem;">
+            <% errors.forEach(function(error) { %>
+                <%= error %>
+            <% }); %>
+        </div>
+    <% } %>
+
+    <form action="/auth/login" method="POST" class="mb-3" id="loginForm">
+        <!-- NEW: Add the hidden CSRF token field -->
+        <input type="hidden" name="_csrf" id="csrfToken" value="<%= csrfToken %>">
+        <div class="mb-3 d-flex align-items-center">
+            <label class="form-label mb-0 me-2" for="username" style="width: 150px;">Nom d'utilisateur :</label>
+            <input type="text" name="username" id="username" class="form-control" value="<%= typeof username !== 'undefined' ? username : '' %>" required style="font-size: 0.85rem;">
+        </div>
+        <div class="mb-3 d-flex align-items-center">
+            <label class="form-label mb-0 me-2" for="password" style="width: 150px;">Mot de passe :</label>
+            <input type="password" name="password" id="password" class="form-control" required style="font-size: 0.85rem;">
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label" for="facilityName">Établissement :</label>
+            <input type="text" id="facilityName" class="form-control" placeholder="Saisir le nom d'utilisateur pour charger l'établissement" readonly style="font-size: 0.85rem;">
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label" for="userRoleName">Rôle :</label>
+            <input type="text" id="userRoleName" class="form-control" placeholder="Saisir le nom d'utilisateur pour charger le rôle" readonly style="font-size: 0.85rem;">
+        </div>
+        
+        <input type="hidden" name="localTime" id="localTimeInput">
+        <button type="submit" class="btn btn-primary w-100" style="font-size: 0.9rem;">Se connecter <i class="fas fa-sign-in-alt"></i></button>
+    </form>
+    
+    <div class="time-display mt-3 d-flex justify-content-between text-center" style="font-size: 0.8rem;">
+        <p class="mb-0 flex-grow-1"><strong>Serveur :</strong> <span id="serverTimeDisplay">Chargement...</span></p>
+        <p class="mb-0 flex-grow-1"><strong>Machine :</strong> <span id="localTimeDisplay">Chargement...</span></p>
+    </div>
+    <p id="timeDifferenceMessage" class="text-danger text-center mt-2" style="font-size: 0.8rem;"></p>
+    
+</div>
+
+<%- include('../partials/footer') %>
+
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const usernameInput = document.getElementById('username');
+        const facilityNameInput = document.getElementById('facilityName');
+        const userRoleNameInput = document.getElementById('userRoleName');
+        const serverTimeDisplay = document.getElementById('serverTimeDisplay');
+        const localTimeDisplay = document.getElementById('localTimeDisplay');
+        const timeDifferenceMessage = document.getElementById('timeDifferenceMessage');
+        const localTimeInput = document.getElementById('localTimeInput');
+        
+        const updateTimes = async () => {
+            try {
+                const response = await fetch(window.location.origin + '/auth/server-time');
+                const data = await response.json();
+                const serverTime = new Date(data.serverTime);
+                serverTimeDisplay.textContent = serverTime.toLocaleString('fr-FR');
+            } catch (error) {
+                console.error('Error fetching server time:', error);
+                serverTimeDisplay.textContent = 'Échec du chargement';
+            }
+            
+            const localTime = new Date();
+            localTimeDisplay.textContent = localTime.toLocaleString('fr-FR');
+            localTimeInput.value = localTime.toISOString();
+        };
+
+        await updateTimes();
+        setInterval(updateTimes, 30000);
+
+        usernameInput.addEventListener('change', async (event) => {
+            const username = event.target.value.trim();
+            if (username.length > 0) {
+                try {
+                    const csrfToken = document.getElementById('csrfToken').value;
+                    const response = await fetch(window.location.origin + '/auth/get-user-facility-and-role', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-csrf-token': csrfToken
+                        },
+                        body: JSON.stringify({ username }),
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        facilityNameInput.value = data.facilityName;
+                        userRoleNameInput.value = data.roleName;
+                    } else {
+                        facilityNameInput.value = data.message;
+                        userRoleNameInput.value = '';
+                    }
+                } catch (error) {
+                    console.error('Error fetching user info:', error);
+                    facilityNameInput.value = 'Erreur lors du chargement des informations de l\'utilisateur.';
+                    userRoleNameInput.value = '';
+                }
+            } else {
+                facilityNameInput.value = 'Saisir le nom d\'utilisateur pour charger l\'établissement';
+                userRoleNameInput.value = 'Saisir le nom d\'utilisateur pour charger le rôle';
+            }
+        });
+
+        if (usernameInput.value) {
+            usernameInput.dispatchEvent(new Event('change'));
+        }
+    });
+</script>
+
+<!-- 
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const usernameInput = document.getElementById('username');
+        const facilityNameInput = document.getElementById('facilityName');
+        const userRoleNameInput = document.getElementById('userRoleName');
+        const passwordInput = document.getElementById('password');
+
+        const serverTimeDisplay = document.getElementById('serverTimeDisplay');
+        const localTimeDisplay = document.getElementById('localTimeDisplay');
+        const timeDifferenceMessage = document.getElementById('timeDifferenceMessage');
+        const localTimeInput = document.getElementById('localTimeInput');
+        const loginForm = document.getElementById('loginForm');
+
+        let serverTime = null;
+        let localTime = null;
+
+        const updateTimes = async () => {
+            try {
+                const response = await fetch('/auth/server-time');
+                const data = await response.json();
+                serverTime = new Date(data.serverTime);
+                serverTimeDisplay.textContent = serverTime.toLocaleString('fr-FR');
+            } catch (error) {
+                console.error('Error fetching server time:', error);
+                serverTimeDisplay.textContent = 'Échec du chargement';
+            }
+
+            localTime = new Date();
+            localTimeDisplay.textContent = localTime.toLocaleString('fr-FR');
+            localTimeInput.value = localTime.toISOString();
+        };
+
+        await updateTimes();
+        setInterval(updateTimes, 30000);
+
+        usernameInput.addEventListener('change', async (event) => {
+            const username = event.target.value.trim();
+            if (username.length > 0) {
+                try {
+                    const response = await fetch('/auth/get-user-facility-and-role', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ username }),
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        facilityNameInput.value = data.facilityName;
+                        userRoleNameInput.value = data.roleName;
+                    } else {
+                        facilityNameInput.value = data.message;
+                        userRoleNameInput.value = '';
+                    }
+                } catch (error) {
+                    console.error('Error fetching user info:', error);
+                    facilityNameInput.value = 'Erreur lors du chargement des informations de l\'utilisateur.';
+                    userRoleNameInput.value = '';
+                }
+            } else {
+                facilityNameInput.value = 'Saisir le nom d\'utilisateur pour charger l\'établissement';
+                userRoleNameInput.value = 'Saisir le nom d\'utilisateur pour charger le rôle';
+            }
+        });
+
+        if (usernameInput.value) {
+            usernameInput.dispatchEvent(new Event('change'));
+        }
+
+        loginForm.addEventListener('submit', async (event) => {
+            try {
+                const response = await fetch('/auth/server-time');
+                const data = await response.json();
+                serverTime = new Date(data.serverTime);
+            } catch (error) {
+                console.error('Error re-fetching server time before submit:', error);
+                timeDifferenceMessage.textContent = 'Impossible de vérifier l\'heure du serveur. Veuillez réessayer.';
+                event.preventDefault();
+                return;
+            }
+
+            localTime = new Date();
+            localTimeInput.value = localTime.toISOString();
+
+            if (serverTime && localTime) {
+                const timeDifferenceMs = Math.abs(serverTime.getTime() - localTime.getTime());
+                const maxAllowedDiffMs = 3 * 60 * 1000;
+
+                if (timeDifferenceMs > maxAllowedDiffMs) {
+                    timeDifferenceMessage.textContent = 'L\'heure de votre machine n\'est pas synchronisée avec celle du serveur. Veuillez la corriger pour vous connecter.';
+                    event.preventDefault();
+                } else {
+                    timeDifferenceMessage.textContent = '';
+                }
+            } else {
+                timeDifferenceMessage.textContent = 'Impossible de vérifier le décalage horaire. L\'heure du serveur ou l\'heure locale n\'est pas disponible.';
+                event.preventDefault();
+            }
+        });
+    });
+</script> -->
+
+// File: c:\Users\Public\Projects\care-db-project\views\facilities\create.ejs
+<%- include('../partials/header') %>
+<%- include('../partials/navbar') %>
+
+<div class="container mt-4">
+    <div class="card p-4 form-wrapper">
+        <h4 class="mb-3">Créer un Etablissement</h4>
+
+        <% if (success) { %>
+            <div class="alert alert-success">L'établissement a été créé avec succès!</div>
+        <% } %>
+
+        <% if (errors && errors.length > 0) { %>
+            <div class="alert alert-danger">
+                <ul>
+                    <% errors.forEach(error => { %>
+                        <li><%= error %></li>
+                    <% }) %>
+                </ul>
+            </div>
+        <% } %>
+
+        <form action="/admin/facilities/create" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Nom Etablissement</label>
+                    <input type="text" name="name" class="form-control" value="<%= name %>" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Code</label>
+                    <input type="text" name="code" class="form-control" value="<%= code %>" maxlength="10" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Type</label>
+                    <select name="type" class="form-select" required>
+                        <option value="">-- Sélectionner Type --</option>
+                        <option value="Hospital" <%= type === 'Hospital' ? 'selected' : '' %>>Hospital</option>
+                        <option value="Health Center" <%= type === 'Health Center' ? 'selected' : '' %>>Centre de santé</option>
+                        <option value="Clinic" <%= type === 'Clinic' ? 'selected' : '' %>>Clinique</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Type Etablissement</label>
+                    <select id="facility-type" name="facility_type" class="form-select" required>
+                        <option value="main" <%= facility_type === 'main' ? 'selected' : '' %>>Etablissement Principal</option>
+                        <option value="satellite" <%= facility_type === 'satellite' ? 'selected' : '' %>>Etablissement Satellite</option>
+                    </select>
+                </div>
+                <div class="col-md-6" id="parent-facility-field" style="display: none;">
+                    <label class="form-label">Etablissement Parent</label>
+                    <select name="parent_id" class="form-select">
+                        <option value="">-- Sélectionner Parent --</option>
+                        <% mainFacilities.forEach(f => { %>
+                            <option value="<%= f.id %>" <%= String(parent_id) === String(f.id) ? 'selected' : '' %>><%= f.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Directeur</label>
+                    <select name="director_id" class="form-select">
+                        <option value="">-- Sélectionner Directeur --</option>
+                        <% staff.forEach(s => { %>
+                            <option value="<%= s.nr %>" <%= String(director_id) === String(s.nr) ? 'selected' : '' %>><%= s.person ? s.person.name_first + ' ' + s.person.name_last : s.job_function_title %> (ID: <%= s.nr %>)</option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Surveillant Général</label>
+                    <select name="head_nurse_id" class="form-select">
+                        <option value="">-- Sélectionner Surveillant Général --</option>
+                        <% staff.forEach(s => { %>
+                            <option value="<%= s.nr %>" <%= String(head_nurse_id) === String(s.nr) ? 'selected' : '' %>><%= s.person ? s.person.name_first + ' ' + s.person.name_last : s.job_function_title %> (ID: <%= s.nr %>)</option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Econome</label>
+                    <select name="finance_officer_id" class="form-select">
+                        <option value="">-- Sélectionner Econome --</option>
+                        <% staff.forEach(s => { %>
+                            <option value="<%= s.nr %>" <%= String(finance_officer_id) === String(s.nr) ? 'selected' : '' %>><%= s.person ? s.person.name_first + ' ' + s.person.name_last : s.job_function_title %> (ID: <%= s.nr %>)</option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Adresse</label>
+                    <textarea name="address" class="form-control"><%= address %></textarea>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Ville</label>
+                    <input type="text" name="city" class="form-control" value="<%= city %>">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Région</label>
+                    <input type="text" name="region" class="form-control" value="<%= region %>">
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Pays</label>
+                    <input type="text" name="country" class="form-control" value="<%= country %>">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Latitude</label>
+                    <input type="text" name="latitude" class="form-control" value="<%= latitude %>">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Longitude</label>
+                    <input type="text" name="longitude" class="form-control" value="<%= longitude %>">
+                </div>
+            </div>
+
+            <div class="mt-4 text-end">
+                <a href="/" class="btn btn-sm btn-secondary">Fermer</a>
+                <button type="submit" class="btn btn-primary">Créer Etablissement</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const facilityTypeSelect = document.getElementById('facility-type');
+        const parentFacilityField = document.getElementById('parent-facility-field');
+        const parentIdSelect = parentFacilityField.querySelector('select[name="parent_id"]');
+
+        const toggleParentField = () => {
+            if (facilityTypeSelect.value === 'satellite') {
+                parentFacilityField.style.display = 'block';
+                parentIdSelect.setAttribute('required', 'required');
+            } else {
+                parentFacilityField.style.display = 'none';
+                parentIdSelect.removeAttribute('required');
+                parentIdSelect.value = "";
+            }
+        };
+
+        if (facilityTypeSelect) {
+            facilityTypeSelect.addEventListener('change', toggleParentField);
+            toggleParentField();
+        }
+    });
+</script>
+
+<style>
+    .form-wrapper {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+</style>
+
+<%- include('../partials/footer') %>
+
+
+// File: c:\Users\Public\Projects\care-db-project\views\facilities\updateFacility.ejs
+<%- include('../partials/header') %>
+<%- include('../partials/navbar') %>
+
+<div class="container mt-4">
+    <div class="card p-4 form-wrapper">
+        <h4 class="mb-3">Mise à jour d'un Etablissement</h4>
+
+        <% if (success) { %>
+            <div class="alert alert-success">L'établissement a été mis à jour avec succès!</div>
+        <% } %>
+
+        <% if (errors && errors.length > 0) { %>
+            <div class="alert alert-danger">
+                <ul>
+                    <% errors.forEach(error => { %>
+                        <li><%= error %></li>
+                    <% }) %>
+                </ul>
+            </div>
+        <% } %>
+
+        <form method="GET" action="/admin/facilities/update" class="mb-4">
+            <div class="card p-3">
+                <h5 class="card-title">Selectionner Etablissement</h5>
+                <div class="row align-items-end">
+                    <div class="col-md-9 mb-3">
+                        <label for="facilitySelect" class="form-label">Liste des Etablissements:</label>
+                        <input type="text" id="facilitySearch" class="form-control form-control-sm mb-2" placeholder="Rechercher un établissement...">
+                        <select name="facility_id" id="facilitySelect" class="form-select" size="6" required>
+                            <% facilities.forEach(f => { %>
+                                <option value="<%= f.id %>" <%= facility && String(f.id) === String(facility.id) ? 'selected' : '' %>>
+                                    <%= f.name %> (<%= f.code %>)
+                                </option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <button type="submit" class="btn btn-primary w-100 mb-2">Charger Etablissement</button>
+                        <a href="/" class="btn btn-secondary w-100">Annuler</a>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <% if (facility) { %>
+            <div class="card p-4 mt-3">
+                <h5 class="card-title">Modifier l'Etablissement: <span class="text-primary"><%= facility.name %></span></h5>
+                <form action="/admin/facilities/update" method="POST">
+                    <input type="hidden" name="facility_id" value="<%= facility.id %>">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nom Etablissement</label>
+                            <input type="text" name="name" class="form-control" value="<%= facility.name %>" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Code</label>
+                            <input type="text" name="code" class="form-control" value="<%= facility.code %>" maxlength="10" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Type</label>
+                            <select name="type" class="form-select" required>
+                                <option value="">-- Sélectionner Type --</option>
+                                <option value="Hospital" <%= facility.type === 'Hospital' ? 'selected' : '' %>>Hospital</option>
+                                <option value="Health Center" <%= facility.type === 'Health Center' ? 'selected' : '' %>>Centre de santé</option>
+                                <option value="Clinic" <%= facility.type === 'Clinic' ? 'selected' : '' %>>Clinique</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Type Etablissement</label>
+                            <select id="facility-type" name="facility_type" class="form-select" required>
+                                <option value="main" <%= String(facility.id) === String(facility.parent_id) ? 'selected' : '' %>>Etablissement Principal</option>
+                                <option value="satellite" <%= String(facility.id) !== String(facility.parent_id) ? 'selected' : '' %>>Etablissement Satellite</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="parent-facility-field" style="display: none;">
+                            <label class="form-label">Etablissement Parent</label>
+                            <select name="parent_id" class="form-select">
+                                <option value="">-- Sélectionner Parent --</option>
+                                <% mainFacilities.forEach(f => { %>
+                                    <option value="<%= f.id %>" <%= String(facility.parent_id) === String(f.id) ? 'selected' : '' %>><%= f.name %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Directeur</label>
+                            <select name="director_id" class="form-select">
+                                <option value="">-- Selectionner Directeur --</option>
+                                <% staff.forEach(s => { %>
+                                    <option value="<%= s.nr %>" <%= String(facility.director_id) === String(s.nr) ? 'selected' : '' %>><%= s.person ? s.person.name_first + ' ' + s.person.name_last : s.job_function_title %> (ID: <%= s.nr %>)</option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Surveillant Général</label>
+                            <select name="head_nurse_id" class="form-select">
+                                <option value="">-- Selectionner Surveillant Général --</option>
+                                <% staff.forEach(s => { %>
+                                    <option value="<%= s.nr %>" <%= String(facility.head_nurse_id) === String(s.nr) ? 'selected' : '' %>><%= s.person ? s.person.name_first + ' ' + s.person.name_last : s.job_function_title %> (ID: <%= s.nr %>)</option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Econome</label>
+                            <select name="finance_officer_id" class="form-select">
+                                <option value="">-- Selectionner Econome --</option>
+                                <% staff.forEach(s => { %>
+                                    <option value="<%= s.nr %>" <%= String(facility.finance_officer_id) === String(s.nr) ? 'selected' : '' %>><%= s.person ? s.person.name_first + ' ' + s.person.name_last : s.job_function_title %> (ID: <%= s.nr %>)</option>
+                                <% }) %>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Adresse</label>
+                            <textarea name="address" class="form-control"><%= facility.address %></textarea>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Ville</label>
+                            <input type="text" name="city" class="form-control" value="<%= facility.city %>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Région</label>
+                            <input type="text" name="region" class="form-control" value="<%= facility.region %>">
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Pays</label>
+                            <input type="text" name="country" class="form-control" value="<%= facility.country %>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Latitude</label>
+                            <input type="text" name="latitude" class="form-control" value="<%= facility.latitude %>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Longitude</label>
+                            <input type="text" name="longitude" class="form-control" value="<%= facility.longitude %>">
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-end">
+                        <button type="submit" class="btn btn-success">Mettre à jour l'établissement</button>
+                    </div>
+                </form>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<script>
+    document.getElementById('facilitySearch').addEventListener('input', function () {
+        const search = this.value.toLowerCase();
+        const options = document.querySelectorAll('#facilitySelect option');
+        options.forEach(option => {
+            const text = option.textContent.toLowerCase();
+            option.style.display = text.includes(search) ? '' : 'none';
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const facilityTypeSelect = document.getElementById('facility-type');
+        const parentFacilityField = document.getElementById('parent-facility-field');
+        const parentIdSelect = parentFacilityField.querySelector('select[name="parent_id"]');
+
+        if (facilityTypeSelect) {
+            const isSatellite = `<%= facility && String(facility.id) !== String(facility.parent_id) %>`;
+            if (isSatellite === 'true') {
+                parentFacilityField.style.display = 'block';
+            } else {
+                parentFacilityField.style.display = 'none';
+            }
+
+            const toggleParentField = () => {
+                if (facilityTypeSelect.value === 'satellite') {
+                    parentFacilityField.style.display = 'block';
+                    parentIdSelect.setAttribute('required', 'required');
+                } else {
+                    parentFacilityField.style.display = 'none';
+                    parentIdSelect.removeAttribute('required');
+                }
+            };
+
+            facilityTypeSelect.addEventListener('change', toggleParentField);
+        }
+    });
+</script>
+
+<style>
+    .form-wrapper {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+</style>
+
+<%- include('../partials/footer') %>
+
+
+
+// File: c:\Users\Public\Projects\care-db-project\views\index.ejs
+<%- include('partials/header') %>
+<%- include('partials/navbar') %>
+
+<div class="container-fluid py-5 content-wrapper">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Navigation Rapide</h5>
+                </div>
+                <div class="list-group list-group-flush">
+                    <% if (hasAnyPermission(['Patient.Read.PatientRecord', 'Patient.Create.PatientRecord'])) { %>
+                        <a href="/patients/list" class="list-group-item list-group-item-action"><i class="fas fa-user-injured me-2"></i> Gestion des Patients</a>
+                    <% } %>
+                    <% if (hasPermission('Pharmacy.Create.Prescription')) { %>
+                        <a href="/patients/prescriptions" class="list-group-item list-group-item-action"><i class="fas fa-file-prescription me-2"></i> Ordonnances & Traitements</a>
+                    <% } %>
+                    <% if (hasAnyPermission(['Billing.Collect.Payment', 'Billing.Create.Invoice'])) { %>
+                        <a href="/finances/invoicing" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar me-2"></i> Facturation</a>
+                    <% } %>
+                    <% if (hasAnyPermission(['Pharmacy.Dispense.Medication', 'Inventory.Read.Stock'])) { %>
+                        <a href="/pharmacy/distribution" class="list-group-item list-group-item-action"><i class="fas fa-pills me-2"></i> Pharmacie</a>
+                    <% } %>
+                    <% if (hasPermission('Appointment.Read.Appointment')) { %>
+                        <a href="/patients/appointments" class="list-group-item list-group-item-action"><i class="fas fa-calendar-check me-2"></i> Rendez-vous</a>
+                    <% } %>
+                    <% if (hasAnyPermission(['Reports.Generate.FinancialData', 'Reports.Generate.ConsultationData'])) { %>
+                        <a href="/stats/finances" class="list-group-item list-group-item-action"><i class="fas fa-chart-line me-2"></i> Rapports</a>
+                    <% } %>
+                    <% if (isAppAdmin || isAdmin) { %>
+                        <a href="/admin/users/create" class="list-group-item list-group-item-action"><i class="fas fa-cog me-2"></i> Administration</a>
+                        <a href="/help/maintenance" class="list-group-item list-group-item-action"><i class="fas fa-wrench me-2"></i> Maintenance</a>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+                <i class="fas fa-hospital-user fa-2x me-3"></i>
+                <div>
+                    <h4 class="alert-heading mb-0">Tableau de Bord - <%= user.facility.name %></h4>
+                    <p class="mb-0">
+                    Bienvenue, 
+                    <strong>
+                        <% if (user.firstName && user.lastName) { %>
+                            <%= user.firstName %> <%= user.lastName %>
+                        <% } else { %>
+                            <%= user.username %>
+                        <% } %>
+                    </strong>! Votre tableau de bord vous donne un aperçu rapide des activités de l'hôpital.
+                </p>
+                </div>
+            </div>
+
+            <% if (isAdmin || isAppAdmin) { %>
+                <h5 class="mt-4 mb-3">Statistiques du Système</h5>
+                <div class="row">
+                    <div class="col-md-4 mb-4">
+                        <div class="card text-white bg-primary h-100 shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="card-title">Utilisateurs Actifs</h5>
+                                        <h2 class="card-text"><%= connectedUsersCount %></h2>
+                                    </div>
+                                    <i class="fas fa-users-cog fa-3x"></i>
+                                </div>
+                                <p class="mt-2 mb-0">
+                                    <small>Nombre de comptes utilisateurs actifs dans le système.</small>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-4">
+                        <div class="card text-white bg-secondary h-100 shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="card-title">Etablissements Gérés</h5>
+                                        <h2 class="card-text">5</h2>
+                                    </div>
+                                    <i class="fas fa-hospital fa-3x"></i>
+                                </div>
+                                <p class="mt-2 mb-0">
+                                    <small>Total des établissements configurés.</small>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-4">
+                        <div class="card text-white bg-dark h-100 shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="card-title">Services en Ligne</h5>
+                                        <h2 class="card-text">12</h2>
+                                    </div>
+                                    <i class="fas fa-server fa-3x"></i>
+                                </div>
+                                <p class="mt-2 mb-0">
+                                    <small>Nombre de services applicatifs fonctionnels.</small>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <% } %>
+
+            <% if (!isAppAdmin) { %>
+                <h5 class="mt-4 mb-3">Indicateurs Clés</h5>
+                <div class="row">
+                    <% if (hasAnyPermission(['Patient.Read.PatientRecord', 'Patient.Create.PatientRecord', 'Patient.Admit.Inpatient', 'Patient.Release.Inpatient'])) { %>
+                        <div class="col-md-4 mb-4">
+                            <div class="card text-white bg-info h-100 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h5 class="card-title">Patients Actuels</h5>
+                                            <h2 class="card-text">150</h2>
+                                        </div>
+                                        <i class="fas fa-procedures fa-3x"></i>
+                                    </div>
+                                    <p class="mt-2 mb-0">
+                                        <small>Nombre total de patients hospitalisés ou en consultation.</small>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    <% } %>
+                    <% if (hasPermission('Pharmacy.Create.Prescription')) { %>
+                        <div class="col-md-4 mb-4">
+                            <div class="card text-white bg-warning h-100 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h5 class="card-title">Nouvelles Ordonnances</h5>
+                                            <h2 class="card-text">35</h2>
+                                        </div>
+                                        <i class="fas fa-notes-medical fa-3x"></i>
+                                    </div>
+                                    <p class="mt-2 mb-0">
+                                        <small>Ordonnances en attente de distribution par la pharmacie.</small>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    <% } %>
+                    <% if (hasAnyPermission(['Billing.Collect.Payment', 'Billing.Create.Invoice'])) { %>
+                        <div class="col-md-4 mb-4">
+                            <div class="card text-white bg-success h-100 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h5 class="card-title">Factures en Cours</h5>
+                                            <h2 class="card-text">25</h2>
+                                        </div>
+                                        <i class="fas fa-receipt fa-3x"></i>
+                                    </div>
+                                    <p class="mt-2 mb-0">
+                                        <small>Factures non payées ou en attente de traitement.</small>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+            <% } %>
+
+            <h5 class="mt-4 mb-3">Actions Rapides</h5>
+            <div class="row">
+                <% if (hasPermission('Patient.Create.PatientRecord')) { %>
+                    <div class="col-md-4 mb-3">
+                        <a href="/patients/create" class="btn btn-primary btn-lg w-100 shadow-sm py-4">
+                            <i class="fas fa-user-plus d-block mb-2"></i>
+                            Ajouter un Nouveau Patient
+                        </a>
+                    </div>
+                <% } %>
+                <% if (hasPermission('Pharmacy.Create.Prescription')) { %>
+                    <div class="col-md-4 mb-3">
+                        <a href="/patients/prescriptions" class="btn btn-secondary btn-lg w-100 shadow-sm py-4">
+                            <i class="fas fa-plus d-block mb-2"></i>
+                            Créer une Ordonnance
+                        </a>
+                    </div>
+                <% } %>
+                <% if (hasPermission('Billing.Create.Invoice')) { %>
+                    <div class="col-md-4 mb-3">
+                        <a href="/finances/invoicing" class="btn btn-warning btn-lg w-100 shadow-sm py-4">
+                            <i class="fas fa-file-alt d-block mb-2"></i>
+                            Créer une Facture
+                        </a>
+                    </div>
+                <% } %>
+            </div>
+            
+            <h5 class="mt-4 mb-3">Activité Récente</h5>
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Action</th>
+                                    <th>Patient</th>
+                                    <th>Date</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Nouvelle Ordonnance</td>
+                                    <td>Marie Dupont</td>
+                                    <td>10 Aou 2025</td>
+                                    <td><span class="badge bg-warning text-dark">En attente</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Enregistrement Patient</td>
+                                    <td>Jean Michel</td>
+                                    <td>10 Aou 2025</td>
+                                    <td><span class="badge bg-success">Complété</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Facture créée</td>
+                                    <td>Fatima Sarr</td>
+                                    <td>09 Aou 2025</td>
+                                    <td><span class="badge bg-danger">Non payé</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Sortie Patient</td>
+                                    <td>Pierre Nku</td>
+                                    <td>08 Aou 2025</td>
+                                    <td><span class="badge bg-success">Complété</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .content-wrapper {
+        background-color: #f8f9fa; /* Light gray background for the entire content area */
+    }
+    .card-title {
+        font-size: 1rem;
+    }
+    .card-text {
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    .list-group-item {
+        font-size: 0.95rem;
+    }
+    .list-group-item:hover {
+        background-color: #e9ecef;
+    }
+    .btn-lg {
+        font-size: 1.1rem;
+    }
+</style>
+
+<%- include('partials/footer') %>
+
+// File: c:\Users\Public\Projects\care-db-project\views\partials\footer.ejs
+<script src="/js/bootstrap.bundle.min.js"></script>
+  <footer class="text-center mt-5 mb-3 text-muted">
+    <hr>
+    <p>&copy; <%= new Date().getFullYear() %> Oseelc Care. All rights reserved.</p>
+  </footer>
+      <script>
+        document.querySelectorAll('.dropdown-submenu > a').forEach(function (element) {
+        element.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          let submenu = this.nextElementSibling;
+            if (submenu) {
+                submenu.classList.toggle('show');
+                this.parentNode.classList.toggle('show');
+            }
+          });
+        });
+      </script>
+</body>
+</html>
+
+// File: c:\Users\Public\Projects\care-db-project\views\partials\header.ejs
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title : 'Oseel Care' %></title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/bootstrap-icons.min.css">
+  <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"> -->
+</head>
+<body class="container mt-5">
+
+
+// File: c:\Users\Public\Projects\care-db-project\views\partials\navbar.ejs
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 rounded">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">Oseel Care</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarMain">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <% if (typeof user !== 'undefined' && user && user.permissions && user.permissions.length > 0) { %>
+                    <li class="nav-item">
+                        <a class="nav-link <%= activePage === 'home' ? 'active' : '' %>" href="/">
+                            <i class="fas fa-home"></i>
+                        </a>
+                    </li>
+                <% } %>
+                
+                <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Patient.Read.PatientRecord', 'Patient.Create.PatientRecord', 'Patient.Update.PatientRecord', 'Patient.Admit.Inpatient', 'Patient.Release.Inpatient', 'MedicalRecord.Read.ClinicalData', 'Reports.Generate.ConsultationData', 'Appointment.Read.Appointment', 'Pharmacy.Create.Prescription', 'Lab.Send.TestRequest', 'Imaging.Send.TestRequest'])) { %>
+                    <li class="nav-item dropdown <%= activePage.startsWith('patients') ? 'active' : '' %>">
+                        <a class="nav-link dropdown-toggle" href="#" id="patientsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-hospital-user"></i>Patients
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="patientsDropdown">
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Patient.Create.PatientRecord')) { %>
+                                <li><a class="dropdown-item" href="/patients/create">Enregistrement</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Patient.Read.PatientRecord')) { %>
+                                <li><a class="dropdown-item" href="/patients/list">Dossiers médicaux</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.ConsultationData')) { %>
+                                <li><a class="dropdown-item" href="/patients/consultations">Consultations</a></li>
+                            <% } %>
+                            <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Patient.Admit.Inpatient', 'Patient.Release.Inpatient'])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#">Hospitalisation</a>
+                                    <ul class="dropdown-menu">
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Patient.Admit.Inpatient')) { %>
+                                            <li><a class="dropdown-item" href="/patients/hospitalization/admit">Admission</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Patient.Release.Inpatient')) { %>
+                                            <li><a class="dropdown-item" href="/patients/hospitalization/release">Sortie</a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Lab.Send.TestRequest', 'Imaging.Send.TestRequest', 'Surgery.Request.Procedure'])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#">Actes/Examens</a>
+                                    <ul class="dropdown-menu">
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Lab.Send.TestRequest')) { %>
+                                            <li><a class="dropdown-item" href="/procedures/acts/lab">Laboratoire</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Imaging.Send.TestRequest')) { %>
+                                            <li><a class="dropdown-item" href="/procedures/acts/imaging">Imagerie</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Surgery.Request.Procedure')) { %>
+                                            <li><a class="dropdown-item" href="/procedures/acts/surgery">Chirurgie</a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Pharmacy.Create.Prescription')) { %>
+                                <li><a class="dropdown-item" href="/patients/prescriptions">Prescriptions</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Appointment.Read.Appointment')) { %>
+                                <li><a class="dropdown-item" href="/patients/appointments">Rendez-vous</a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+                
+                <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Billing.Collect.Payment', 'Billing.Create.Invoice', 'Billing.View.ProformaInvoices', 'Billing.Read.InsuranceInfo', 'Billing.View.PendingInvoices', 'Reports.Generate.FinancialData', 'Billing.Manage.SupportVoucherConfig'])) { %>
+                    <li class="nav-item dropdown <%= activePage.startsWith('finances') ? 'active' : '' %>">
+                        <a class="nav-link dropdown-toggle" href="#" id="financesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-cash-register"></i> Finances
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="financesDropdown">
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Billing.Collect.Payment')) { %>
+                                <li><a class="dropdown-item" href="/finances/payments">Encaissements</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Billing.Create.Invoice')) { %>
+                                <li><a class="dropdown-item" href="/finances/invoicing">Facturation</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Billing.View.ProformaInvoices')) { %>
+                                <li><a class="dropdown-item" href="/finances/proforma-invoices">Factures pro-forma</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Billing.View.PendingInvoices')) { %>
+                                <li><a class="dropdown-item" href="/finances/pending-invoices">Factures en attente</a></li>
+                            <% } %>
+                            <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Billing.Read.InsuranceInfo', 'Billing.Manage.SupportVoucherConfig'])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#">Assurances</a>
+                                    <ul class="dropdown-menu">
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Billing.Read.InsuranceInfo')) { %>
+                                            <li><a class="dropdown-item" href="/finances/third-parties">Assurances et Entreprises</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Billing.Manage.SupportVoucherConfig')) { %>
+                                            <li><a class="dropdown-item" href="/finances/support-vouchers">Bons de prise en charge</a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Billing.Collect.Payment')) { %>
+                                <li><a class="dropdown-item" href="/finances/collections">Recouvrements</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.FinancialData')) { %>
+                                <li><a class="dropdown-item" href="/finances/financial-reports">Rapports financiers</a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+                
+                <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Pharmacy.Dispense.Medication', 'Inventory.Order.Drugs', 'Inventory.Read.Stock', 'Pharmacy.Report.Distribution'])) { %>
+                    <li class="nav-item dropdown <%= activePage.startsWith('pharmacy') ? 'active' : '' %>">
+                        <a class="nav-link dropdown-toggle" href="#" id="pharmacyDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-pills"></i>Pharmacie
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="pharmacyDropdown">
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Pharmacy.Dispense.Medication')) { %>
+                                <li><a class="dropdown-item" href="/pharmacy/distribution">Distribution</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Inventory.Order.Drugs')) { %>
+                                <li><a class="dropdown-item" href="/pharmacy/orders">Commandes</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Inventory.Read.Stock')) { %>
+                                <li><a class="dropdown-item" href="/pharmacy/inventory">Inventaire</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Pharmacy.Report.Distribution')) { %>
+                                <li><a class="dropdown-item" href="/pharmacy/reports/distribution">Rapport de distribution</a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+                
+                <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Inventory.Manage.Suppliers', 'Inventory.Order.Drugs', 'Inventory.Order.ToPharmacy', 'Inventory.Read.Stock', 'Inventory.Report.Stock'])) { %>
+                    <li class="nav-item dropdown <%= activePage.startsWith('warehouse') ? 'active' : '' %>">
+                        <a class="nav-link dropdown-toggle" href="#" id="warehouseDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-warehouse"></i>Entrepôt
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="warehouseDropdown">
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Inventory.Manage.Suppliers')) { %>
+                                <li><a class="dropdown-item" href="/warehouse/suppliers">Comptes fournisseurs</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Inventory.Order.Drugs')) { %>
+                                <li><a class="dropdown-item" href="/warehouse/orders/suppliers">Commandes fournisseurs</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Inventory.Order.ToPharmacy')) { %>
+                                <li><a class="dropdown-item" href="/warehouse/orders/shelves">Commandes rayons</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Inventory.Read.Stock')) { %>
+                                <li><a class="dropdown-item" href="/warehouse/inventory">Inventaires périodiques</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Inventory.Report.Stock')) { %>
+                                <li><a class="dropdown-item" href="/warehouse/reports">Rapports des stocks</a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+                
+                <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Reports.Generate.FinancialData', 'Reports.Generate.ConsultationData', 'Reports.Generate.HospitalizationData', 'Reports.Generate.DiagnosticData', 'Reports.Generate.LabData', 'Reports.Generate.ImagingData', 'Reports.Generate.MedicationOrderData'])) { %>
+                    <li class="nav-item dropdown <%= activePage.startsWith('stats') ? 'active' : '' %>">
+                        <a class="nav-link dropdown-toggle" href="#" id="statsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-chart-line"></i>Stats
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="statsDropdown">
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.FinancialData')) { %>
+                                <li><a class="dropdown-item" href="/stats/finances">Finances</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.ConsultationData')) { %>
+                                <li><a class="dropdown-item" href="/stats/consultations">Consultations</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.HospitalizationData')) { %>
+                                <li><a class="dropdown-item" href="/stats/hospitalisations">Hospitalisations</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.DiagnosticData')) { %>
+                                <li><a class="dropdown-item" href="/stats/diagnostics">Diagnostiques</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.LabData')) { %>
+                                <li><a class="dropdown-item" href="/stats/lab">Laboratoire</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.ImagingData')) { %>
+                                <li><a class="dropdown-item" href="/stats/imaging">Imagerie</a></li>
+                            <% } %>
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Reports.Generate.MedicationOrderData')) { %>
+                                <li><a class="dropdown-item" href="/stats/medication-orders">Commandes</a></li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+                
+                <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Admin.Manage.SupportAndMaintenance'])) { %>
+                    <li class="nav-item dropdown <%= activePage.startsWith('help') ? 'active' : '' %>">
+                        <a class="nav-link dropdown-toggle" href="#" id="helpDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-wrench"></i>Maintenance
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="helpDropdown">
+                            <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.SupportAndMaintenance')) { %>
+                                <li><a class="dropdown-item" href="/help/maintenance">Maintenance</a></li>
+                            <% } %>
+                            <li class="dropdown-submenu">
+                                <a class="dropdown-item dropdown-toggle" href="#">Aide</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="/help/guide">Guide d'utilisation</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                <% } %>
+                
+                <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Admin.FullAccess', 'Admin.Create.User', 'Admin.Update.User', 'Admin.Create.Facility', 'Admin.Update.Facility', 'Admin.Manage.CashierConfig', 'Admin.Manage.PharmacyShelves', 'Admin.Manage.WarehouseShelves', 'Admin.Manage.LabConfig', 'Admin.Manage.ServicesConfig', 'Admin.Manage.HospitalizationRooms'])) { %>
+                    <li class="nav-item dropdown <%= activePage.startsWith('admin') ? 'active' : '' %>">
+                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-cog"></i>
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="adminDropdown">
+                            <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Admin.Create.User', 'Admin.Update.User'])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#">Utilisateurs</a>
+                                    <ul class="dropdown-menu">
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Create.User')) { %>
+                                            <li><a class="dropdown-item" href="/admin/users/create">Création des comptes</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Update.User')) { %>
+                                            <li><a class="dropdown-item" href="/admin/users/update">Modification de compte</a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Admin.Create.Facility', 'Admin.Update.Facility'])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#">Etablissements</a>
+                                    <ul class="dropdown-menu">
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Create.Facility')) { %>
+                                            <li><a class="dropdown-item" href="/admin/facilities/create">Création</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Update.Facility')) { %>
+                                            <li><a class="dropdown-item" href="/admin/facilities/update">Modification</a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Admin.Manage.CashierConfig', 'Admin.Manage.PharmacyShelves', 'Admin.Manage.WarehouseShelves', 'Admin.Manage.LabConfig', 'Admin.Manage.ServicesConfig', 'Admin.Manage.HospitalizationRooms'])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#">Services</a>
+                                    <ul class="dropdown-menu">
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.CashierConfig')) { %>
+                                            <li><a class="dropdown-item" href="/admin/config/cashiers">Caisses</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.PharmacyShelves')) { %>
+                                            <li><a class="dropdown-item" href="/admin/config/pharmacy-shelves">Rayons Pharmacie</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.WarehouseShelves')) { %>
+                                            <li><a class="dropdown-item" href="/admin/config/warehouse-shelves">Rayons Entrepôt</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.LabConfig')) { %>
+                                            <li><a class="dropdown-item" href="/admin/config/lab">Laboratoire</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.ServicesConfig')) { %>
+                                            <li><a class="dropdown-item" href="/admin/config/imaging">Imagerie</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.HospitalizationRooms')) { %>
+                                            <li><a class="dropdown-item" href="/admin/config/hospitalization-rooms">Salles</a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                            <% if (typeof hasAnyPermission !== 'undefined' && hasAnyPermission(['Admin.Manage.EquipmentMaintenance', 'Admin.Manage.SoftwareMaintenance'])) { %>
+                                <li class="dropdown-submenu">
+                                    <a class="dropdown-item dropdown-toggle" href="#">Maintenance</a>
+                                    <ul class="dropdown-menu">
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.SoftwareMaintenance')) { %>
+                                            <li><a class="dropdown-item" href="/admin/maintenance/software">Logiciel</a></li>
+                                        <% } %>
+                                        <% if (typeof hasPermission !== 'undefined' && hasPermission('Admin.Manage.EquipmentMaintenance')) { %>
+                                            <li><a class="dropdown-item" href="/admin/maintenance/equipment">Equipements</a></li>
+                                        <% } %>
+                                    </ul>
+                                </li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+            </ul>
+
+            <% if (typeof user !== 'undefined' && user && user.permissions && user.permissions.length > 0) { %>
+                <span class="navbar-text me-3 text-end" style="font-size: 0.8em;">
+                    Bienvenue, <%= user.firstName %> <%= user.lastName %>
+                    <div class="d-block" style="font-size: 0.8em; opacity: 0.7;">
+                        (<%= user.roleName %>)
+                    </div>
+                </span>
+                <a href="/auth/logout" class="btn btn-outline-light btn-sm"><i class="fas fa-sign-out-alt"></i></a>
+            <% } else { %>
+                <a href="/auth/login" class="btn btn-outline-light btn-sm me-2"><i class="fas fa-sign-in-alt"></i></a>
+            <% } %>
+        </div>
+    </div>
+</nav>
+
+// File: c:\Users\Public\Projects\care-db-project\views\patients\createPatient.ejs
+<%- include('../partials/header') %>
+<%- include('../partials/navbar') %>
+
+
+<style>
+  /* Custom CSS for a better look and feel on mobile */
+  body {
+    background-color: #f3f4f6; /* A slightly darker gray for the body background */
+  }
+  .card {
+    border-radius: 1.5rem; /* More rounded corners for a modern feel */
+  }
+  .card-header {
+    background-color: #ffffff; /* White background for the header */
+    border-bottom: 1px solid #e5e7eb; /* Subtle separator */
+    border-top-left-radius: 1.5rem;
+    border-top-right-radius: 1.5rem;
+    padding: 1.5rem;
+  }
+  .card-body {
+    background-color: #f9fafb; /* Light gray for the form background */
+    border-bottom-left-radius: 1.5rem;
+    border-bottom-right-radius: 1.5rem;
+    padding: 2rem;
+  }
+  .form-label {
+    font-size: 0.75rem; /* Smaller font size for labels */
+    font-weight: 500;
+    margin-bottom: 0.25rem; /* Reduced bottom margin for labels */
+  }
+  .form-control, .form-select {
+    font-size: 0.75rem; /* Smaller font size for form controls */
+    border-radius: 0.5rem; /* Rounded corners for inputs */
+    padding: 0.4rem 0.6rem; /* Reduced padding for a more compact look */
+  }
+  .form-check-label {
+      font-size: 0.75rem;
+  }
+  .nav-tabs {
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .nav-tabs .nav-link.active {
+    background-color: #f9fafb;
+    border-color: #e5e7eb #e5e7eb #f9fafb;
+    font-weight: 600;
+  }
+</style>
+
+<main class="container-fluid mt-4">
+    <div class="row justify-content-center">
+        <!-- Making the form use the full width of the container -->
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">Enregistrement du patient</h4>
+                    <div class="d-flex align-items-center">
+                        <label for="date_reg" class="form-label mb-0 me-2">Date:</label>
+                        <input type="text" class="form-control form-control-sm" id="date_reg" value="<%= new Date().toLocaleString() %>" disabled style="width: auto;">
+                    </div>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="myTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#registration-tab-pane" type="button" role="tab" aria-controls="registration-tab-pane" aria-selected="true">Enregistrement</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="profile-tab" data-bs-toggle="tab" data-bs-target="#prescriptions-tab-pane" type="button" role="tab" aria-controls="prescriptions-tab-pane" aria-selected="false">Prescriptions</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="myTabContent">
+                        <div class="tab-pane fade show active p-4" id="registration-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
+                            <form action="/patients/create" method="POST">
+                                <!-- NEW: Add the hidden CSRF token field -->
+                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+                                <% if (success) { %>
+                                    <div class="alert alert-success mt-3" role="alert">Patient enregistré avec succès!</div>
+                                <% } %>
+                                <% if (errors.length > 0) { %>
+                                    <div class="alert alert-danger mt-3" role="alert">
+                                        <ul>
+                                            <% errors.forEach(error => { %>
+                                                <li><%= error %></li>
+                                            <% }); %>
+                                        </ul>
+                                    </div>
+                                <% } %>
+
+                                <!-- Nom, Prénoms, Né(e) le, ou Age, Tribu all on one line with custom widths -->
+                                <div class="row g-1 mt-2">
+                                    <div class="col-md-3">
+                                        <label for="name_last" class="form-label">Nom:</label>
+                                        <input type="text" class="form-control" id="name_last" name="name_last" required>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="name_first" class="form-label">Prénoms:</label>
+                                        <input type="text" class="form-control" id="name_first" name="name_first" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="date_birth" class="form-label">Né(e) le:</label>
+                                        <input type="date" class="form-control" id="date_birth" name="date_birth" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="age" class="form-label">ou Age:</label>
+                                        <input type="number" class="form-control" id="age" name="age">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="ethnic_orig" class="form-label">Tribu:</label>
+                                        <select class="form-select" id="ethnic_orig" name="ethnic_orig">
+                                            <option value="ANGLO">ANGLO</option>
+                                            <option value="FRANCO">FRANCO</option>
+                                            <option value="BAMILEKE">BAMILEKE</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Profession, Ville/Quartier, BP, Telephone all on one line with custom widths -->
+                                <div class="row g-1 mt-2">
+                                    <div class="col-md-4">
+                                        <label for="profession" class="form-label">Profession:</label>
+                                        <input type="text" class="form-control" id="profession" name="profession">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="addr_citytown_nr" class="form-label">Ville/Quartier:</label>
+                                        <input type="text" class="form-control" id="addr_citytown_nr" name="addr_citytown_nr">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="addr_zip" class="form-label">BP:</label>
+                                        <input type="text" class="form-control" id="addr_zip" name="addr_zip" maxlength="10">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="cellphone_1_nr" class="form-label">Telephone:</label>
+                                        <input type="tel" class="form-control" id="cellphone_1_nr" name="cellphone_1_nr" maxlength="10">
+                                    </div>
+                                </div>
+
+                                <div class="row g-1 mt-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label d-block">Sexe:</label>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="sex" id="sexMasculin" value="m" checked>
+                                            <label class="form-check-label" for="sexMasculin">M</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="sex" id="sexFeminin" value="f">
+                                            <label class="form-check-label" for="sexFeminin">F</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label d-block">Groupe Sanguin:</label>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="blood_group" id="bgA" value="A" checked>
+                                            <label class="form-check-label" for="bgA">A</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="blood_group" id="bgB" value="B">
+                                            <label class="form-check-label" for="bgB">B</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="blood_group" id="bgAB" value="AB">
+                                            <label class="form-check-label" for="bgAB">AB</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="blood_group" id="bgO" value="O">
+                                            <label class="form-check-label" for="bgO">O</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label d-block">Rhesus:</label>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="rhesus" id="rhPositif" value="+" checked>
+                                            <label class="form-check-label" for="rhPositif">+</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="rhesus" id="rhNegatif" value="-">
+                                            <label class="form-check-label" for="rhNegatif">-</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row g-1 mt-2">
+                                    <div class="col-12">
+                                        <label class="form-label d-block">État Civil:</label>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="civil_status" id="csCelibataire" value="single" checked>
+                                            <label class="form-check-label" for="csCelibataire">Célibataire</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="civil_status" id="csMarie" value="married">
+                                            <label class="form-check-label" for="csMarie">Marié(e)</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="civil_status" id="csDivorce" value="divorced">
+                                            <label class="form-check-label" for="csDivorce">Divorce(e)</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="civil_status" id="csVeuf" value="widowed">
+                                            <label class="form-check-label" for="csVeuf">Veu(f) (ve)</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="civil_status" id="csSepare" value="separated">
+                                            <label class="form-check-label" for="csSepare">Séparé(e)</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-end mt-3 pt-2 border-top">
+                                    <button type="submit" class="btn btn-primary me-2">Inscrire</button>
+                                    <button type="button" class="btn btn-secondary me-2">Admettre</button>
+                                    <a href="/" class="btn btn-danger">Quitter</a>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="tab-pane fade p-4" id="prescriptions-tab-pane" role="tabpanel" aria-labelledby="profile-tab" tabindex="0">
+                            <h4>Rechercher un patient et ajouter des prescriptions</h4>
+                            <p>This tab is a placeholder for future functionality. Here, you will be able to search for an existing patient and manage their prescriptions.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<%- include('../partials/footer') %>
+
+// File: c:\Users\Public\Projects\care-db-project\views\staff\list.ejs
+<%- include('../partials/header') %>
+<%- include('../partials/navbar') %>
+
+
+<h1>Staff Directory</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Job Title</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% staffList.forEach((staff, index) => { %>
+        <tr>
+          <td><%= index + 1 %></td>
+          <td><%= staff.person?.name_first %> <%= staff.person?.name_last %></td>
+          <td><%= staff.person?.email %></td>
+          <td><%= staff.job_function_title %></td>
+          <td><%= staff.status %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+
+<%- include ('../partials/footer') %>
+
+// File: c:\Users\Public\Projects\care-db-project\views\users\register.ejs
+<%- include('../partials/header') %>
+<%- include('../partials/navbar') %>
+
+<style>
+  /* UPDATED: Form wrapper widened for better layout */
+  .form-wrapper {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px;
+    font-size: 0.85rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+  }
+
+  .form-control,
+  .form-select {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.5rem;
+  }
+
+  h2 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+  }
+
+  .btn {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .alert {
+    font-size: 0.8rem;
+    padding: 0.5rem;
+  }
+</style>
+
+<div class="container mt-4">
+  <div class="card bg-light p-4 form-wrapper">
+    <h4 class="mb-3">Création de Compte Utilisateur</h4>
+
+    <% if (success) { %>
+      <div class="alert alert-success">Compte utilisateur créé avec succès !</div>
+    <% } %>
+
+    <% if (errors && errors.length > 0) { %>
+      <div class="alert alert-danger">
+        <ul>
+          <% errors.forEach(error => { %>
+            <li><%= error %></li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <form method="POST" action="/admin/users/create">
+      <!-- NEW: Add the hidden CSRF token field -->
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="row mb-2">
+        <div class="col-md-6">
+          <label for="person_id" class="form-label">Sélectionner un Membre du Personnel</label>
+          <input type="text" id="personSearch" class="form-control form-control-sm mb-2" placeholder="Rechercher par nom...">
+          <select name="person_id" id="person_id" class="form-select form-select-sm" required size="5">
+            <option value="">-- Sélectionner un Membre du Personnel --</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="username" class="form-label">Nom d'utilisateur (Généré)</label>
+          <input type="text" name="username" id="username" class="form-control form-control-sm" readonly required>
+          <label for="email" class="form-label mt-2">Email</label>
+          <input type="email" name="email" id="email" class="form-control form-control-sm" readonly>
+        </div>
+      </div>
+
+      <div class="row mb-2">
+        <div class="col-md-6">
+          <label for="password" class="form-label">Mot de passe</label>
+          <input type="password" name="password" id="password" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-md-6">
+          <label for="role_id" class="form-label">Rôle</label>
+          <select name="role_id" id="role_id" class="form-select form-select-sm" required>
+            <option value="">-- Sélectionner un Rôle --</option>
+            <% roles.forEach(userole => { %>
+              <option value="<%= userole.id %>"><%= userole.role_name %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+
+      <div class="row mb-2">
+        <div class="col-md-6">
+          <label for="facility_id" class="form-label">Établissement</label>
+          <select name="facility_id" id="facility_id" class="form-select form-select-sm" required>
+            <option value="">-- Sélectionner un Établissement --</option>
+            <% facilities.forEach(facility => { %>
+              <option value="<%= facility.id %>"><%= facility.name %> (<%= facility.code %>)</option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="dept_nr" class="form-label">Département (Optionnel)</label>
+          <select name="dept_nr" id="dept_nr" class="form-select form-select-sm">
+            <option value="">-- Sélectionner un Département --</option>
+            <% departments.forEach(dept => { %>
+              <option value="<%= dept.nr %>"><%= dept.name_formal %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+
+      <div class="text-end mt-3">
+        <a href="/" class="btn btn-sm btn-secondary">Fermer</a>
+        <button type="submit" class="btn btn-sm btn-primary">Créer Compte</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Debounce function to limit API calls
+  function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+      const context = this;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+  }
+
+  // Dynamic personnel search
+  document.getElementById('personSearch').addEventListener('input', debounce(function () {
+    const searchQuery = this.value;
+    const selectElement = document.getElementById('person_id');
+
+    // Clear previous search results, but keep the default option
+    while (selectElement.options.length > 1) {
+      selectElement.remove(1);
+    }
+
+    if (searchQuery.length < 3) {
+      return;
+    }
+
+    fetch(`/admin/users/personnel-search?query=${encodeURIComponent(searchQuery)}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => {
+        data.forEach(person => {
+          const option = document.createElement('option');
+          option.value = person.pid;
+          option.textContent = `${person.name_first || ''} ${person.name_last || ''} (PID: ${person.pid})`;
+          option.dataset.firstname = person.name_first || '';
+          option.dataset.lastname = person.name_last || '';
+          option.dataset.email = person.email || '';
+          selectElement.appendChild(option);
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching search results:', error);
+        const errorOption = document.createElement('option');
+        errorOption.textContent = 'Failed to load personnel. Please try again.';
+        errorOption.disabled = true;
+        selectElement.appendChild(errorOption);
+      });
+  }, 300));
+
+  // Dynamic username and email generation on selection
+  document.getElementById('person_id').addEventListener('change', function () {
+    const selectedOption = this.options[this.selectedIndex];
+    const usernameField = document.getElementById('username');
+    const emailField = document.getElementById('email');
+
+    if (selectedOption.value) {
+      const firstName = selectedOption.dataset.firstname;
+      const lastName = selectedOption.dataset.lastname;
+      // const pid = selectedOption.value; // Removed pid
+      const email = selectedOption.dataset.email;
+
+      let generatedUsername = '';
+      if (lastName) {
+        generatedUsername += lastName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      }
+      if (firstName && firstName.length >= 2) {
+        generatedUsername += firstName.substring(0, 2).toLowerCase().replace(/[^a-z0-9]/g, '');
+      } else if (firstName) {
+        generatedUsername += firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      }
+      // generatedUsername += pid; // REMOVED: No longer appending pid
+
+      usernameField.value = generatedUsername;
+      emailField.value = email;
+    } else {
+      usernameField.value = '';
+      emailField.value = '';
+    }
+  });
+</script>
+
+<%- include('../partials/footer') %>
+
+// File: c:\Users\Public\Projects\care-db-project\views\users\updateUser.ejs
+<%- include('../partials/header') %>
+<%- include('../partials/navbar') %>
+
+<div class="container mt-4">
+  <div class="card bg-light p-4 form-wrapper">
+    <h4 class="mb-3">Modification Compte Utilisateur</h4>
+
+    <% if (success) { %>
+      <div class="alert alert-success">Compte utilisateur mis à jour avec succès !</div>
+    <% } %>
+
+    <% if (errors && errors.length > 0) { %>
+      <div class="alert alert-danger">
+        <ul>
+          <% errors.forEach(error => { %>
+            <li><%= error %></li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <form method="GET" action="/admin/users/update" class="mb-4">
+      <div class="row">
+        <div class="col-md-6">
+          <label for="userSearch" class="form-label">Sélectionner l'utilisateur à modifier</label>
+          <input type="text" id="userSearch" class="form-control form-control-sm mb-2" placeholder="Rechercher par nom d'utilisateur ou nom complet...">
+          <select name="user_id" id="user_id" class="form-select form-select-sm" required size="5">
+          <option value="">-- Sélectionner un utilisateur --</option>
+          <% if (userToEdit) { %>
+            <option value="<%= userToEdit.user_id %>" selected>
+              <%= userToEdit.username %> - 
+              <% if (userToEdit.personData) { %>
+                <%= userToEdit.personData.name_first || '' %> <%= userToEdit.personData.name_last || '' %>
+              <% } else { %>
+                (Nom non disponible)
+              <% } %>
+            </option>
+          <% } %>
+        </select>
+        </div>
+        <div class="col-md-6 d-flex align-items-end justify-content-end">
+          <div class="text-end mt-3">
+            <button class="btn btn-sm btn-primary" type="submit">Charger</button>
+            <a href="/admin/users/update" class="btn btn-sm btn-secondary">Annuler la sélection</a>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <% if (userToEdit) { %>
+      <hr>
+      <form method="POST" action="/admin/users/update/edit" class="mt-4">
+        <input type="hidden" name="user_id" value="<%= userToEdit.user_id %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+        <div class="row mb-2">
+          <div class="col-md-6">
+            <label for="username" class="form-label">Nom d'utilisateur</label>
+            <input type="text" name="username" id="username" class="form-control form-control-sm" value="<%= userToEdit.username %>" required>
+          </div>
+          <div class="col-md-6">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" name="email" id="email" class="form-control form-control-sm" value="<%= userToEdit.email || '' %>">
+          </div>
+        </div>
+        
+        <div class="row mb-2">
+          <div class="col-md-6">
+            <label for="password" class="form-label">Nouveau Mot de passe (Laisser vide pour ne pas changer)</label>
+            <input type="password" name="password" id="password" class="form-control form-control-sm">
+          </div>
+          <div class="col-md-6">
+            <label for="role_id" class="form-label">Rôle</label>
+            <select name="role_id" id="role_id" class="form-select form-select-sm" required>
+              <option value="">-- Sélectionner un Rôle --</option>
+              <% roles.forEach(role => { %>
+                <option value="<%= role.id %>" <%= userToEdit.role_id === role.id ? 'selected' : '' %>>
+                  <%= role.role_name %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+
+        <div class="row mb-2">
+          <div class="col-md-6">
+            <label for="dept_nr" class="form-label">Département (Optionnel)</label>
+            <select name="dept_nr" id="dept_nr" class="form-select form-select-sm">
+              <option value="">-- Sélectionner un Département --</option>
+              <% departments.forEach(dept => { %>
+                <option value="<%= dept.nr %>" <%= userToEdit.dept_nr === dept.nr ? 'selected' : '' %>>
+                  <%= dept.name_formal %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="facility_id" class="form-label">Établissement</label>
+            <select name="facility_id" id="facility_id" class="form-select form-select-sm" required>
+              <option value="">-- Sélectionner un Établissement --</option>
+              <% facilities.forEach(facility => { %>
+                <option value="<%= facility.id %>" <%= userToEdit.facility_id === facility.id ? 'selected' : '' %>>
+                  <%= facility.name %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+
+        <div class="text-end mt-3">
+          <a href="/" class="btn btn-sm btn-secondary">Annuler</a>
+          <button type="submit" class="btn btn-sm btn-success">Mettre à jour le Compte</button>
+        </div>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<style>
+  .form-wrapper {
+    max-width: 900px;
+    margin: 0 auto;
+    font-size: 0.875rem;
+  }
+  .form-label {
+    font-weight: 500;
+  }
+</style>
+
+<%- include('../partials/footer') %>
+
+<script>
+  function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+      const context = this;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+  }
+
+  // New: User search functionality
+  document.getElementById('userSearch').addEventListener('input', debounce(function () {
+    const searchQuery = this.value;
+    const selectElement = document.getElementById('user_id');
+
+    // Clear previous search results, but keep the default option
+    while (selectElement.options.length > 1) {
+      selectElement.remove(1);
+    }
+
+    if (searchQuery.length < 3) {
+      return;
+    }
+
+    fetch(`/admin/users/user-search?query=${encodeURIComponent(searchQuery)}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => {
+        data.forEach(user => {
+          const option = document.createElement('option');
+          option.value = user.user_id;
+          let fullName = '';
+          if (user.personData) {
+            fullName = `${user.personData.name_first || ''} ${user.personData.name_last || ''}`;
+          }
+          option.textContent = `${user.username} - ${fullName}`;
+          selectElement.appendChild(option);
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching search results:', error);
+        const errorOption = document.createElement('option');
+        errorOption.textContent = 'Failed to load users. Please try again.';
+        errorOption.disabled = true;
+        selectElement.appendChild(errorOption);
+      });
+  }, 300));
+</script>
+

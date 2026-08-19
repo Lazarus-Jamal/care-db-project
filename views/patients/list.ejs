@@ -1,0 +1,274 @@
+
+<%- include("../partials/header", { title: t.patientList.title }) %>
+<%- include("../partials/navbar", { activePage: "patients", user: user }) %>
+
+<style>
+  
+  .btn-xs { padding: 2px 6px; font-size: 0.72rem; }
+  #patientsTable td, #patientsTable th { padding: 4px 8px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+
+<div class="container-fluid mt-3">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+      <h6 class="mb-0"><i class="fas fa-user-injured me-2"></i><%= t.patientList.title %></h6>
+      <% if (typeof hasPermission !== "undefined" && hasPermission("Patient.Create.PatientRecord")) { %>
+        <a href="/patients/create" class="btn btn-sm btn-light">
+          <i class="fas fa-user-plus me-1"></i><%= t.patientList.newPatient %>
+        </a>
+      <% } %>
+    </div>
+
+    <div class="card-body py-2 px-3">
+
+      <%/* ── Search & Filters ── */%>
+      <form method="GET" action="/patients/list" class="row g-2 mb-2">
+        <div class="col-md-4">
+          <input type="text" name="search" class="form-control form-control-sm"
+            placeholder="<%= t.patientList.searchPlaceholder %>"
+            value="<%= typeof search !== "undefined" ? search : "" %>">
+        </div>
+        <div class="col-md-2">
+          <select name="sex" class="form-select form-select-sm">
+            <option value="">-- <%= t.patientList.sex %> --</option>
+            <option value="m" <%= typeof sex !== "undefined" && sex === "m" ? "selected" : "" %>><%= t.patientList.male %></option>
+            <option value="f" <%= typeof sex !== "undefined" && sex === "f" ? "selected" : "" %>><%= t.patientList.female %></option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <input type="date" name="date_from" class="form-control form-control-sm"
+            value="<%= typeof date_from !== "undefined" ? date_from : "" %>"
+            title="<%= t.patientList.from %>">
+        </div>
+        <div class="col-md-2">
+          <input type="date" name="date_to" class="form-control form-control-sm"
+            value="<%= typeof date_to !== "undefined" ? date_to : "" %>"
+            title="<%= t.patientList.to %>">
+        </div>
+        <div class="col-md-2 d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="fas fa-search"></i>
+          </button>
+          <a href="/patients/list" class="btn btn-secondary btn-sm w-100"><i class="fas fa-undo"></i></a>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="exportCSV()" title="<%= t.patientList.exportCsv %>">
+            <i class="fas fa-file-csv"></i>
+          </button>
+        </div>
+      </form>
+
+      <%/* ── Results summary ── */%>
+      <% if (typeof patients !== "undefined") { %>
+        <small class="text-muted d-block mb-1">
+          <%= typeof totalCount !== "undefined" ? totalCount : patients.length %> <%= t.patientList.found %>
+          <% if (typeof totalPages !== "undefined" && totalPages > 1) { %>
+            &mdash; <%= locale === "fr" ? "Page" : "Page" %> <%= currentPage %> / <%= totalPages %>
+          <% } %>
+        </small>
+      <% } %>
+
+      <%/* ── Table ── */%>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-1"
+          style="font-size:0.8rem;" id="patientsTable">
+          <thead class="table-dark">
+            <tr>
+              <th style="width:32px">#</th>
+              <th><%= t.patientList.colFile %></th>
+              <th><%= t.patientList.colLastName %></th>
+              <th><%= t.patientList.colFirstName %></th>
+              <th style="width:36px"><%= t.patientList.colSex %></th>
+              <th><%= t.patientList.colDob %></th>
+              <th><%= t.patientList.colPhone %></th>
+              <th><%= t.patientList.colRegDate %></th>
+              <th style="width:100px"><%= t.patientList.colActions %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (typeof patients !== "undefined" && patients.length > 0) { %>
+              <% patients.forEach((p, index) => { %>
+                <tr>
+                  <td class="text-muted"><%= ((currentPage - 1) * 20) + index + 1 %></td>
+                  <td><code style="font-size:0.75rem;"><%= p.hospital_file_nr || "—" %></code></td>
+                  <td><strong><%= p.name_last || "—" %></strong></td>
+                  <td><%= p.name_first || "—" %></td>
+                  <td class="text-center">
+                    <% if (p.sex === "m") { %>
+                      <span class="badge bg-info text-white">M</span>
+                    <% } else if (p.sex === "f") { %>
+                      <span class="badge text-white" style="background:#d4537e;">F</span>
+                    <% } else { %>—<% } %>
+                  </td>
+                  <td>
+                    <%= p.date_birth ? new Date(p.date_birth).toLocaleDateString(locale === "fr" ? "fr-FR" : "en-GB") : "—" %>
+                  </td>
+                  <td><%= p.cellphone_1_nr || p.phone_1_nr || "—" %></td>
+                  <td>
+                    <%= p.date_reg ? new Date(p.date_reg).toLocaleDateString(locale === "fr" ? "fr-FR" : "en-GB") : "—" %>
+                  </td>
+                  <td>
+                    <div class="d-flex gap-1">
+                      <% var isOpen = typeof openEncounterPids !== "undefined" && openEncounterPids.indexOf(p.pid) !== -1; %>
+                      <% var ownEnc = typeof openEncounterByPid !== "undefined" ? openEncounterByPid[p.pid] : undefined; %>
+                      <% if (isOpen && ownEnc && ownEnc.isOwnFacility) { %>
+                        <%/* Already admitted at YOUR facility — one button, straight to
+                            the record page. That page already has its own Edit/Admit/
+                            Prescription buttons plus the actual encounter tools (vitals,
+                            diagnoses, notes), so there's nothing the four separate icons
+                            offered here that isn't already reachable from there. */ %>
+                        <a href="/patients/<%= p.pid %>/record"
+                          class="btn btn-xs btn-success d-inline-flex align-items-center gap-1"
+                          title="<%= locale === "fr" ? "Consultation active — ouvrir le dossier" : "Active encounter — open record" %>">
+                          <i class="fas fa-folder-open"></i>
+                          <span><%= locale === "fr" ? "Dossier" : "Open Record" %></span>
+                        </a>
+                      <% } else if (isOpen && ownEnc && !ownEnc.isOwnFacility) { %>
+                        <%/* Already admitted at a DIFFERENT facility (Multi-Facility Phase 2,
+                            §5 item 8) — inert, not a working link. Just enough visibility to
+                            know why this patient can't be admitted here, not access to the
+                            other facility's encounter itself. */ %>
+                        <button class="btn btn-xs btn-secondary d-inline-flex align-items-center gap-1" disabled
+                          title="<%= locale === "fr" ? "Admis à " + ownEnc.facility_name : "Admitted at " + ownEnc.facility_name %>">
+                          <i class="fas fa-ban"></i>
+                          <span><%= locale === "fr" ? "Admis ailleurs" : "Already admitted elsewhere" %></span>
+                        </button>
+                      <% } else { %>
+                        <a href="/patients/<%= p.pid %>/record"
+                          class="btn btn-xs btn-outline-primary"
+                          title="<%= locale === "fr" ? "Voir dossier" : "View record" %>">
+                          <i class="fas fa-folder-open"></i>
+                        </a>
+                        <a href="/patients/<%= p.pid %>/edit"
+                          class="btn btn-xs btn-outline-warning"
+                          title="<%= locale === "fr" ? "Modifier" : "Edit" %>">
+                          <i class="fas fa-pen"></i>
+                        </a>
+                        <button class="btn btn-xs btn-outline-secondary" disabled
+                          title="<%= locale === "fr" ? "Aucune consultation active" : "No active encounter" %>">
+                          <i class="fas fa-prescription"></i>
+                        </button>
+                        <% if (typeof hasPermission !== "undefined" && hasPermission("Patient.Admit.Inpatient")) { %>
+                          <a href="/patients/<%= p.pid %>/admit"
+                            class="btn btn-xs btn-outline-success"
+                            title="<%= locale === "fr" ? "Admettre" : "Admit" %>">
+                            <i class="fas fa-hospital"></i>
+                          </a>
+                        <% } %>
+                      <% } %>
+                      <% var refInfo = typeof referralByPid !== "undefined" ? referralByPid[p.pid] : undefined; %>
+                      <% if (refInfo) { %>
+                        <%/* Item 4 from the live-testing feedback -- no
+                            visual indicator existed anywhere that a
+                            patient is currently referred. Status labels
+                            match incoming_referrals_table.ejs and
+                            record.ejs exactly. */%>
+                        <span class="badge bg-info text-dark d-inline-flex align-items-center gap-1"
+                          title="<%= locale === "fr" ? "Refere vers " + refInfo.toFacilityName : "Referred to " + refInfo.toFacilityName %>">
+                          <i class="fas fa-share-square"></i>
+                          <%= locale === "fr" ? "Refere" : "Referred" %>
+                        </span>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="9" class="text-center text-muted py-5">
+                  <i class="fas fa-user-slash fa-2x mb-3 d-block"></i>
+                  <% if (typeof search !== "undefined" && search) { %>
+                    <%= t.patientList.emptySearch %> &laquo; <strong><%= search %></strong> &raquo;
+                  <% } else { %>
+                    <%= t.patientList.emptyDefault %><br>
+                    <% if (typeof hasPermission !== "undefined" && hasPermission("Patient.Create.PatientRecord")) { %>
+                      <a href="/patients/create" class="btn btn-primary btn-sm mt-3">
+                        <i class="fas fa-user-plus me-1"></i><%= t.patientList.registerFirst %>
+                      </a>
+                    <% } %>
+                  <% } %>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+
+      <%/* ── Pagination ── */%>
+      <% if (typeof totalPages !== "undefined" && totalPages > 1) { %>
+        <%
+          var qBase = "search=" + encodeURIComponent(search||"") + "&sex=" + (sex||"") + "&date_from=" + (date_from||"") + "&date_to=" + (date_to||"") + "&page=1";
+          const winStart = Math.max(1, currentPage - 2);
+          const winEnd   = Math.min(totalPages, currentPage + 2);
+        %>
+        <nav class="mt-2">
+          <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
+            <li class="page-item <%= currentPage === 1 ? "disabled" : "" %>">
+              <a class="page-link" href="/patients/list?page=<%= currentPage-1 %>&<%= qBase %>">&laquo;</a>
+            </li>
+            <% if (winStart > 1) { %>
+              <li class="page-item"><a class="page-link" href="/patients/list?page=1&<%= qBase %>">1</a></li>
+              <% if (winStart > 2) { %><li class="page-item disabled"><span class="page-link">&hellip;</span></li><% } %>
+            <% } %>
+            <% for (let i = winStart; i <= winEnd; i++) { %>
+              <li class="page-item <%= i === currentPage ? "active" : "" %>">
+                <a class="page-link" href="/patients/list?page=<%= i %>&<%= qBase %>"><%= i %></a>
+              </li>
+            <% } %>
+            <% if (winEnd < totalPages) { %>
+              <% if (winEnd < totalPages - 1) { %><li class="page-item disabled"><span class="page-link">&hellip;</span></li><% } %>
+              <li class="page-item"><a class="page-link" href="/patients/list?page=<%= totalPages %>&<%= qBase %>"><%= totalPages %></a></li>
+            <% } %>
+            <li class="page-item <%= currentPage === totalPages ? "disabled" : "" %>">
+              <a class="page-link" href="/patients/list?page=<%= currentPage+1 %>&<%= qBase %>">&raquo;</a>
+            </li>
+          </ul>
+        </nav>
+      <% } %>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function exportCSV() {
+  const rows = document.querySelectorAll('#patientsTable tr');
+  let csv = '';
+  rows.forEach(row => {
+    const cells = Array.from(row.querySelectorAll('th,td')).slice(0,8);
+    csv += cells.map(function(c){ return '"' + c.textContent.trim().replace(/"/g,'""') + '"'; }).join(',') + '\n';
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = 'patients.csv';
+  a.click();
+}
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

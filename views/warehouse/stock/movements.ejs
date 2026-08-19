@@ -1,0 +1,127 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-history me-2 text-secondary"></i><%= locale==="fr"?"Mouvements de stock":"Stock Movements" %></h5>
+      <small class="text-muted"><%= count %> <%= locale==="fr"?"mouvement(s)":"movement(s)" %></small>
+    </div>
+    <a href="/warehouse/stock" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i><%= locale==="fr"?"Retour":"Back" %></a>
+  </div>
+
+  <%/* Filters */%>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/warehouse/stock/movements" class="d-flex gap-2 flex-wrap align-items-end">
+      <div>
+        <label style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:#6c757d;"><%= locale==="fr"?"Type":"Type" %></label>
+        <select name="type" class="form-select form-select-sm">
+          <option value=""><%= locale==="fr"?"Tous":"All" %></option>
+          <option value="receipt"    <%= typeFilter==="receipt"    ?"selected":"" %>><%= locale==="fr"?"Entrée":"Receipt" %></option>
+          <option value="issue"      <%= typeFilter==="issue"      ?"selected":"" %>><%= locale==="fr"?"Sortie":"Issue" %></option>
+          <option value="adjustment" <%= typeFilter==="adjustment" ?"selected":"" %>><%= locale==="fr"?"Ajustement":"Adjustment" %></option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:#6c757d;"><%= locale==="fr"?"Du":"From" %></label>
+        <input type="date" name="date_from" value="<%= dateFrom %>" class="form-control form-control-sm">
+      </div>
+      <div>
+        <label style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:#6c757d;"><%= locale==="fr"?"Au":"To" %></label>
+        <input type="date" name="date_to" value="<%= dateTo %>" class="form-control form-control-sm">
+      </div>
+      <div>
+        <label style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:#6c757d;"><%= locale==="fr"?"Produit":"Product" %></label>
+        <input type="text" name="search" value="<%= search %>" class="form-control form-control-sm" placeholder="<%= locale==="fr"?"Nom ou code...":"Name or code..." %>">
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter"></i></button>
+    </form>
+  </div></div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!movements || movements.length === 0) { %>
+        <div class="text-center text-muted py-5"><%= locale==="fr"?"Aucun mouvement.":"No movements." %></div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"Date":"Date" %></th>
+              <th><%= locale==="fr"?"Type":"Type" %></th>
+              <th><%= locale==="fr"?"Produit":"Product" %></th>
+              <th class="text-center">Qty</th>
+              <th><%= locale==="fr"?"Lot":"Batch" %></th>
+              <th><%= locale==="fr"?"Péremption":"Expiry" %></th>
+              <th><%= locale==="fr"?"Référence":"Reference" %></th>
+              <th><%= locale==="fr"?"Par":"By" %></th>
+            </tr></thead>
+            <tbody>
+              <% movements.forEach(function(m) { %>
+                <%
+                  var tClass = { receipt:"bg-success", issue:"bg-danger", adjustment:"bg-warning text-dark" };
+                  var tLabel = locale==="fr"
+                    ? { receipt:"Entree", issue:"Sortie", adjustment:"Ajustement" }
+                    : { receipt:"Receipt", issue:"Issue", adjustment:"Adjustment" };
+                %>
+                <tr>
+                  <td class="text-muted" style="font-size:.74rem;">
+                    <%= new Date(m.performed_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %><br>
+                    <span style="font-size:.66rem;"><%= new Date(m.performed_at).toLocaleTimeString(locale==="fr"?"fr-FR":"en-GB",{hour:"2-digit",minute:"2-digit"}) %></span>
+                  </td>
+                  <td><span class="badge <%= tClass[m.movement_type]||"bg-secondary" %>" style="font-size:.60rem;"><%= tLabel[m.movement_type]||m.movement_type %></span></td>
+                  <td>
+                    <div style="font-size:.80rem;font-weight:600;"><%= m.product ? m.product.name : "#"+m.product_id %></div>
+                    <% if (m.product) { %><div style="font-size:.68rem;color:#6c757d;"><code><%= m.product.item_code %></code></div><% } %>
+                  </td>
+                  <td class="text-center fw-bold" style="font-size:.88rem;color:<%= m.quantity>=0?"#198754":"#dc3545" %>">
+                    <%= m.quantity >= 0 ? "+" + m.quantity : m.quantity %>
+                  </td>
+                  <td class="text-muted"><%= m.batch_number || "—" %></td>
+                  <td class="text-muted" style="font-size:.74rem;"><%= m.expiry_date ? new Date(m.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : "—" %></td>
+                  <td class="text-muted" style="font-size:.74rem;"><%= m.reference_type ? m.reference_type + " #" + m.reference_id : "—" %></td>
+                  <td class="text-muted" style="font-size:.74rem;"><%= m.performed_by %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+        <% if (totalPages > 1) { %>
+          <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+            <small class="text-muted">Page <%= currentPage %> / <%= totalPages %></small>
+            <div class="d-flex gap-1">
+              <% if (currentPage > 1) { %><a href="?page=<%= currentPage-1 %>&type=<%= typeFilter %>&search=<%= search %>&date_from=<%= dateFrom %>&date_to=<%= dateTo %>" class="btn btn-xs btn-outline-secondary">&#8249;</a><% } %>
+              <% if (currentPage < totalPages) { %><a href="?page=<%= currentPage+1 %>&type=<%= typeFilter %>&search=<%= search %>&date_from=<%= dateFrom %>&date_to=<%= dateTo %>" class="btn btn-xs btn-outline-secondary">&#8250;</a><% } %>
+            </div>
+          </div>
+        <% } %>
+      <% } %>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

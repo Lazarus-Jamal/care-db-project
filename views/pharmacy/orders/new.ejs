@@ -1,0 +1,164 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req { color:#dc3545; }
+  .item-row { background:#f8f9fa; border:1px solid #dee2e6; border-radius:.4rem;
+              padding:10px 12px; margin-bottom:8px; }
+  .stock-low  { color:#dc3545; font-weight:700; }
+  .stock-ok   { color:#198754; font-weight:700; }
+  .stock-zero { color:#6c757d; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:820px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/pharmacy/orders"><%= locale==="fr"?"Commandes":"Orders" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Nouvelle commande":"New Request" %></li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/pharmacy/orders/new">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+        <i class="fas fa-shopping-cart me-2 text-success"></i>
+        <%= locale==="fr"?"Articles demandes":"Requested Items" %>
+      </div>
+      <div class="card-body">
+
+        <div id="itemsContainer"></div>
+
+        <button type="button" class="btn btn-sm btn-outline-success mt-2" onclick="addItem()">
+          <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Ajouter un article":"Add Item" %>
+        </button>
+
+        <div class="mt-3">
+          <label class="lbl">Notes</label>
+          <textarea name="notes" class="form-control form-control-sm" rows="2"
+            maxlength="500"
+            placeholder="<%= locale==="fr"?"Remarques, urgence, destination...":"Notes, urgency, destination..." %>"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a href="/pharmacy/orders" class="btn btn-outline-secondary btn-sm">
+        <%= locale==="fr"?"Annuler":"Cancel" %>
+      </a>
+      <button type="submit" class="btn btn-success btn-sm flex-fill" id="submitBtn" disabled>
+        <i class="fas fa-paper-plane me-1"></i>
+        <%= locale==="fr"?"Soumettre la commande":"Submit Request" %>
+      </button>
+    </div>
+
+  </form>
+</div></div>
+
+<%
+  var productsJson = JSON.stringify(products.map(function(p){
+    return {
+      id:    p.product_id,
+      name:  p.name,
+      code:  p.item_code,
+      unit:  p.unit_of_measure,
+      stock: p.current_stock,
+      cat:   p.category ? p.category.name : ""
+    };
+  }));
+%>
+
+<script>
+var PRODUCTS  = <%- productsJson %>;
+var itemCount = 0;
+var locale    = '<%= locale %>';
+
+function addItem() {
+  var idx = itemCount++;
+  var opts = PRODUCTS.map(function(p) {
+    return '<option value="'+p.id+'" data-unit="'+p.unit+'" data-stock="'+p.stock+'">'
+      + p.name + ' ['+p.code+'] — '
+      + (p.stock > 0
+          ? (locale==='fr'?'Stock: ':'Stock: ')+p.stock+' '+p.unit
+          : (locale==='fr'?'Rupture':'Out of stock'))
+      + '</option>';
+  }).join('');
+
+  var html = '<div class="item-row" id="item_'+idx+'">'
+    + '<div class="d-flex gap-2 flex-wrap align-items-end">'
+    + '<div style="flex:2;min-width:200px;">'
+    + '<label class="lbl">'+(locale==='fr'?'Produit':'Product')+' <span class="req">*</span></label>'
+    + '<select name="items['+idx+'][product_id]" class="form-select form-select-sm" onchange="updateStock('+idx+',this)" required>'
+    + '<option value="">-- '+(locale==='fr'?'Choisir':'Select')+' --</option>'
+    + opts
+    + '</select></div>'
+    + '<div style="width:110px;">'
+    + '<label class="lbl">'+(locale==='fr'?'Quantite':'Qty')+' <span class="req">*</span></label>'
+    + '<input type="number" name="items['+idx+'][quantity_requested]" class="form-control form-control-sm" min="1" required>'
+    + '</div>'
+    + '<div id="stockInfo_'+idx+'" style="font-size:.72rem;padding-bottom:6px;"></div>'
+    + '<div>'
+    + '<label class="lbl">&nbsp;</label>'
+    + '<button type="button" class="btn btn-xs btn-outline-danger" onclick="removeItem('+idx+')">'
+    + '<i class="fas fa-trash"></i></button>'
+    + '</div>'
+    + '</div>'
+    + '</div>';
+
+  document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+  updateSubmitBtn();
+}
+
+function updateStock(idx, sel) {
+  var opt   = sel.options[sel.selectedIndex];
+  var stock = parseInt(opt.dataset.stock || '0', 10);
+  var unit  = opt.dataset.unit || '';
+  var info  = document.getElementById('stockInfo_'+idx);
+  if (!opt.value) { info.innerHTML = ''; return; }
+  if (stock <= 0) {
+    info.innerHTML = '<span class="stock-zero"><i class="fas fa-exclamation-circle me-1"></i>'
+      + (locale==='fr'?'Rupture de stock':'Out of stock') + '</span>';
+  } else if (stock < 10) {
+    info.innerHTML = '<span class="stock-low"><i class="fas fa-exclamation-triangle me-1"></i>'
+      + (locale==='fr'?'Stock bas: ':'Low stock: ') + stock + ' ' + unit + '</span>';
+  } else {
+    info.innerHTML = '<span class="stock-ok"><i class="fas fa-check me-1"></i>'
+      + (locale==='fr'?'Disponible: ':'Available: ') + stock + ' ' + unit + '</span>';
+  }
+  updateSubmitBtn();
+}
+
+function removeItem(idx) {
+  var el = document.getElementById('item_'+idx);
+  if (el) el.remove();
+  updateSubmitBtn();
+}
+
+function updateSubmitBtn() {
+  var rows = document.querySelectorAll('.item-row');
+  document.getElementById('submitBtn').disabled = rows.length === 0;
+}
+
+// Add first item automatically
+addItem();
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

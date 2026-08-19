@@ -1,0 +1,55 @@
+
+<%- include("../partials/header", { title: t.help.guideTitle }) %>
+<%- include("../partials/navbar") %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0"><i class="fas fa-book me-2"></i><%= t.help.guideTitle %></h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-3">
+          <div class="list-group list-group-flush">
+            <a href="#patients" class="list-group-item list-group-item-action"><i class="fas fa-user-injured me-2"></i><%= t.help.patients %></a>
+            <a href="#finances" class="list-group-item list-group-item-action"><i class="fas fa-cash-register me-2"></i><%= t.help.finances %></a>
+            <a href="#pharmacy" class="list-group-item list-group-item-action"><i class="fas fa-pills me-2"></i><%= t.help.pharmacyTitle %></a>
+            <a href="#admin" class="list-group-item list-group-item-action"><i class="fas fa-cog me-2"></i><%= t.help.adminTitle %></a>
+          </div>
+        </div>
+        <div class="col-md-9">
+          <div id="patients" class="mb-4">
+            <h5><i class="fas fa-user-injured me-2 text-primary"></i><%= t.help.patients %></h5><hr>
+            <p class="text-muted"><%= t.help.patientsSub %></p>
+            <ul>
+              <li><strong><%= t.help.registering %></strong> — <%= t.help.registeringSub %></li>
+              <li><strong><%= t.help.records %></strong> — <%= t.help.recordsSub %></li>
+              <li><strong><%= t.help.hospitalization %></strong> — <%= t.help.hospitalizationSub %></li>
+            </ul>
+          </div>
+          <div id="finances" class="mb-4">
+            <h5><i class="fas fa-cash-register me-2 text-success"></i><%= t.help.finances %></h5><hr>
+            <p class="text-muted"><%= t.help.financesSub %></p>
+          </div>
+          <div id="pharmacy" class="mb-4">
+            <h5><i class="fas fa-pills me-2 text-warning"></i><%= t.help.pharmacyTitle %></h5><hr>
+            <p class="text-muted"><%= t.help.pharmacySub %></p>
+          </div>
+          <div id="admin" class="mb-4">
+            <h5><i class="fas fa-cog me-2 text-secondary"></i><%= t.help.adminTitle %></h5><hr>
+            <p class="text-muted"><%= t.help.adminSub %></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include("../partials/footer") %>
+
+
+
+

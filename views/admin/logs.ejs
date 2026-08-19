@@ -1,0 +1,206 @@
+
+<%- include("../partials/header", { title: t.logs.title }) %>
+<%- include("../partials/navbar", { activePage: "admin-logs", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+      <h5 class="mb-0"><%= t.logs.title %></h5>
+      <a href="/" class="btn btn-sm btn-light"><%= t.logs.close %></a>
+    </div>
+    <div class="card-body">
+      <form id="filterForm" class="row g-3 mb-3">
+        <div class="col-md-3">
+          <label for="usernameFilter" class="form-label"><%= t.logs.username %></label>
+          <select id="usernameFilter" class="form-select" multiple>
+            <% const usernames = [...new Set(logs.map(log => log.username))]; %>
+            <% usernames.forEach(name => { %>
+              <option value="<%= name %>"><%= name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="lognoteFilter" class="form-label"><%= t.logs.logNote %></label>
+          <select id="lognoteFilter" class="form-select" multiple>
+            <% const notes = [...new Set(logs.map(log => log.lognote))]; %>
+            <% notes.forEach(note => { %>
+              <option value="<%= note %>"><%= note %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="startDate" class="form-label"><%= t.logs.startDate %></label>
+          <input type="date" id="startDate" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label for="endDate" class="form-label"><%= t.logs.endDate %></label>
+          <input type="date" id="endDate" class="form-control">
+        </div>
+        <div class="col-md-2 d-flex align-items-end justify-content-end gap-2">
+          <button type="button" class="btn btn-primary w-100" onclick="applyFilters()"><%= t.logs.applyFilters %></button>
+          <button type="button" class="btn btn-secondary w-100" onclick="resetFilters()"><%= t.logs.reset %></button>
+        </div>
+      </form>
+
+      <div class="mb-3 d-flex justify-content-between">
+        <div>
+          <button class="btn btn-outline-secondary btn-sm me-2" onclick="exportToCSV()"><%= t.logs.exportCsv %></button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="exportToExcel()"><%= t.logs.exportExcel %></button>
+        </div>
+        <div>
+          <span class="me-2"><%= t.logs.sortBy %></span>
+          <button class="btn btn-outline-secondary btn-sm me-1" onclick="sortByColumn('username')"><%= t.logs.sortUser %></button>
+          <button class="btn btn-outline-secondary btn-sm me-1" onclick="sortByColumn('action')"><%= t.logs.sortAction %></button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="sortByColumn('timestamp')"><%= t.logs.sortTime %></button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle" id="logsTable">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th><%= t.logs.colUser %></th>
+              <th><%= t.logs.colAction %></th>
+              <th><%= t.logs.colIp %></th>
+              <th><%= t.logs.colDate %></th>
+              <th><%= t.logs.colStatus %></th>
+            </tr>
+          </thead>
+          <tbody id="logsBody">
+            <% if (typeof logs !== "undefined" && logs.length > 0) { %>
+              <% logs.forEach((log, index) => { %>
+                <tr data-username="<%= log.username %>" data-action="<%= log.lognote %>" data-timestamp="<%= new Date(log.datetime).toISOString() %>">
+                  <td><%= index + 1 %></td>
+                  <td><%= log.username %></td>
+                  <td><%= log.lognote %></td>
+                  <td><%= log.ip %></td>
+                  <td><%= new Date(log.datetime).toLocaleString() %></td>
+                  <td>
+                    <% if (log.login_success) { %>
+                      <span class="badge bg-success"><%= t.logs.success %></span>
+                    <% } else { %>
+                      <span class="badge bg-danger"><%= t.logs.failed %></span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr><td colspan="6" class="text-center text-muted py-4"><%= t.logs.noLogs %></td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+      <div id="pagination" class="mt-3 d-flex flex-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentPage = 1;
+const rowsPerPage = 10;
+let currentSort = { column: null, ascending: true };
+
+function applyFilters() {
+  const selectedUsernames = Array.from(document.getElementById('usernameFilter').selectedOptions).map(o => o.value);
+  const selectedNotes     = Array.from(document.getElementById('lognoteFilter').selectedOptions).map(o => o.value);
+  const startDate = document.getElementById('startDate').value;
+  const endDate   = document.getElementById('endDate').value;
+
+  document.querySelectorAll('#logsBody tr').forEach(row => {
+    const date = new Date(row.dataset.timestamp).toISOString().split('T')[0];
+    const ok = (!selectedUsernames.length || selectedUsernames.includes(row.dataset.username))
+            && (!selectedNotes.length     || selectedNotes.includes(row.dataset.action))
+            && (!startDate || date >= startDate)
+            && (!endDate   || date <= endDate);
+    row.classList.toggle('filtered-in', ok);
+  });
+  currentPage = 1; renderTable(); renderPagination();
+}
+
+function resetFilters() {
+  document.getElementById('filterForm').reset();
+  document.querySelectorAll('#filterForm select').forEach(s => s.selectedIndex = -1);
+  document.querySelectorAll('#logsBody tr').forEach(r => r.classList.add('filtered-in'));
+  currentPage = 1; renderTable(); renderPagination();
+}
+
+function renderTable() {
+  const rows = Array.from(document.querySelectorAll('#logsBody tr'));
+  const filtered = rows.filter(r => r.classList.contains('filtered-in'));
+  const start = (currentPage - 1) * rowsPerPage;
+  rows.forEach(r => r.style.display = 'none');
+  filtered.forEach((r, i) => { if (i >= start && i < start + rowsPerPage) { r.style.display = ''; r.children[0].textContent = i + 1; } });
+}
+
+function renderPagination() {
+  const total = Math.ceil(document.querySelectorAll('#logsBody tr.filtered-in').length / rowsPerPage);
+  const container = document.getElementById('pagination');
+  container.innerHTML = '';
+  for (let i = 1; i <= total; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i;
+    btn.className = 'btn btn-sm btn-outline-primary me-1' + (i === currentPage ? ' active' : '');
+    btn.addEventListener('click', () => { currentPage = i; renderTable(); renderPagination(); });
+    container.appendChild(btn);
+  }
+}
+
+function sortByColumn(column) {
+  const tbody = document.getElementById('logsBody');
+  const rows  = Array.from(tbody.querySelectorAll('tr.filtered-in'));
+  const asc   = currentSort.column === column ? !currentSort.ascending : true;
+  currentSort = { column, ascending: asc };
+  rows.sort((a, b) => {
+    let vA = a.dataset[column], vB = b.dataset[column];
+    if (column === 'timestamp') { vA = new Date(vA); vB = new Date(vB); }
+    return asc ? (vA > vB ? 1 : -1) : (vA < vB ? 1 : -1);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  currentPage = 1; renderTable(); renderPagination();
+}
+
+function exportToCSV() {
+  const rows = Array.from(document.querySelectorAll('#logsBody tr.filtered-in')).filter(r => r.style.display !== 'none');
+  let csv = 'User,Action,IP,Date\n';
+  rows.forEach(r => { csv += Array.from(r.querySelectorAll('td')).slice(1, 5).map(function(td){ return '"' + td.textContent.trim() + '"'; }).join(',') + '\n'; });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})), download: 'access_logs.csv' });
+  a.click();
+}
+
+function exportToExcel() {
+  const rows = Array.from(document.querySelectorAll('#logsBody tr.filtered-in')).filter(r => r.style.display !== 'none');
+  const html = '<table>' + document.querySelector('#logsTable thead').outerHTML + '<tbody>' + rows.map(r => r.outerHTML).join('') + '</tbody></table>';
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([html], {type:'application/vnd.ms-excel'})), download: 'access_logs.xls' });
+  a.click();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#logsBody tr').forEach(r => r.classList.add('filtered-in'));
+  renderTable(); renderPagination();
+});
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,100 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .aisle-header { background:#495057; color:#fff; padding:6px 12px; font-size:.78rem; font-weight:700;
+                  text-transform:uppercase; letter-spacing:.06em; border-radius:.3rem .3rem 0 0; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-map-marker-alt me-2 text-secondary"></i><%= locale==="fr"?"Emplacements de stock":"Stock Locations" %></h5>
+      <small class="text-muted"><%= locations.length %> <%= locale==="fr"?"emplacement(s)":"location(s)" %></small>
+    </div>
+    <div class="d-flex gap-2">
+      <% if (typeof hasAnyPermission !== "undefined" && hasAnyPermission(["Warehouse.Receive.Delivery","Warehouse.Approve.Manager","Admin.FullAccess"])) { %>
+        <a href="/warehouse/locations/new" class="btn btn-sm btn-secondary">
+          <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Nouvel emplacement":"New Location" %>
+        </a>
+      <% } %>
+      <a href="/warehouse" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Dashboard</a>
+    </div>
+  </div>
+  <% if (typeof success !== "undefined" && success) { %>
+    <div class="alert alert-success py-2 mb-3 alert-dismissible" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i><%= success === "created" ? (locale==="fr"?"Emplacement créé.":"Location created.") : (locale==="fr"?"Emplacement mis à jour.":"Location updated.") %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+  <% if (!locations || locations.length === 0) { %>
+    <div class="card shadow-sm"><div class="card-body text-center text-muted py-5">
+      <i class="fas fa-map-marker-alt fa-2x mb-2 d-block opacity-25"></i>
+      <%= locale==="fr"?"Aucun emplacement défini. Créez des emplacements pour organiser votre stock.":"No locations defined yet. Create locations to organise your stock." %>
+    </div></div>
+  <% } else { %>
+    <% Object.keys(grouped).sort().forEach(function(aisle) { %>
+      <div class="mb-3">
+        <div class="aisle-header"><i class="fas fa-th-large me-2"></i><%= locale==="fr"?"Allée":"Aisle" %>: <%= aisle %></div>
+        <div class="card shadow-sm" style="border-radius:0 0 .4rem .4rem;">
+          <div class="card-body p-0">
+            <table class="table table-xs table-hover align-middle mb-0">
+              <thead class="table-dark"><tr>
+                <th><%= locale==="fr"?"Étiquette":"Label" %></th>
+                <th><%= locale==="fr"?"Rayon":"Shelf" %></th>
+                <th><%= locale==="fr"?"Description":"Description" %></th>
+                <th class="text-center"><%= locale==="fr"?"Statut":"Status" %></th>
+                <th class="text-center">Actions</th>
+              </tr></thead>
+              <tbody>
+                <% grouped[aisle].forEach(function(l) { %>
+                  <tr>
+                    <td><span class="badge bg-secondary" style="font-size:.75rem;"><%= l.label %></span></td>
+                    <td class="text-muted"><%= l.shelf || "—" %></td>
+                    <td class="text-muted" style="font-size:.76rem;"><%= l.description || "—" %></td>
+                    <td class="text-center">
+                      <% if (l.is_active) { %>
+                        <span class="badge bg-success" style="font-size:.60rem;"><%= locale==="fr"?"Actif":"Active" %></span>
+                      <% } else { %>
+                        <span class="badge bg-secondary" style="font-size:.60rem;"><%= locale==="fr"?"Inactif":"Inactive" %></span>
+                      <% } %>
+                    </td>
+                    <td class="text-center">
+                      <a href="/warehouse/locations/<%= l.location_id %>/edit" class="btn btn-xs btn-outline-secondary">
+                        <i class="fas fa-edit"></i>
+                      </a>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

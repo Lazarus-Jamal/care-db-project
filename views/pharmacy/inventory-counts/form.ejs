@@ -1,0 +1,130 @@
+
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "pharmacy", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .req { color:#dc3545; }
+  .type-card { border:2px solid #dee2e6; border-radius:.5rem; padding:14px; cursor:pointer; height:100%; }
+  .type-card.picked { border-color:#0d6efd; background:#f0f6ff; }
+  .type-card h6 { font-size:.86rem; font-weight:700; margin-bottom:4px; }
+  .type-card p { font-size:.74rem; color:#6c757d; margin-bottom:0; }
+</style>
+
+<div class="container-fluid px-3 pt-2 content-wrapper" style="max-width:760px;">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/pharmacy">Pharmacy</a></li>
+      <li class="breadcrumb-item"><a href="/pharmacy/inventory-counts"><%= locale==="fr"?"Inventaires":"Counts" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= locale==="fr"?"Nouveau":"New" %></li>
+    </ol>
+  </nav>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-danger py-2 mb-3" style="font-size:.82rem;">
+      <% errors.forEach(function(e){ %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+    </div>
+  <% } %>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-2 fw-bold" style="font-size:.88rem;">
+      <i class="fas fa-clipboard-list me-2 text-secondary"></i>
+      <%= locale==="fr"?"Nouvel inventaire pharmacie":"New Pharmacy Inventory Count" %>
+    </div>
+    <div class="card-body">
+
+      <form method="POST" action="/pharmacy/inventory-counts/new" id="countForm">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="count_type" id="count_type" value="">
+
+        <label class="lbl mb-2 d-block"><%= locale==="fr"?"Type d'inventaire":"Count Type" %> <span class="req">*</span></label>
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <div class="type-card" data-type="cycle_20pct" onclick="pickType(this)">
+              <h6><i class="fas fa-dice me-1 text-primary"></i>Cycle 20%</h6>
+              <p><%= locale==="fr"
+                ?"L'agent selectionne manuellement 20% des articles. Ceux du dernier cycle sont exclus."
+                :"Agent manually picks 20% of items. Whatever was picked last cycle is excluded." %></p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="type-card" data-type="full" onclick="pickType(this)">
+              <h6><i class="fas fa-boxes me-1 text-success"></i><%= locale==="fr"?"Complet":"Full" %></h6>
+              <p><%= locale==="fr"
+                ?"Tous les articles pharmacie. Recommande une fois par trimestre."
+                :"Every pharmacy item. Recommended once a quarter." %></p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="type-card" data-type="year_end" onclick="pickType(this)">
+              <h6><i class="fas fa-calendar-check me-1 text-danger"></i><%= locale==="fr"?"Fin d'annee":"Year-End" %></h6>
+              <p><%= locale==="fr"
+                ?"Inventaire complet annuel formel."
+                :"Formal full count, once a year." %></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="lbl"><%= locale==="fr"?"Date de comptage":"Count Date" %> <span class="req">*</span></label>
+            <input type="date" name="count_date" id="count_date" class="form-control form-control-sm"
+              value="<%= new Date().toISOString().slice(0,10) %>" required>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="lbl">Notes</label>
+          <textarea name="notes" id="notes" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+        </div>
+
+        <div class="alert alert-info py-2 mt-3" style="font-size:.80rem;">
+          <i class="fas fa-info-circle me-2"></i>
+          <%= locale==="fr"
+            ? "Une fois demarre, le comptage doit etre soumis avec une raison pour chaque ecart, puis approuve par un superviseur avant que le stock ne soit ajuste."
+            : "Once started, the count must be submitted with a reason for every variance, then approved by a supervisor before stock is adjusted." %>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-secondary btn-sm" id="submitBtn" disabled>
+            <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Creer l'inventaire":"Create Count" %>
+          </button>
+          <a href="/pharmacy/inventory-counts" class="btn btn-outline-secondary btn-sm"><%= locale==="fr"?"Annuler":"Cancel" %></a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+var _locale = '<%= locale %>';
+
+function pickType(el) {
+  document.querySelectorAll('.type-card').forEach(function(c){ c.classList.remove('picked'); });
+  el.classList.add('picked');
+  document.getElementById('count_type').value = el.dataset.type;
+  document.getElementById('submitBtn').disabled = false;
+}
+
+document.getElementById('countForm').addEventListener('submit', function(e) {
+  var type = document.getElementById('count_type').value;
+  if (!type) { e.preventDefault(); alert(_locale==='fr'?'Choisissez un type.':'Choose a count type.'); return; }
+  if (type === 'cycle_20pct') {
+    // The 20% type needs manual item selection first — hand off to the picker
+    // instead of submitting directly.
+    e.preventDefault();
+    var date  = document.getElementById('count_date').value;
+    var notes = document.getElementById('notes').value;
+    window.location.href = '/pharmacy/inventory-counts/picker'
+      + '?count_date=' + encodeURIComponent(date)
+      + '&notes=' + encodeURIComponent(notes);
+  }
+});
+</script>
+
+<%- include("../../partials/footer") %>

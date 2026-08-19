@@ -1,0 +1,197 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .rpt-card { background:#fff; border-radius:.6rem; border:1px solid #dee2e6;
+              padding:20px; transition:box-shadow .2s,transform .15s; cursor:pointer; }
+  .rpt-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.1); transform:translateY(-2px); }
+  .rpt-icon { width:48px; height:48px; border-radius:.5rem; display:flex;
+              align-items:center; justify-content:center; font-size:1.3rem; margin-bottom:12px; }
+  .rpt-stat { font-size:1.6rem; font-weight:800; line-height:1; }
+  .rpt-label{ font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h4 class="mb-0 fw-bold">
+        <i class="fas fa-chart-bar me-2 text-primary"></i>
+        <%= locale==="fr"?"Rapports et Analytiques":"Reports & Analytics" %>
+      </h4>
+      <small class="text-muted">
+        <%= locale==="fr"?"Genere le":"Generated" %>
+        <%= new Date().toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+      </small>
+    </div>
+    <a href="/warehouse" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Dashboard
+    </a>
+  </div>
+
+  <%/* Quick stats strip */%>
+  <div class="row g-3 mb-4">
+    <% var stats = [
+      { val: totalProducts, label: locale==="fr"?"Produits actifs":"Active Products",  color:"#0d6efd" },
+      { val: lowStock,      label: locale==="fr"?"Stock bas":"Low Stock",              color:"#dc3545" },
+      { val: pendingPos,    label: locale==="fr"?"Commandes en cours":"Pending POs",   color:"#ffc107" },
+      { val: totalMovements,label: locale==="fr"?"Mouvements total":"Total Movements", color:"#198754" },
+      { val: openCounts,    label: locale==="fr"?"Inventaires ouverts":"Open Counts",  color:"#6f42c1" },
+      { val: pendingReimb,  label: locale==="fr"?"Remb. en attente":"Pending Reimb.",  color:"#fd7e14" },
+    ]; %>
+    <% stats.forEach(function(s){ %>
+      <div class="col-6 col-md-2">
+        <div class="bg-white rounded-3 border p-3 text-center shadow-sm">
+          <div class="rpt-stat" style="color:<%= s.color %>"><%= s.val %></div>
+          <div class="rpt-label mt-1"><%= s.label %></div>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+
+  <%/* Report cards */%>
+  <div class="row g-3">
+
+    <%/* 1 — Stock Valuation */%>
+    <div class="col-md-6 col-xl-4">
+      <a href="/warehouse/reports/valuation" class="text-decoration-none">
+        <div class="rpt-card h-100">
+          <div class="rpt-icon" style="background:#e8f4fd;">
+            <i class="fas fa-coins" style="color:#0d6efd;"></i>
+          </div>
+          <h6 class="fw-bold mb-1"><%= locale==="fr"?"Valorisation du stock":"Stock Valuation" %></h6>
+          <p class="text-muted mb-2" style="font-size:.80rem;">
+            <%= locale==="fr"
+              ?"Valeur totale du stock par produit et categorie, basee sur le dernier prix d\"achat."
+              :"Total stock value by product and category based on last purchase price." %>
+          </p>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-primary" style="font-size:.64rem;"><%= locale==="fr"?"Par produit":"By product" %></span>
+            <span class="badge bg-secondary" style="font-size:.64rem;"><%= locale==="fr"?"Par categorie":"By category" %></span>
+            <span class="badge bg-light text-dark border" style="font-size:.64rem;"><%= locale==="fr"?"Imprimable":"Printable" %></span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <%/* 2 — Procurement */%>
+    <div class="col-md-6 col-xl-4">
+      <a href="/warehouse/reports/procurement" class="text-decoration-none">
+        <div class="rpt-card h-100">
+          <div class="rpt-icon" style="background:#fff3e0;">
+            <i class="fas fa-file-invoice" style="color:#fd7e14;"></i>
+          </div>
+          <h6 class="fw-bold mb-1"><%= locale==="fr"?"Synthese des achats":"Procurement Summary" %></h6>
+          <p class="text-muted mb-2" style="font-size:.80rem;">
+            <%= locale==="fr"
+              ?"Commandes par periode, repartition par fournisseur, statuts et paiements."
+              :"POs by period, by supplier, status funnel and reimbursements paid." %>
+          </p>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-warning text-dark" style="font-size:.64rem;"><%= locale==="fr"?"Par mois":"Monthly" %></span>
+            <span class="badge bg-secondary" style="font-size:.64rem;"><%= locale==="fr"?"Par fournisseur":"By supplier" %></span>
+            <span class="badge bg-light text-dark border" style="font-size:.64rem;"><%= locale==="fr"?"Imprimable":"Printable" %></span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <%/* 3 — Supplier Performance */%>
+    <div class="col-md-6 col-xl-4">
+      <a href="/warehouse/reports/suppliers" class="text-decoration-none">
+        <div class="rpt-card h-100">
+          <div class="rpt-icon" style="background:#e8f8f0;">
+            <i class="fas fa-truck" style="color:#198754;"></i>
+          </div>
+          <h6 class="fw-bold mb-1"><%= locale==="fr"?"Performance fournisseurs":"Supplier Performance" %></h6>
+          <p class="text-muted mb-2" style="font-size:.80rem;">
+            <%= locale==="fr"
+              ?"Delai de livraison, taux de rejet QC et volume d\"achats par fournisseur."
+              :"Lead time, QC rejection rate and purchase volume per supplier." %>
+          </p>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-success" style="font-size:.64rem;"><%= locale==="fr"?"Delai livraison":"Lead time" %></span>
+            <span class="badge bg-danger" style="font-size:.64rem;"><%= locale==="fr"?"Taux rejet":"Rejection rate" %></span>
+            <span class="badge bg-light text-dark border" style="font-size:.64rem;"><%= locale==="fr"?"Imprimable":"Printable" %></span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <%/* 4 — Consumption */%>
+    <div class="col-md-6 col-xl-4">
+      <a href="/warehouse/reports/consumption" class="text-decoration-none">
+        <div class="rpt-card h-100">
+          <div class="rpt-icon" style="background:#f0ebff;">
+            <i class="fas fa-pills" style="color:#6f42c1;"></i>
+          </div>
+          <h6 class="fw-bold mb-1"><%= locale==="fr"?"Consommation stock":"Stock Consumption" %></h6>
+          <p class="text-muted mb-2" style="font-size:.80rem;">
+            <%= locale==="fr"
+              ?"Articles emis vers la pharmacie, top 10 produits et tendance mensuelle."
+              :"Items issued to pharmacy, top 10 products and monthly trend." %>
+          </p>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge" style="background:#6f42c1;font-size:.64rem;"><%= locale==="fr"?"Par produit":"By product" %></span>
+            <span class="badge bg-secondary" style="font-size:.64rem;">Top 10</span>
+            <span class="badge bg-light text-dark border" style="font-size:.64rem;"><%= locale==="fr"?"Imprimable":"Printable" %></span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <%/* 5 — Discrepancies */%>
+    <div class="col-md-6 col-xl-4">
+      <a href="/warehouse/reports/discrepancies" class="text-decoration-none">
+        <div class="rpt-card h-100">
+          <div class="rpt-icon" style="background:#fff0f0;">
+            <i class="fas fa-balance-scale" style="color:#dc3545;"></i>
+          </div>
+          <h6 class="fw-bold mb-1"><%= locale==="fr"?"Ecarts inventaire":"Inventory Discrepancies" %></h6>
+          <p class="text-muted mb-2" style="font-size:.80rem;">
+            <%= locale==="fr"
+              ?"Ecarts entre quantites systeme et quantites comptees lors des inventaires approuves."
+              :"Variances between system quantities and counted quantities on approved inventory counts." %>
+          </p>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-danger" style="font-size:.64rem;"><%= locale==="fr"?"Ecarts negatifs":"Negative variances" %></span>
+            <span class="badge bg-secondary" style="font-size:.64rem;"><%= locale==="fr"?"Par comptage":"By count" %></span>
+            <span class="badge bg-light text-dark border" style="font-size:.64rem;"><%= locale==="fr"?"Imprimable":"Printable" %></span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <%/* 6 — QC Log */%>
+    <div class="col-md-6 col-xl-4">
+      <a href="/warehouse/reports/qc" class="text-decoration-none">
+        <div class="rpt-card h-100">
+          <div class="rpt-icon" style="background:#e8faf0;">
+            <i class="fas fa-clipboard-check" style="color:#20c997;"></i>
+          </div>
+          <h6 class="fw-bold mb-1"><%= locale==="fr"?"Journal Controle Qualite":"QC Log" %></h6>
+          <p class="text-muted mb-2" style="font-size:.80rem;">
+            <%= locale==="fr"
+              ?"Historique des controles qualite, taux de rejet par fournisseur et alertes temperature."
+              :"QC check history, rejection rates by supplier and temperature failure alerts." %>
+          </p>
+          <div class="d-flex gap-2 flex-wrap">
+            <span class="badge" style="background:#20c997;font-size:.64rem;"><%= locale==="fr"?"Pass/Fail":"Pass/Fail" %></span>
+            <span class="badge bg-warning text-dark" style="font-size:.64rem;"><%= locale==="fr"?"Temperature":"Temperature" %></span>
+            <span class="badge bg-light text-dark border" style="font-size:.64rem;"><%= locale==="fr"?"Imprimable":"Printable" %></span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

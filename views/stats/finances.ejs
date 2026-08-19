@@ -1,0 +1,133 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "stats", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 10px; font-size:.78rem; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-chart-line me-2" style="color:#198754;"></i>
+        <%= locale==="fr" ? "Statistiques financieres" : "Financial Statistics" %>
+      </h5>
+      <small class="text-muted">
+        <%= total %> <%= locale==="fr" ? "enregistrement(s)" : "record(s)" %>
+        &nbsp;&middot;&nbsp; <%= fromStr %> &mdash; <%= toStr %>
+      </small>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <form method="GET" action="/stats/finances" class="d-flex gap-2 align-items-end flex-wrap">
+        <div>
+          <label class="d-block" style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:#6c757d;">
+            <%= locale==="fr" ? "Du" : "From" %>
+          </label>
+          <input type="date" name="date_from" value="<%= fromStr %>" class="form-control form-control-sm" style="width:140px;">
+        </div>
+        <div>
+          <label class="d-block" style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:#6c757d;">
+            <%= locale==="fr" ? "Au" : "To" %>
+          </label>
+          <input type="date" name="date_to" value="<%= toStr %>" class="form-control form-control-sm" style="width:140px;">
+        </div>
+        <div style="flex:1;min-width:160px;">
+          <label class="d-block" style="font-size:.68rem;font-weight:700;text-transform:uppercase;color:#6c757d;">
+            <%= locale==="fr" ? "Recherche" : "Search" %>
+          </label>
+          <input type="text" name="search" value="<%= search %>" class="form-control form-control-sm" placeholder="...">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="fas fa-search me-1"></i><%= locale==="fr" ? "Filtrer" : "Filter" %>
+        </button>
+        <a href="/stats/finances" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-undo me-1"></i>Reset
+        </a>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header py-2" style="background:#198754;color:#fff;font-weight:700;font-size:.85rem;">
+      <i class="fas fa-chart-bar me-2"></i>
+      <%= locale==="fr" ? "Par jour" : "Per Day" %>
+    </div>
+    <div class="card-body" style="height:220px;position:relative;">
+      <canvas id="histChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-2" style="background:#343a40;color:#fff;font-weight:700;font-size:.85rem;">
+      <i class="fas fa-chart-line me-2"></i>
+      <%= locale==="fr" ? "Detail" : "Detail" %>
+      <span class="badge ms-2" style="background:#198754;font-size:.65rem;"><%= tableRows.length %></span>
+    </div>
+    <div class="card-body p-0">
+      <% if (!tableRows || tableRows.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-chart-line fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr" ? "Aucune donnee pour cette periode." : "No data for this period." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr><th><%= locale==="fr" ? "Date" : "Date" %></th><th><%= locale==="fr" ? "Mode" : "Mode" %></th><th><%= locale==="fr" ? "Transactions" : "Transactions" %></th><th><%= locale==="fr" ? "Total FCFA" : "Total FCFA" %></th><th><%= locale==="fr" ? "Caissier" : "Cashier" %></th></tr></thead>
+            <tbody>
+              <% tableRows.forEach(function(row) { %>
+                <tr><td><%= row.day %></td><td><span class="badge bg-primary" style="font-size:.65rem;"><%= row.payment_mode %></span></td><td class="text-center"><%= row.transactions %></td><td class="text-end fw-bold" style="color:#198754;"><%= Number(row.total_fcfa||0).toLocaleString("fr-FR") %></td><td><%= row.cashier||"" %></td></tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var _sl = "<%= locale %>";
+(function() {
+  var labels = [<%= histogram.map(function(d){ return JSON.stringify(d.date); }).join(",") %>];
+  var counts = [<%= histogram.map(function(d){ return d.count; }).join(",") %>];
+  var ctx = document.getElementById("histChart");
+  if (!ctx) return;
+  new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: _sl === "fr" ? "Nombre" : "Count",
+        data: counts,
+        backgroundColor: "#198754cc",
+        borderColor: "#198754",
+        borderWidth: 1,
+        borderRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: "index" } },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 }, precision: 0 } }
+      }
+    }
+  });
+})();
+</script>
+<%- include("../partials/footer") %>
+
+

@@ -1,0 +1,129 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .section-header { padding:8px 14px; font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h5 class="mb-0 fw-bold"><i class="fas fa-calendar-times me-2 text-warning"></i><%= locale==="fr"?"Rapport de péremption":"Expiry Report" %></h5>
+    <a href="/warehouse/stock" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i><%= locale==="fr"?"Retour stock":"Back to Stock" %></a>
+  </div>
+
+  <%/* Summary badges */%>
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm text-center py-3">
+        <div style="font-size:1.6rem;font-weight:800;color:#842029;"><%= expired.length %></div>
+        <div style="font-size:.72rem;color:#842029;font-weight:600;"><%= locale==="fr"?"PÉRIMÉS":"EXPIRED" %></div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm text-center py-3">
+        <div style="font-size:1.6rem;font-weight:800;color:#856404;"><%= critical.length %></div>
+        <div style="font-size:.72rem;color:#856404;font-weight:600;"><%= locale==="fr"?"CRITIQUE (≤7j)":"CRITICAL (≤7d)" %></div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm text-center py-3">
+        <div style="font-size:1.6rem;font-weight:800;color:#664d03;"><%= warning.length %></div>
+        <div style="font-size:.72rem;color:#664d03;font-weight:600;"><%= locale==="fr"?"AVERTISSEMENT (≤30j)":"WARNING (≤30d)" %></div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm text-center py-3">
+        <div style="font-size:1.6rem;font-weight:800;color:#0a3622;"><%= ok.length %></div>
+        <div style="font-size:.72rem;color:#0a3622;font-weight:600;"><%= locale==="fr"?"OK":"OK" %></div>
+      </div>
+    </div>
+  </div>
+
+  <% function batchTable(batches, rowClass, emptyMsg) { %>
+    <% if (batches.length === 0) { %>
+      <div class="text-muted py-2 px-3" style="font-size:.78rem;"><%= emptyMsg %></div>
+    <% } else { %>
+      <div class="table-responsive">
+        <table class="table table-xs table-hover align-middle mb-0">
+          <thead class="table-dark"><tr>
+            <th><%= locale==="fr"?"Produit":"Product" %></th>
+            <th><%= locale==="fr"?"Lot":"Batch" %></th>
+            <th><%= locale==="fr"?"Emplacement":"Location" %></th>
+            <th class="text-center">Qty</th>
+            <th><%= locale==="fr"?"Date péremption":"Expiry Date" %></th>
+          </tr></thead>
+          <tbody>
+            <% batches.forEach(function(b) { %>
+              <tr class="<%= rowClass %>">
+                <td>
+                  <div class="fw-bold"><%= b.product ? b.product.name : "#"+b.product_id %></div>
+                  <% if (b.product) { %><div class="text-muted" style="font-size:.68rem;"><code><%= b.product.item_code %></code> &bull; <%= b.product.unit_of_measure %></div><% } %>
+                </td>
+                <td><%= b.batch_number || "—" %></td>
+                <td><%= b.location ? b.location.label : "—" %></td>
+                <td class="text-center fw-bold"><%= b.quantity %></td>
+                <td><strong><%= b.expiry_date ? new Date(b.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") : "—" %></strong></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  <% } %>
+
+  <% if (expired.length > 0) { %>
+    <div class="card shadow-sm mb-3">
+      <div class="section-header" style="background:#f8d7da;color:#842029;border-radius:.4rem .4rem 0 0;">
+        <i class="fas fa-skull-crossbones me-2"></i><%= locale==="fr"?"Périmés — à retirer immédiatement":"Expired — Remove Immediately" %> (<%= expired.length %>)
+      </div>
+      <%- batchTable(expired, "table-danger", "") %>
+    </div>
+  <% } %>
+
+  <% if (critical.length > 0) { %>
+    <div class="card shadow-sm mb-3">
+      <div class="section-header" style="background:#fff3cd;color:#856404;border-radius:.4rem .4rem 0 0;">
+        <i class="fas fa-exclamation-triangle me-2"></i><%= locale==="fr"?"Critique — périme dans 7 jours ou moins":"Critical — Expires within 7 days" %> (<%= critical.length %>)
+      </div>
+      <%- batchTable(critical, "table-warning", "") %>
+    </div>
+  <% } %>
+
+  <% if (warning.length > 0) { %>
+    <div class="card shadow-sm mb-3">
+      <div class="section-header" style="background:#fff8e1;color:#664d03;border-radius:.4rem .4rem 0 0;">
+        <i class="fas fa-exclamation-circle me-2"></i><%= locale==="fr"?"Avertissement — périme dans 30 jours":"Warning — Expires within 30 days" %> (<%= warning.length %>)
+      </div>
+      <%- batchTable(warning, "", "") %>
+    </div>
+  <% } %>
+
+  <div class="card shadow-sm">
+    <div class="section-header" style="background:#d1e7dd;color:#0a3622;border-radius:.4rem .4rem 0 0;">
+      <i class="fas fa-check-circle me-2"></i><%= locale==="fr"?"Stock valide":"Valid Stock" %> (<%= ok.length %>)
+    </div>
+    <%- batchTable(ok, "", locale==="fr"?"Aucun lot valide en stock.":"No valid stock batches.") %>
+  </div>
+
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

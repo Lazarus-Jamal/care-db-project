@@ -1,0 +1,45 @@
+
+<%- include("../partials/header", { title: t.help.maintenanceTitle }) %>
+<%- include("../partials/navbar") %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+</style>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0"><i class="fas fa-wrench me-2"></i><%= t.help.maintenanceTitle %></h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="card text-center h-100 shadow-sm"><div class="card-body py-4">
+            <i class="fas fa-question-circle fa-3x text-primary mb-3"></i>
+            <h6><%= t.help.requests %></h6><p class="text-muted small"><%= t.help.requestsSub %></p>
+            <a href="/admin/maintenance/software" class="btn btn-outline-primary btn-sm"><%= t.help.access %></a>
+          </div></div>
+        </div>
+        <div class="col-md-4">
+          <div class="card text-center h-100 shadow-sm"><div class="card-body py-4">
+            <i class="fas fa-tools fa-3x text-warning mb-3"></i>
+            <h6><%= t.help.repairs %></h6><p class="text-muted small"><%= t.help.repairsSub %></p>
+            <a href="/admin/maintenance/equipment" class="btn btn-outline-warning btn-sm"><%= t.help.access %></a>
+          </div></div>
+        </div>
+        <div class="col-md-4">
+          <div class="card text-center h-100 shadow-sm"><div class="card-body py-4">
+            <i class="fas fa-book fa-3x text-success mb-3"></i>
+            <h6><%= t.help.guide %></h6><p class="text-muted small"><%= t.help.guideSub %></p>
+            <a href="/help/guide" class="btn btn-outline-success btn-sm"><%= t.help.access %></a>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include("../partials/footer") %>
+
+
+
+

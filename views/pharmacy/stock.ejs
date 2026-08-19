@@ -1,0 +1,234 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  
+  .card { background:#fff !important; }
+  .ph-header { background:linear-gradient(135deg,#1a9e72 0%,#157a58 100%); color:#fff; border-radius:.5rem .5rem 0 0; }
+  .ph-tab-active   { background:#1a9e72 !important; color:#fff !important; border-color:#1a9e72 !important; }
+  .ph-tab-inactive { background:#e8f5f0; color:#1a9e72; border:1px solid #b2dfce; }
+  .ph-tab-inactive:hover { background:#d1ece3; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6; padding:14px 16px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+  .stat-val { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  .table-xs td,.table-xs th { padding:5px 9px; font-size:.79rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stock-ok   { display:inline-block; padding:2px 7px; border-radius:10px; background:#d1ece3; color:#0a3622; font-size:.62rem; font-weight:700; }
+  .stock-low  { display:inline-block; padding:2px 7px; border-radius:10px; background:#fff3cd; color:#856404; font-size:.62rem; font-weight:700; }
+  .stock-out  { display:inline-block; padding:2px 7px; border-radius:10px; background:#f8d7da; color:#842029; font-size:.62rem; font-weight:700; }
+  .badge-med { background:#1a9e72; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  .badge-sup { background:#0d6efd; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-boxes me-2" style="color:#fd7e14;"></i>
+        <%= locale==="fr"?"Stock pharmacie":"Pharmacy Stock" %>
+      </h5>
+      <small class="text-muted"><%= count %> <%= locale==="fr"?"article(s)":"item(s)" %></small>
+    </div>
+    <% if (typeof hasPermission !== "undefined" && hasPermission("Inventory.Update.Stock")) { %>
+      <a href="/pharmacy/stock/add" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Ajouter un article":"Add Item" %>
+      </a>
+      <a href="/pharmacy/shelves" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-th-large me-1"></i><%= locale==="fr"?"Rayons":"Shelves" %>
+      </a>
+    <% } %>
+    <% if (typeof hasPermission !== "undefined" && hasPermission("Inventory.Order.ToPharmacy")) { %>
+      <a href="/pharmacy/orders/new" class="btn btn-sm" style="background:#1a9e72;color:#fff;">
+        <i class="fas fa-truck me-1"></i><%= locale==="fr"?"Commander a l entrepot":"Order from Warehouse" %>
+      </a>
+    <% } %>
+  </div>
+
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/pharmacy/stock" class="d-flex gap-2 flex-wrap align-items-end">
+      <div>
+        <label class="lbl"><%= locale==="fr"?"Recherche":"Search" %></label>
+        <input type="text" name="search" value="<%= search %>" class="form-control form-control-sm"
+          style="width:200px;" placeholder="<%= locale==="fr"?"Nom ou code...":"Name or code..." %>">
+      </div>
+      <div class="d-flex gap-1 flex-wrap">
+        <a href="/pharmacy/stock" class="btn btn-xs <%= filter===""?"ph-tab-active":"ph-tab-inactive" %>">
+          <%= locale==="fr"?"Tout":"All" %>
+        </a>
+        <a href="/pharmacy/stock?filter=low" class="btn btn-xs <%= filter==="low"?"ph-tab-active":"ph-tab-inactive" %>">
+          <i class="fas fa-exclamation-triangle me-1"></i><%= locale==="fr"?"Stock bas":"Low Stock" %>
+        </a>
+        <a href="/pharmacy/stock?filter=out" class="btn btn-xs <%= filter==="out"?"ph-tab-active":"ph-tab-inactive" %>">
+          <i class="fas fa-times-circle me-1"></i><%= locale==="fr"?"Rupture":"Out of Stock" %>
+        </a>
+      </div>
+      <button type="submit" class="btn btn-xs" style="background:#1a9e72;color:#fff;">
+        <i class="fas fa-search"></i>
+      </button>
+    </form>
+  </div></div>
+
+  <div class="card shadow-sm">
+    <div class="ph-header px-3 py-2">
+      <span class="fw-bold" style="font-size:.85rem;">
+        <i class="fas fa-list me-2"></i><%= locale==="fr"?"Inventaire pharmacie":"Pharmacy Inventory" %>
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <% if (!rows || rows.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-box-open fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr"?"Aucun article.":"No items." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"Article":"Item" %></th>
+              <th><%= locale==="fr"?"Code":"Code" %></th>
+              <th class="text-center"><%= locale==="fr"?"Stock actuel":"Current Stock" %></th>
+              <th class="text-center"><%= locale==="fr"?"Min":"Min" %></th>
+              <th class="text-center"><%= locale==="fr"?"Reappro":"Reorder" %></th>
+              <th class="text-center"><%= locale==="fr"?"Max":"Max" %></th>
+              <th class="text-center"><%= locale==="fr"?"Statut":"Status" %></th>
+              <% if (typeof hasPermission !== "undefined" && hasPermission("Inventory.Update.Stock")) { %>
+                <th class="text-center">Actions</th>
+              <% } %>
+            </tr></thead>
+            <tbody>
+              <% rows.forEach(function(item) {
+                var isOut  = item.quantity === 0;
+                var isLow  = !isOut && item.ReorderLevel > 0 && item.quantity <= item.ReorderLevel;
+              %>
+                <tr class="<%= isOut ? "table-danger" : isLow ? "table-warning" : "" %>" style="opacity:<%= isOut ? .7 : 1 %>">
+                  <td>
+                    <div class="fw-bold" style="font-size:.78rem;"><%= item.item_description %></div>
+                    <% if (item.item_description_en && item.item_description_en !== item.item_description) { %>
+                      <div class="text-muted" style="font-size:.66rem;font-style:italic;"><%= item.item_description_en %></div>
+                    <% } %>
+                  </td>
+                  <td><code style="font-size:.70rem;"><%= item.item_number %></code></td>
+                  <td class="text-center fw-bold" style="color:<%= isOut?"#842029":isLow?"#856404":"#157a58" %>; font-size:.85rem;">
+                    <%= item.quantity %>
+                  </td>
+                  <td class="text-center text-muted"><%= item.Minimumlevel||"—" %></td>
+                  <td class="text-center text-muted"><%= item.ReorderLevel||"—" %></td>
+                  <td class="text-center text-muted"><%= item.Maximumlevel||"—" %></td>
+                  <td class="text-center">
+                    <% if (isOut) { %><span class="stock-out"><%= locale==="fr"?"Rupture":"Out" %></span>
+                    <% } else if (isLow) { %><span class="stock-low"><%= locale==="fr"?"Bas":"Low" %></span>
+                    <% } else { %><span class="stock-ok">OK</span><% } %>
+                  </td>
+                  <% if (typeof hasPermission !== "undefined" && hasPermission("Inventory.Update.Stock")) { %>
+                    <td class="text-center">
+                      <button class="btn btn-xs btn-outline-secondary"
+                        data-id="<%= item.item_id %>" data-name="<%= encodeURIComponent(item.item_description) %>" data-qty="<%= item.quantity %>" onclick="showAdjustFromEl(this)">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                    </td>
+                  <% } %>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+        <% if (totalPages > 1) { %>
+          <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+            <small class="text-muted">Page <%= currentPage %> / <%= totalPages %></small>
+            <div class="d-flex gap-1">
+              <% if (currentPage > 1) { %><a href="?page=<%= currentPage-1 %>&search=<%= search %>&filter=<%= filter %>" class="btn btn-xs btn-outline-secondary">&#8249;</a><% } %>
+              <% if (currentPage < totalPages) { %><a href="?page=<%= currentPage+1 %>&search=<%= search %>&filter=<%= filter %>" class="btn btn-xs btn-outline-secondary">&#8250;</a><% } %>
+            </div>
+          </div>
+        <% } %>
+      <% } %>
+    </div>
+  </div>
+
+</div></div>
+
+<%/* Adjustment modal */%>
+<div class="modal fade" id="adjustModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2 ph-header">
+        <h6 class="modal-title mb-0"><i class="fas fa-edit me-2"></i><%= locale==="fr"?"Ajustement stock":"Stock Adjustment" %></h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="adjustItemName" class="fw-bold mb-2" style="font-size:.82rem;"></div>
+        <div class="mb-2">
+          <label class="lbl"><%= locale==="fr"?"Stock actuel":"Current Stock" %></label>
+          <div id="adjustCurrent" class="fw-bold"></div>
+        </div>
+        <div class="mb-2">
+          <label class="lbl"><%= locale==="fr"?"Ajustement (+/-)":"Adjustment (+/-)" %></label>
+          <input type="number" id="adjQty" class="form-control form-control-sm" placeholder="+10 ou -5">
+        </div>
+        <div>
+          <label class="lbl"><%= locale==="fr"?"Motif":"Reason" %></label>
+          <input type="text" id="adjReason" class="form-control form-control-sm"
+            placeholder="<%= locale==="fr"?"Motif de l ajustement":"Reason for adjustment" %>">
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"><%= locale==="fr"?"Annuler":"Cancel" %></button>
+        <button type="button" class="btn btn-sm" style="background:#1a9e72;color:#fff;" onclick="saveAdjust()">
+          <%= locale==="fr"?"Enregistrer":"Save" %>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var _csrf  = '<%= csrfToken %>';
+var locale = '<%= locale %>';
+var _adjustItemId = null;
+
+function showAdjustFromEl(btn) {
+  _adjustItemId = btn.dataset.id;
+  document.getElementById('adjustItemName').textContent = decodeURIComponent(btn.dataset.name);
+  document.getElementById('adjustCurrent').textContent  = btn.dataset.qty;
+  document.getElementById('adjQty').value    = '';
+  document.getElementById('adjReason').value = '';
+  new bootstrap.Modal(document.getElementById('adjustModal')).show();
+}
+function saveAdjust() {
+  var qty    = document.getElementById('adjQty').value;
+  var reason = document.getElementById('adjReason').value;
+  if (!qty || qty === '0') { alert(locale==='fr'?'Quantite requise.':'Quantity required.'); return; }
+  fetch('/pharmacy/stock/'+_adjustItemId+'/adjust?_csrf='+encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ qty_adjustment: qty, reason: reason }),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok) { window.location.reload(); }
+    else { alert(d.error || 'Error'); }
+  });
+}
+</script>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

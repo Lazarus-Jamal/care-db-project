@@ -1,0 +1,146 @@
+<%- include("../../partials/header", { title: "Sortie Patient" }) %>
+<%- include("../../partials/navbar", { activePage: "patients", user: user }) %>
+
+<div class="container mt-4">
+  <div class="card shadow-sm" style="max-width:800px;margin:0 auto;">
+    <div class="card-header bg-warning text-dark">
+      <h5 class="mb-0"><i class="fas fa-sign-out-alt me-2"></i>Sortie d'Hospitalisation</h5>
+    </div>
+    <div class="card-body">
+
+      <% if (typeof errors !== "undefined" && errors.length > 0) { %>
+        <div class="alert alert-danger"><ul class="mb-0"><% errors.forEach(e => { %><li><%= e %></li><% }) %></ul></div>
+      <% } %>
+      <% if (typeof success !== "undefined" && success) { %>
+        <div class="alert alert-success">Sortie enregistrÃ©e avec succÃ¨s.</div>
+      <% } %>
+
+      <!-- Current inpatients table -->
+      <h6 class="mb-3">Patients actuellement hospitalisÃ©s</h6>
+      <div class="table-responsive mb-4">
+        <table class="table table-hover align-middle" style="font-size:0.85rem;">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Patient</th>
+              <th>NÂ° Dossier</th>
+              <th>Admis le</th>
+              <th>Salle</th>
+              <th>DÃ©partement</th>
+              <th style="width:90px">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (typeof inpatients !== "undefined" && inpatients.length > 0) { %>
+              <% inpatients.forEach((enc, i) => { %>
+                <tr>
+                  <td><%= i + 1 %></td>
+                  <td><strong><%= enc.patient ? enc.patient.name_last + " " + enc.patient.name_first : "â€”" %></strong></td>
+                  <td><code><%= enc.patient ? enc.patient.hospital_file_nr : "â€”" %></code></td>
+                  <td><%= enc.encounter_date ? new Date(enc.encounter_date).toLocaleDateString("fr-FR") : "â€”" %></td>
+                  <td>Salle <%= enc.current_room_nr || "â€”" %></td>
+                  <td><%= enc.dept ? enc.dept.name_short : "â€”" %></td>
+                  <td>
+                    <button class="btn btn-xs btn-warning" onclick="loadRelease(<%= enc.encounter_nr %>, '<%= enc.patient ? enc.patient.name_last + " " + enc.patient.name_first : "" %>')">
+                      <i class="fas fa-sign-out-alt me-1"></i>Sortie
+                    </button>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="7" class="text-center text-muted py-4">
+                  <i class="fas fa-bed fa-2x mb-2 d-block"></i>
+                  Aucun patient hospitalisÃ© en ce moment.
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Release form (shown when a patient is selected) -->
+      <div id="releaseForm" style="display:none;">
+        <hr>
+        <h6>Enregistrer la sortie de : <strong id="releasePatientName"></strong></h6>
+        <form action="/patients/hospitalization/release" method="POST" class="mt-3">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="encounter_nr" id="releaseEncounterNr">
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Date de sortie</label>
+              <input type="date" name="discharge_date" class="form-control form-control-sm"
+                value="<%= new Date().toISOString().split("T")[0] %>" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Heure de sortie</label>
+              <input type="time" name="discharge_time" class="form-control form-control-sm" required>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Mode de sortie</label>
+            <select name="discharge_type" class="form-select form-select-sm" required>
+              <option value="">-- SÃ©lectionner --</option>
+              <option value="gueri">GuÃ©ri</option>
+              <option value="ameliore">AmÃ©liorÃ©</option>
+              <option value="stationnaire">Stationnaire</option>
+              <option value="transfert">Transfert</option>
+              <option value="decede">DÃ©cÃ©dÃ©</option>
+              <option value="sortie_volontaire">Sortie volontaire</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Notes de sortie</label>
+            <textarea name="post_encounter_notes" class="form-control form-control-sm" rows="2" placeholder="RÃ©sumÃ©, instructions de suivi..."></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Date de suivi prÃ©vue</label>
+            <input type="date" name="followup_date" class="form-control form-control-sm">
+          </div>
+
+          <div class="text-end">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('releaseForm').style.display='none'">Annuler</button>
+            <button type="submit" class="btn btn-warning btn-sm ms-2 text-dark">
+              <i class="fas fa-check me-1"></i>Confirmer la Sortie
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }.btn-xs { padding: 2px 6px; font-size: 0.75rem; }  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<script>
+function loadRelease(encounterNr, patientName) {
+  document.getElementById('releaseEncounterNr').value = encounterNr;
+  document.getElementById('releasePatientName').textContent = patientName;
+  document.getElementById('releaseForm').style.display = 'block';
+  document.getElementById('releaseForm').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

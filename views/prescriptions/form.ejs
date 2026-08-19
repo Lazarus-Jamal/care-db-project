@@ -1,0 +1,535 @@
+
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "worklist", user: user }) %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card         { background: #fff !important; }
+  .lbl          { font-size:.68rem; font-weight:700; text-transform:uppercase;
+                  letter-spacing:.06em; color:#6c757d; }
+  .search-result { font-size:.80rem; padding:6px 10px; cursor:pointer;
+                   border-bottom:1px solid #f0f0f0; }
+  .search-result:hover { background:#f0f4ff; }
+  .cart-row     { font-size:.80rem; padding:8px 0; border-bottom:1px solid #f5f5f5; }
+  .cart-row:last-child { border-bottom:none; }
+  .cart-empty   { text-align:center; color:#adb5bd; padding:24px 0; font-size:.82rem; }
+  .prx-existing { font-size:.78rem; padding:5px 0; border-bottom:1px solid #f5f5f5; }
+  .prx-existing:last-child { border-bottom:none; }
+  .table-xs td, .table-xs th { padding:4px 8px; }
+  #search-results { position:absolute; z-index:1000; background:#fff;
+                    border:1px solid #dee2e6; border-top:none;
+                    border-radius:0 0 .5rem .5rem;
+                    max-height:260px; overflow-y:auto; width:100%; }
+  .search-wrap  { position:relative; }
+</style>
+
+<div class="prx-page">
+<div class="container-fluid px-3 pt-2">
+
+  <%/* Breadcrumb */%>
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item">
+        <a href="/encounters/worklist"><i class="fas fa-stethoscope me-1"></i>
+          <%= locale==="fr"?"File consultations":"Worklist" %>
+        </a>
+      </li>
+      <% if (patient) { %>
+        <li class="breadcrumb-item">
+          <a href="/patients/<%= patient.pid %>/record">
+            <%= patient.name_last %>, <%= patient.name_first %>
+          </a>
+        </li>
+      <% } %>
+      <li class="breadcrumb-item active fw-bold">
+        <%= locale==="fr"?"Prescription":"Prescription" %>
+      </li>
+    </ol>
+  </nav>
+
+  <%/* Encounter info banner */%>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-3">
+          <div class="lbl"><%= locale==="fr"?"Patient":"Patient" %></div>
+          <div class="fw-bold" style="font-size:.88rem;">
+            <%= patient ? patient.name_last + ", " + patient.name_first : "-" %>
+          </div>
+          <div class="text-muted" style="font-size:.72rem;">
+            <%= patient ? patient.hospital_file_nr : "" %>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <div class="lbl"><%= locale==="fr"?"Consultation":"Encounter" %></div>
+          <div style="font-size:.82rem;"><code>#<%= encounter.encounter_nr %></code></div>
+        </div>
+        <div class="col-md-3">
+          <div class="lbl"><%= locale==="fr"?"Medecin":"Doctor" %></div>
+          <div style="font-size:.82rem;"><%= encounter.consulting_dr || "-" %></div>
+        </div>
+        <div class="col-md-2">
+          <div class="lbl"><%= locale==="fr"?"Departement":"Department" %></div>
+          <div style="font-size:.82rem;">
+            <%= encounter.department ? encounter.department.name_short : "#" + encounter.current_dept_nr %>
+          </div>
+        </div>
+        <div class="col-md-2 text-end">
+          <%
+            var encSCls = encounter.encounter_status==="active"?"bg-success":
+                          encounter.encounter_status==="pending"?"bg-warning text-dark":"bg-secondary";
+          %>
+          <span class="badge <%= encSCls %>">
+            <%= encounter.encounter_status==="active"
+              ? (locale==="fr"?"Actif":"Active")
+              : encounter.encounter_status==="pending"
+                ? (locale==="fr"?"En attente":"Pending")
+                : encounter.encounter_status %>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: Search + Cart ── */%>
+    <div class="col-lg-7">
+
+      <%/* Search card */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-search me-2 text-primary"></i>
+            <%= locale==="fr"?"Rechercher un article":"Search for an item" %>
+          </span>
+        </div>
+        <div class="card-body pb-2">
+          <div class="search-wrap">
+            <input type="text" id="item-search" class="form-control form-control-sm"
+              placeholder="<%= locale==="fr"
+                ? "Nom du medicament, service ou consommable..."
+                : "Drug name, service or supply..." %>"
+              autocomplete="off">
+            <div id="search-results" style="display:none;"></div>
+          </div>
+          <div id="selected-item-form" style="display:none;" class="mt-3 p-3 bg-light rounded">
+            <div class="fw-bold mb-2" style="font-size:.82rem;" id="selected-item-name"></div>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="lbl"><%= locale==="fr"?"Prix unitaire":"Unit price" %></label>
+                <div class="fw-bold text-primary" style="font-size:.88rem;" id="selected-item-price"></div>
+              </div>
+              <div class="col-md-4">
+                <label class="lbl" for="inp-units">
+                  <%= locale==="fr"?"Quantite":"Quantity" %>
+                  <span style="color:#dc3545;">*</span>
+                </label>
+                <input type="number" id="inp-units" class="form-control form-control-sm"
+                  min="1" value="1">
+              </div>
+              <div class="col-md-4">
+                <label class="lbl" for="inp-dosage">
+                  <%= locale==="fr"?"Posologie":"Dosage" %>
+                  <span style="color:#dc3545;">*</span>
+                </label>
+                <input type="number" id="inp-dosage" class="form-control form-control-sm"
+                  min="1" placeholder="ex: 1">
+              </div>
+              <div class="col-md-6">
+                <label class="lbl" for="inp-apptype">
+                  <%= locale==="fr"?"Voie d administration":"Route of admin." %>
+                  <span style="color:#dc3545;">*</span>
+                </label>
+                <select id="inp-apptype" class="form-select form-select-sm">
+                  <option value="1"><%= locale==="fr"?"Oral / Per os":"Oral / Per os" %></option>
+                  <option value="2"><%= locale==="fr"?"Injection IV":"IV Injection" %></option>
+                  <option value="3"><%= locale==="fr"?"Injection IM":"IM Injection" %></option>
+                  <option value="4"><%= locale==="fr"?"Injection SC":"SC Injection" %></option>
+                  <option value="5"><%= locale==="fr"?"Topique / Local":"Topical / Local" %></option>
+                  <option value="6"><%= locale==="fr"?"Inhalation":"Inhalation" %></option>
+                  <option value="7"><%= locale==="fr"?"Procedure / Service":"Procedure / Service" %></option>
+                  <option value="8"><%= locale==="fr"?"Autre":"Other" %></option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="lbl" for="inp-notes">
+                  <%= locale==="fr"?"Instructions / Notes":"Instructions / Notes" %>
+                  <span style="color:#dc3545;">*</span>
+                </label>
+                <input type="text" id="inp-notes" class="form-control form-control-sm"
+                  placeholder="<%= locale==="fr"?"ex: 2x/jour apres repas":"e.g. 2x/day after meals" %>">
+              </div>
+            </div>
+            <div class="mt-2 d-flex gap-2">
+              <button class="btn btn-sm btn-primary" onclick="addToCart()">
+                <i class="fas fa-plus me-1"></i>
+                <%= locale==="fr"?"Ajouter au panier":"Add to cart" %>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="clearItemForm()">
+                <%= locale==="fr"?"Annuler":"Cancel" %>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <%/* Cart card */%>
+      <div class="card shadow-sm">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-shopping-cart me-2 text-success"></i>
+            <%= locale==="fr"?"Panier":"Cart" %>
+            <span class="badge bg-primary ms-1" id="cart-count" style="font-size:.65rem;">0</span>
+          </span>
+          <span class="fw-bold text-success" id="cart-total" style="font-size:.88rem;">0 FCFA</span>
+        </div>
+        <div class="card-body p-0" id="cart-body">
+          <div class="cart-empty" id="cart-empty">
+            <i class="fas fa-shopping-cart fa-2x mb-2 d-block opacity-25"></i>
+            <%= locale==="fr"
+              ? "Aucun article dans le panier."
+              : "Cart is empty. Search for items above." %>
+          </div>
+          <div id="cart-items"></div>
+        </div>
+        <div class="card-footer py-2" id="cart-footer" style="display:none;">
+          <button class="btn btn-success w-100" id="btn-submit-prx" onclick="submitPrescription()">
+            <i class="fas fa-check me-2"></i>
+            <%= locale==="fr"?"Valider la prescription":"Submit Prescription" %>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <%/* ── RIGHT: Existing prescriptions for this encounter ── */%>
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header py-2">
+          <span class="fw-bold" style="font-size:.85rem;">
+            <i class="fas fa-list me-2 text-muted"></i>
+            <%= locale==="fr"?"Prescriptions existantes":"Existing prescriptions" %>
+            <span class="badge bg-secondary ms-1" style="font-size:.65rem;">
+              <%= existing.length %>
+            </span>
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <% if (existing.length === 0) { %>
+            <div class="text-center text-muted py-4" style="font-size:.80rem;">
+              <i class="fas fa-prescription fa-lg d-block mb-1 opacity-25"></i>
+              <%= locale==="fr"?"Aucune prescription.":"No prescriptions yet." %>
+            </div>
+          <% } else { %>
+            <div style="max-height:480px;overflow-y:auto;">
+              <% existing.forEach(function(p) { %>
+                <div class="prx-existing px-3" id="prx-row-<%= p.nr %>">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div style="flex:1;">
+                      <div class="fw-bold" style="font-size:.80rem;">
+                        <%= p.article || "-" %>
+                      </div>
+                      <div class="text-muted" style="font-size:.70rem;">
+                        <% if (p.dosage) { %>
+                          <span class="me-2"><i class="fas fa-tablets me-1"></i><%= p.dosage %></span>
+                        <% } %>
+                        <% if (p.notes) { %><span><%= p.notes.substring(0,50) %></span><% } %>
+                      </div>
+                      <div style="font-size:.68rem;color:#adb5bd;" class="mt-1">
+                        <%= p.price ? p.price + " FCFA" : "" %>
+                        <% if (p.bill_number) { %>
+                          &bull; Bill #<%= p.bill_number %>
+                          <span class="badge <%= p.bill_status==="paid"?"bg-success":p.bill_status==="open"?"bg-warning text-dark":"bg-secondary" %>"
+                            style="font-size:.55rem;"><%= p.bill_status %></span>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="ms-2 text-end">
+                      <span class="badge bg-success" style="font-size:.60rem;">Active</span>
+                      <br>
+                      <button class="btn btn-xs btn-outline-danger mt-1"
+                        style="font-size:.65rem;padding:1px 5px;"
+                        onclick="stopPrx(<%= p.nr %>, this)"
+                        title="<%= locale==="fr"?"Arreter":"Stop" %>">
+                        <i class="fas fa-stop me-1"></i>
+                        <%= locale==="fr"?"Arreter":"Stop" %>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+var _csrf    = '<%= csrfToken %>';
+var _encNr   = <%= encounter.encounter_nr %>;
+var _locale  = '<%= locale %>';
+var _isFr    = _locale === 'fr';
+var _cart    = [];
+var _selItem = null;
+var _searchTimer = null;
+
+// ── Item search ───────────────────────────────────────────────────
+document.getElementById('item-search').addEventListener('input', function() {
+    clearTimeout(_searchTimer);
+    var q = this.value.trim();
+    if (q.length < 2) {
+        document.getElementById('search-results').style.display = 'none';
+        return;
+    }
+    _searchTimer = setTimeout(function() { doSearch(q); }, 300);
+});
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.search-wrap')) {
+        document.getElementById('search-results').style.display = 'none';
+    }
+});
+
+function doSearch(q) {
+    fetch('/prescriptions/search?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var box = document.getElementById('search-results');
+            if (!data.ok || data.items.length === 0) {
+                box.innerHTML = '<div class="search-result text-muted">' +
+                    (_isFr ? 'Aucun resultat.' : 'No results.') + '</div>';
+                box.style.display = '';
+                return;
+            }
+            var html = '';
+            data.items.forEach(function(item) {
+                html += '<div class="search-result" onclick="selectItem(' +
+                    JSON.stringify(item).replace(/"/g,'&quot;') + ')">' +
+                    '<div class="fw-bold">' + item.description + '</div>' +
+                    '<div style="font-size:.68rem;color:#6c757d;">' +
+                    item.item_number + ' &bull; ' + item.drug_class +
+                    ' &bull; <strong>' + Math.round(item.price).toLocaleString('fr-FR') + ' FCFA</strong>' +
+                    '</div></div>';
+            });
+            box.innerHTML = html;
+            box.style.display = '';
+        });
+}
+
+function selectItem(item) {
+    _selItem = item;
+    document.getElementById('search-results').style.display = 'none';
+    document.getElementById('item-search').value = item.description;
+    document.getElementById('selected-item-name').textContent = item.description;
+    document.getElementById('selected-item-price').textContent =
+        Math.round(item.price).toLocaleString('fr-FR') + ' FCFA';
+    document.getElementById('inp-units').value  = 1;
+    document.getElementById('inp-dosage').value = '';
+    document.getElementById('inp-notes').value  = '';
+    document.getElementById('selected-item-form').style.display = '';
+    document.getElementById('inp-dosage').focus();
+}
+
+function clearItemForm() {
+    _selItem = null;
+    document.getElementById('item-search').value = '';
+    document.getElementById('selected-item-form').style.display = 'none';
+}
+
+// ── Cart ──────────────────────────────────────────────────────────
+function addToCart() {
+    if (!_selItem) return;
+    var units   = Math.max(1, parseInt(document.getElementById('inp-units').value) || 1);
+    var dosage  = document.getElementById('inp-dosage').value.trim();
+    var apptype = document.getElementById('inp-apptype').value;
+    var notes   = document.getElementById('inp-notes').value.trim();
+
+    if (!dosage) {
+        alert(_isFr ? 'Veuillez saisir la posologie.' : 'Please enter the dosage.');
+        document.getElementById('inp-dosage').focus();
+        return;
+    }
+    if (!notes) {
+        alert(_isFr ? 'Veuillez saisir les instructions.' : 'Please enter the instructions/notes.');
+        document.getElementById('inp-notes').focus();
+        return;
+    }
+
+    // If this drug is already in the cart, merge into that line instead of adding
+    // a second one — quantities are combined and both sets of instructions are
+    // kept in the notes. This guarantees a bill can never end up with two lines
+    // for the same drug, which is what let stopPrescription's lookup (by
+    // description text, not a stable ID) become ambiguous about which line's
+    // charge to remove. The server re-applies this same merge as the
+    // authoritative guarantee — this client-side version is just so the doctor
+    // sees the combined line immediately instead of discovering it after submit.
+    var existingIdx = -1;
+    for (var i = 0; i < _cart.length; i++) {
+        if (_cart[i].item_id === _selItem.item_id) { existingIdx = i; break; }
+    }
+
+    if (existingIdx !== -1) {
+        var existing = _cart[existingIdx];
+        var sameDosage = (dosage === existing.dosage) && (apptype === existing.application_type_nr);
+        var addition = notes;
+        if (!sameDosage) {
+            var apptypeSelect = document.getElementById('inp-apptype');
+            var apptypeLabel  = apptypeSelect.options[apptypeSelect.selectedIndex].textContent;
+            addition = '[' + dosage + ' \u2014 ' + apptypeLabel + '] ' + notes;
+        }
+        existing.units += units;
+        existing.notes  = existing.notes + ' | ' + addition;
+        existing.total  = Math.round(_selItem.price * existing.units);
+        alert(_isFr
+            ? 'Ce medicament est deja dans le panier — quantite et instructions combinees.'
+            : 'This drug is already in the cart — quantity and instructions combined.');
+    } else {
+        var total = Math.round(_selItem.price * units);
+        _cart.push({
+            item_id:            _selItem.item_id,
+            description:        _selItem.description,
+            drug_class:         _selItem.drug_class,
+            price:              _selItem.price,
+            units:              units,
+            dosage:             dosage,
+            application_type_nr: apptype,
+            notes:              notes,
+            total:              total,
+        });
+    }
+
+    clearItemForm();
+    renderCart();
+}
+
+function removeFromCart(idx) {
+    _cart.splice(idx, 1);
+    renderCart();
+}
+
+function renderCart() {
+    var count = _cart.length;
+    document.getElementById('cart-count').textContent = count;
+
+    var grandTotal = _cart.reduce(function(s, i) { return s + i.total; }, 0);
+    document.getElementById('cart-total').textContent =
+        Math.round(grandTotal).toLocaleString('fr-FR') + ' FCFA';
+
+    var empty   = document.getElementById('cart-empty');
+    var items   = document.getElementById('cart-items');
+    var footer  = document.getElementById('cart-footer');
+
+    if (count === 0) {
+        empty.style.display  = '';
+        items.innerHTML      = '';
+        footer.style.display = 'none';
+        return;
+    }
+    empty.style.display  = 'none';
+    footer.style.display = '';
+
+    var html = '';
+    _cart.forEach(function(item, idx) {
+        html += '<div class="cart-row px-3">' +
+            '<div class="d-flex justify-content-between align-items-start">' +
+            '<div style="flex:1;">' +
+            '<div class="fw-bold" style="font-size:.80rem;">' + item.description + '</div>' +
+            '<div class="text-muted" style="font-size:.70rem;">' +
+            (_isFr?'Qte:':'Qty:') + ' ' + item.units +
+            ' &bull; ' + (_isFr?'Posologie:':'Dosage:') + ' ' + item.dosage +
+            ' &bull; ' + item.notes + '</div>' +
+            '</div>' +
+            '<div class="ms-2 text-end">' +
+            '<div class="fw-bold text-primary" style="font-size:.80rem;">' +
+            Math.round(item.total).toLocaleString('fr-FR') + ' FCFA</div>' +
+            '<button class="btn btn-xs btn-outline-danger mt-1" style="font-size:.62rem;padding:1px 5px;"' +
+            ' onclick="removeFromCart(' + idx + ')">' +
+            '<i class="fas fa-times"></i></button>' +
+            '</div></div></div>';
+    });
+    items.innerHTML = html;
+}
+
+// ── Submit prescription ───────────────────────────────────────────
+function submitPrescription() {
+    if (_cart.length === 0) return;
+    var btn = document.getElementById('btn-submit-prx');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>' +
+        (_isFr ? 'Traitement...' : 'Processing...');
+
+    var payload = { items: _cart.map(function(c) {
+        return {
+            item_id:            c.item_id,
+            dosage:             c.dosage,
+            application_type_nr: c.application_type_nr,
+            notes:              c.notes,
+            units:              c.units,
+        };
+    })};
+
+    fetch('/prescriptions/encounter/' + _encNr + '?_csrf=' + encodeURIComponent(_csrf), {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            window.location.href = data.redirect;
+        } else {
+            alert((_isFr ? 'Erreur: ' : 'Error: ') + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check me-2"></i>' +
+                (_isFr ? 'Valider la prescription' : 'Submit Prescription');
+        }
+    })
+    .catch(function(err) {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-2"></i>' +
+            (_isFr ? 'Valider la prescription' : 'Submit Prescription');
+    });
+}
+
+// ── Stop prescription ─────────────────────────────────────────────
+function stopPrx(prxNr, btn) {
+    if (!confirm(_isFr ? 'Arreter cette prescription ?' : 'Stop this prescription?')) return;
+    btn.disabled = true;
+
+    fetch('/prescriptions/' + prxNr + '/stop?_csrf=' + encodeURIComponent(_csrf), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            var row = document.getElementById('prx-row-' + prxNr);
+            if (row) {
+                row.style.opacity = '0.4';
+                row.style.textDecoration = 'line-through';
+                btn.remove();
+            }
+        } else {
+            alert('Error: ' + (data.error || 'Unknown'));
+            btn.disabled = false;
+        }
+    });
+}
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+

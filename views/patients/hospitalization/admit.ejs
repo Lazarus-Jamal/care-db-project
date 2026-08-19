@@ -1,0 +1,132 @@
+<%- include("../../partials/header", { title: "Admission Patient" }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background: #fff !important; }
+</style>
+<%- include("../../partials/navbar", { activePage: "patients", user: user }) %>
+
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="card shadow-sm" style="max-width:800px;margin:0 auto;">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0"><i class="fas fa-hospital me-2"></i>Admission en Hospitalisation</h5>
+    </div>
+    <div class="card-body">
+
+      <% if (typeof errors !== "undefined" && errors.length > 0) { %>
+        <div class="alert alert-danger"><ul class="mb-0"><% errors.forEach(e => { %><li><%= e %></li><% }) %></ul></div>
+      <% } %>
+      <% if (typeof success !== "undefined" && success) { %>
+        <div class="alert alert-success">Patient admis avec succÃ¨s.</div>
+      <% } %>
+
+      <!-- Patient lookup -->
+      <div class="mb-4">
+        <label class="form-label fw-500">SÃ©lectionner un patient</label>
+        <input type="text" id="patientSearch" class="form-control form-control-sm mb-2" placeholder="Rechercher par nom ou numÃ©ro dossier...">
+        <select id="patientSelect" class="form-select form-select-sm" size="4">
+          <option value="">-- SÃ©lectionner un patient --</option>
+          <% if (typeof patients !== "undefined") { %>
+            <% patients.forEach(p => { %>
+              <option value="<%= p.pid %>" data-name="<%= p.name_last %> <%= p.name_first %>"
+                <%= typeof selectedPid !== "undefined" && selectedPid == p.pid ? "selected" : "" %>>
+                <%= p.hospital_file_nr %> â€” <%= p.name_last %> <%= p.name_first %>
+              </option>
+            <% }) %>
+          <% } %>
+        </select>
+      </div>
+
+      <form action="/patients/hospitalization/admit" method="POST" id="admitForm">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="pid" id="pidInput" value="<%= typeof selectedPid !== "undefined" ? selectedPid : "" %>">
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">DÃ©partement</label>
+            <select name="dept_nr" class="form-select form-select-sm" required>
+              <option value="">-- DÃ©partement --</option>
+              <% if (typeof departments !== "undefined") { %>
+                <% departments.forEach(d => { %>
+                  <option value="<%= d.nr %>"><%= d.name_formal %></option>
+                <% }) %>
+              <% } %>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Salle / Chambre</label>
+            <select name="room_nr" class="form-select form-select-sm">
+              <option value="">-- Salle --</option>
+              <% if (typeof rooms !== "undefined") { %>
+                <% rooms.forEach(r => { %>
+                  <option value="<%= r.nr %>">Salle <%= r.room_nr %> â€” Ward <%= r.ward_nr %></option>
+                <% }) %>
+              <% } %>
+            </select>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Date d'admission</label>
+            <input type="date" name="admit_date" class="form-control form-control-sm"
+              value="<%= new Date().toISOString().split("T")[0] %>" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Type d'admission</label>
+            <select name="admit_type" class="form-select form-select-sm">
+              <option value="0">Urgence</option>
+              <option value="1">ProgrammÃ©e</option>
+              <option value="2">Transfert</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">MÃ©decin traitant</label>
+          <select name="att_dr_nr" class="form-select form-select-sm">
+            <option value="">-- SÃ©lectionner mÃ©decin --</option>
+            <% if (typeof staff !== "undefined") { %>
+              <% staff.forEach(s => { %>
+                <option value="<%= s.nr %>"><%= s.person ? s.person.name_first + " " + s.person.name_last : s.job_function_title %></option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Diagnostic de rÃ©fÃ©rence</label>
+          <textarea name="referrer_diagnosis" class="form-control form-control-sm" rows="2" placeholder="Motif d'admission..."></textarea>
+        </div>
+
+        <div class="text-end">
+          <a href="/patients/list" class="btn btn-secondary btn-sm">Annuler</a>
+          <button type="submit" class="btn btn-primary btn-sm ms-2">
+            <i class="fas fa-hospital me-1"></i>Admettre le Patient
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('patientSearch').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  Array.from(document.getElementById('patientSelect').options).forEach(o => {
+    o.style.display = !o.value || o.text.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+document.getElementById('patientSelect').addEventListener('change', function() {
+  document.getElementById('pidInput').value = this.value;
+});
+</script>
+
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

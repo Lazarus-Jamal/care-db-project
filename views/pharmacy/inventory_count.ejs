@@ -1,0 +1,142 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar", { activePage: "pharmacy", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .ph-header { background:linear-gradient(135deg,#1a9e72 0%,#157a58 100%); color:#fff; border-radius:.5rem .5rem 0 0; }
+  .ph-tab-active   { background:#1a9e72 !important; color:#fff !important; border-color:#1a9e72 !important; }
+  .ph-tab-inactive { background:#e8f5f0; color:#1a9e72; border:1px solid #b2dfce; }
+  .ph-tab-inactive:hover { background:#d1ece3; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6; padding:14px 16px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+  .stat-val { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  .table-xs td,.table-xs th { padding:5px 9px; font-size:.79rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stock-ok   { display:inline-block; padding:2px 7px; border-radius:10px; background:#d1ece3; color:#0a3622; font-size:.62rem; font-weight:700; }
+  .stock-low  { display:inline-block; padding:2px 7px; border-radius:10px; background:#fff3cd; color:#856404; font-size:.62rem; font-weight:700; }
+  .stock-out  { display:inline-block; padding:2px 7px; border-radius:10px; background:#f8d7da; color:#842029; font-size:.62rem; font-weight:700; }
+  .badge-med { background:#1a9e72; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  .badge-sup { background:#0d6efd; color:#fff; font-size:.60rem; padding:2px 6px; border-radius:4px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold">
+        <i class="fas fa-clipboard-list me-2" style="color:#6f42c1;"></i>
+        <%= locale==="fr"?"Comptage inventaire pharmacie":"Pharmacy Inventory Count" %>
+      </h5>
+      <small class="text-muted"><%= items.length %> <%= locale==="fr"?"article(s)":"item(s)" %></small>
+    </div>
+    <a href="/pharmacy/stock" class="btn btn-xs btn-outline-secondary">
+      <i class="fas fa-boxes me-1"></i><%= locale==="fr"?"Retour stock":"Back to Stock" %>
+    </a>
+  </div>
+
+  <div class="alert py-2" style="background:#f3eeff;border:1px solid #d8c4f8;font-size:.80rem;">
+    <i class="fas fa-info-circle me-2" style="color:#6f42c1;"></i>
+    <%= locale==="fr"
+      ?"Saisissez la quantite reelle comptee pour chaque article. Seuls les articles avec ecart seront mis a jour."
+      :"Enter the actual counted quantity for each item. Only items with a variance will be updated." %>
+  </div>
+
+  <form method="POST" action="/pharmacy/inventory-count">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-header py-2 fw-bold" style="background:#f3eeff;font-size:.85rem;border-bottom:2px solid #6f42c1;">
+        <i class="fas fa-clipboard-check me-2" style="color:#6f42c1;"></i>
+        <%= locale==="fr"?"Feuille de comptage":"Count Sheet" %>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-xs table-hover align-middle mb-0">
+          <thead class="table-dark"><tr>
+            <th><%= locale==="fr"?"Article":"Item" %></th>
+            <th><%= locale==="fr"?"Code":"Code" %></th>
+            <th class="text-center"><%= locale==="fr"?"Stock systeme":"System Qty" %></th>
+            <th class="text-center" style="width:130px;"><%= locale==="fr"?"Qte comptee":"Counted Qty" %></th>
+            <th class="text-center"><%= locale==="fr"?"Ecart":"Variance" %></th>
+          </tr></thead>
+          <tbody>
+            <% items.forEach(function(item, idx) { %>
+              <tr id="countRow_<%= idx %>">
+                <td>
+                  <input type="hidden" name="counts[<%= idx %>][item_id]" value="<%= item.item_id %>">
+                  <div class="fw-bold" style="font-size:.77rem;"><%= item.item_description %></div>
+                </td>
+                <td><code style="font-size:.68rem;"><%= item.item_number %></code></td>
+                <td class="text-center fw-bold" style="color:#1a9e72;"><%= item.quantity %></td>
+                <td class="text-center">
+                  <input type="number" name="counts[<%= idx %>][counted_qty]"
+                    class="form-control form-control-sm text-center count-input"
+                    data-system="<%= item.quantity %>" data-row="<%= idx %>"
+                    style="width:90px;margin:0 auto;"
+                    placeholder="<%= item.quantity %>" min="0"
+                    onchange="calcVariance(<%= idx %>)">
+                </td>
+                <td class="text-center" id="variance_<%= idx %>">
+                  <span class="text-muted">—</span>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-3 p-3">
+      <label class="lbl">Notes</label>
+      <textarea name="notes" class="form-control form-control-sm" rows="2"
+        placeholder="<%= locale==="fr"?"Remarques sur le comptage...":"Notes about this count..." %>"></textarea>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a href="/pharmacy/stock" class="btn btn-outline-secondary btn-sm">
+        <%= locale==="fr"?"Annuler":"Cancel" %>
+      </a>
+      <button type="submit" class="btn btn-sm" style="background:#6f42c1;color:#fff;">
+        <i class="fas fa-save me-1"></i>
+        <%= locale==="fr"?"Soumettre le comptage":"Submit Count" %>
+      </button>
+    </div>
+  </form>
+
+</div></div>
+
+<script>
+function calcVariance(idx) {
+  var input   = document.querySelector('input[data-row="'+idx+'"]');
+  var system  = parseInt(input.dataset.system, 10);
+  var counted = parseInt(input.value, 10);
+  var cell    = document.getElementById('variance_'+idx);
+  if (isNaN(counted)) { cell.innerHTML = '<span class="text-muted">—</span>'; return; }
+  var diff = counted - system;
+  if (diff === 0) {
+    cell.innerHTML = '<span class="text-muted">0</span>';
+  } else if (diff > 0) {
+    cell.innerHTML = '<span style="color:#198754;font-weight:700;">+'+diff+'</span>';
+  } else {
+    cell.innerHTML = '<span style="color:#dc3545;font-weight:700;">'+diff+'</span>';
+  }
+}
+</script>
+<%- include("../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+

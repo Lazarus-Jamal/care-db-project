@@ -1,0 +1,290 @@
+<%- include("../partials/header", { title: title }) %>
+<%- include("../partials/navbar") %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .edit-card  { max-width: 1000px; margin: 0 auto; }
+  .sec-title  { font-size:0.7rem; font-weight:700; text-transform:uppercase;
+                letter-spacing:.08em; color:#6c757d;
+                border-bottom:1px solid #dee2e6; padding-bottom:4px; margin-bottom:8px; }
+  .form-label { font-size:0.72rem; font-weight:600; margin-bottom:2px; color:#495057; }
+  .form-control, .form-select { font-size:0.78rem; padding:0.28rem 0.5rem; }
+  .req        { color:#dc3545; }
+</style>
+
+<div class="container-fluid py-3">
+<div class="card shadow-sm edit-card">
+
+  <div class="card-header py-2 d-flex justify-content-between align-items-center bg-warning">
+    <h6 class="mb-0 text-dark">
+      <i class="fas fa-pen me-2"></i>
+      <%= locale === "fr" ? "Modifier le Dossier" : "Edit Patient Record" %> —
+      <strong><%= patient.name_last %>, <%= patient.name_first %></strong>
+    </h6>
+    <a href="/patients/<%= patient.pid %>/record" class="btn btn-sm btn-dark">
+      <i class="fas fa-times me-1"></i><%= locale === "fr" ? "Annuler" : "Cancel" %>
+    </a>
+  </div>
+
+  <div class="card-body p-3">
+
+    <% if (typeof errors !== "undefined" && errors.length > 0) { %>
+      <div class="alert alert-danger py-2 mb-2" style="font-size:0.78rem;">
+        <% errors.forEach(function(e) { %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+      </div>
+    <% } %>
+    <% if (typeof success !== "undefined" && success) { %>
+      <div class="alert alert-success py-2 mb-2" style="font-size:0.78rem;">
+        <%= locale === "fr" ? "Dossier mis à jour avec succès." : "Record updated successfully." %>
+      </div>
+    <% } %>
+
+    <form action="/patients/<%= patient.pid %>/edit?_csrf=<%= encodeURIComponent(csrfToken) %>"
+          method="POST" enctype="multipart/form-data">
+
+      <%/* SECTION 1 — Identity */%>
+      <p class="sec-title"><i class="fas fa-id-card me-1"></i>
+        <%= locale === "fr" ? "Identité" : "Identity" %>
+      </p>
+      <div class="row g-2 mb-2">
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Nom" : "Last Name" %> <span class="req">*</span></label>
+          <input type="text" name="name_last" class="form-control"
+            value="<%= patient.name_last || "" %>" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Prénom(s)" : "First Name(s)" %> <span class="req">*</span></label>
+          <input type="text" name="name_first" class="form-control"
+            value="<%= patient.name_first || "" %>" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Nom de jeune fille" : "Maiden Name" %></label>
+          <input type="text" name="name_maiden" class="form-control"
+            value="<%= patient.name_maiden || "" %>">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Né(e) le" : "Date of Birth" %> <span class="req">*</span></label>
+          <input type="date" name="date_birth" class="form-control"
+            value="<%= patient.date_birth ? new Date(patient.date_birth).toISOString().split("T")[0] : "" %>" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Nationalité" : "Nationality" %> <span class="req">*</span></label>
+          <select name="citizenship" class="form-select" required>
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <% countries.forEach(function(c) { %>
+              <option value="<%= c.name %>" <%= patient.citizenship === c.name ? "selected" : "" %>><%= c.name %></option>
+            <% }); %>
+          </select>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Sexe" : "Sex" %></label>
+          <div class="d-flex gap-3 mt-1">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="sex" id="sexM" value="m"
+                <%= patient.sex === "m" ? "checked" : "" %>>
+              <label class="form-check-label" for="sexM"><%= locale === "fr" ? "Masc." : "M" %></label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="sex" id="sexF" value="f"
+                <%= patient.sex === "f" ? "checked" : "" %>>
+              <label class="form-check-label" for="sexF"><%= locale === "fr" ? "Fém." : "F" %></label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Groupe Sanguin" : "Blood Group" %></label>
+          <%
+            var bgVal = (patient.blood_group || "A+").replace(/[+-]/, "");
+            var rhVal = (patient.blood_group || "A+").includes("-") ? "-" : "+";
+          %>
+          <div class="d-flex gap-1 flex-wrap mt-1">
+            <% ["A","B","AB","O"].forEach(function(bg) { %>
+              <div class="form-check form-check-inline me-1">
+                <input class="form-check-input" type="radio" name="blood_group"
+                  id="bg<%= bg %>" value="<%= bg %>" <%= bgVal === bg ? "checked" : "" %>>
+                <label class="form-check-label" for="bg<%= bg %>"><%= bg %></label>
+              </div>
+            <% }); %>
+            <div class="form-check form-check-inline ms-1">
+              <input class="form-check-input" type="radio" name="rhesus" id="rhP" value="+"
+                <%= rhVal === "+" ? "checked" : "" %>>
+              <label class="form-check-label" for="rhP">+</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="rhesus" id="rhN" value="-"
+                <%= rhVal === "-" ? "checked" : "" %>>
+              <label class="form-check-label" for="rhN">-</label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "État Civil" : "Civil Status" %></label>
+          <select name="civil_status" class="form-select">
+            <% [
+              ["single",    locale === "fr" ? "Celibataire" : "Single"],
+              ["married",   locale === "fr" ? "Marie(e)"    : "Married"],
+              ["divorced",  locale === "fr" ? "Divorce(e)"  : "Divorced"],
+              ["widowed",   locale === "fr" ? "Veuf/Veuve"  : "Widowed"],
+              ["separated", locale === "fr" ? "Separe(e)"   : "Separated"],
+            ].forEach(function(opt) { %>
+              <option value="<%= opt[0] %>" <%= patient.civil_status === opt[0] ? "selected" : "" %>><%= opt[1] %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "N° CNI" : "ID Number" %></label>
+          <input type="text" name="nat_id_nr" class="form-control"
+            value="<%= patient.nat_id_nr || "" %>">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Profession" : "Profession" %></label>
+          <input type="text" name="profession" class="form-control"
+            value="<%= patient.title || "" %>">
+        </div>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Religion" : "Religion" %></label>
+          <select name="religion" class="form-select">
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <% [
+              [locale === "fr" ? "Christianisme"  : "Christianity"],
+              [locale === "fr" ? "Islam"           : "Islam"],
+              [locale === "fr" ? "Catholicisme"    : "Catholicism"],
+              [locale === "fr" ? "Protestantisme"  : "Protestantism"],
+              [locale === "fr" ? "Evangelisme"     : "Evangelicalism"],
+              [locale === "fr" ? "Hindouisme"      : "Hinduism"],
+              [locale === "fr" ? "Bouddhisme"      : "Buddhism"],
+              [locale === "fr" ? "Judaisme"        : "Judaism"],
+              [locale === "fr" ? "Sikhisme"        : "Sikhism"],
+              [locale === "fr" ? "Animisme / Tradition" : "Animism / Traditional"],
+              [locale === "fr" ? "Bahaisme"        : "Bahai Faith"],
+              [locale === "fr" ? "Shintoisme"      : "Shinto"],
+              [locale === "fr" ? "Taoisme"         : "Taoism"],
+              [locale === "fr" ? "Confucianisme"   : "Confucianism"],
+              [locale === "fr" ? "Sans religion"   : "No religion"],
+            ].forEach(function(r) { %>
+              <option value="<%= r[0] %>" <%= patient.religion === r[0] ? "selected" : "" %>><%= r[0] %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Tribu / Origine" : "Tribe / Ethnic Origin" %></label>
+          <select name="ethnic_orig" class="form-select">
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <% if (typeof tribes !== "undefined") { tribes.forEach(function(tribe) { %>
+              <option value="<%= tribe.tribe_id %>"
+                <%= patient.ethnic_orig == tribe.tribe_id ? "selected" : "" %>>
+                <%= tribe.tribe_name %>
+              </option>
+            <% }); } %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Photo" : "Photo" %></label>
+          <div class="d-flex align-items-center gap-2">
+            <% if (patient.photo_filename) { %>
+              <img src="/patients/photos/<%= patient.photo_filename %>"
+                style="width:36px;height:36px;object-fit:cover;border-radius:50%;border:2px solid #dee2e6;">
+            <% } %>
+            <input type="file" name="photo" class="form-control form-control-sm"
+              accept="image/jpeg,image/png,image/webp">
+          </div>
+        </div>
+      </div>
+
+      <%/* SECTION 2 — Contact */%>
+      <p class="sec-title mt-2"><i class="fas fa-phone me-1"></i>
+        <%= locale === "fr" ? "Coordonnées" : "Contact Details" %>
+      </p>
+      <div class="row g-2 mb-2">
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Téléphone 1" : "Phone 1" %></label>
+          <input type="tel" name="cellphone_1_nr" class="form-control"
+            value="<%= patient.cellphone_1_nr || "" %>" maxlength="20">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Téléphone 2" : "Phone 2" %></label>
+          <input type="tel" name="cellphone_2_nr" class="form-control"
+            value="<%= patient.cellphone_2_nr || "" %>" maxlength="20">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Email</label>
+          <input type="email" name="email" class="form-control"
+            value="<%= patient.email || "" %>">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Adresse / Quartier" : "Address / Area" %></label>
+          <input type="text" name="addr_str" class="form-control"
+            value="<%= patient.addr_str || "" %>">
+        </div>
+      </div>
+
+      <%/* SECTION 3 — Emergency Contact */%>
+      <p class="sec-title mt-2"><i class="fas fa-ambulance me-1"></i>
+        <%= locale === "fr" ? "Contact d\"urgence" : "Emergency Contact" %>
+      </p>
+      <div class="row g-2 mb-3">
+        <div class="col-md-4">
+          <label class="form-label"><%= locale === "fr" ? "Nom complet" : "Full Name" %></label>
+          <input type="text" name="contact_person" class="form-control"
+            value="<%= patient.contact_person || "" %>">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Lien de parenté" : "Relation" %></label>
+          <select name="contact_relation" class="form-select">
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <% [
+              [locale === "fr" ? "Conjoint(e)"       : "Spouse"],
+              [locale === "fr" ? "Pere"              : "Father"],
+              [locale === "fr" ? "Mere"              : "Mother"],
+              [locale === "fr" ? "Fils"              : "Son"],
+              [locale === "fr" ? "Fille"             : "Daughter"],
+              [locale === "fr" ? "Frere"             : "Brother"],
+              [locale === "fr" ? "Soeur"              : "Sister"],
+              [locale === "fr" ? "Oncle"             : "Uncle"],
+              [locale === "fr" ? "Tante"             : "Aunt"],
+              [locale === "fr" ? "Cousin(e)"         : "Cousin"],
+              [locale === "fr" ? "Grand-pere"        : "Grandfather"],
+              [locale === "fr" ? "Grand-mere"        : "Grandmother"],
+              [locale === "fr" ? "Ami(e)"            : "Friend"],
+              [locale === "fr" ? "Collegue"          : "Colleague"],
+              [locale === "fr" ? "Tuteur / Tutrice"  : "Guardian"],
+              [locale === "fr" ? "Autre"             : "Other"],
+            ].forEach(function(r) { %>
+              <option value="<%= r[0] %>" <%= patient.contact_relation === r[0] ? "selected" : "" %>><%= r[0] %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Téléphone" : "Phone" %></label>
+          <input type="tel" name="relative_phone" class="form-control"
+            value="<%= patient.relative_phone || "" %>" maxlength="20">
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+        <a href="/patients/<%= patient.pid %>/record" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-times me-1"></i><%= locale === "fr" ? "Annuler" : "Cancel" %>
+        </a>
+        <button type="submit" class="btn btn-sm btn-warning">
+          <i class="fas fa-save me-1"></i>
+          <%= locale === "fr" ? "Enregistrer les modifications" : "Save Changes" %>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+

@@ -1,0 +1,150 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "finances", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; } .table-xs td,.table-xs th { padding:5px 9px; font-size:.80rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .sp { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.62rem; font-weight:700; text-transform:uppercase; white-space:nowrap; }
+  .s-pending         { background:#e9ecef;color:#495057 }
+  .s-pending_director{ background:#fff3cd;color:#856404 }
+  .s-approved_director{ background:#d1e7dd;color:#0a3622 }
+  .s-paid            { background:#d0d3f8;color:#1a1f8c }
+  .s-rejected        { background:#f8d7da;color:#842029 }
+  .s-cancelled       { background:#dee2e6;color:#6c757d }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="fin-page"><div class="container-fluid px-3 pt-2">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-money-check-alt me-2 text-success"></i>
+        <%= locale==="fr"?"Demandes de remboursement":"Reimbursement Requests" %>
+      </h5>
+      <small class="text-muted"><%= totalCount %> <%= locale==="fr"?"demande(s)":"request(s)" %></small>
+    </div>
+    <div class="d-flex gap-2">
+      <% if (typeof hasPermission !== "undefined" && hasPermission("Finance.Create.Reimbursement")) { %>
+        <a href="/finances/reimbursements/new" class="btn btn-sm btn-success">
+          <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Nouvelle demande":"New Request" %>
+        </a>
+      <% } %>
+    </div>
+  </div>
+
+  <%
+    var tabs = [
+      { key:"",                  label: locale==="fr"?"Toutes":"All" },
+      { key:"pending",           label: locale==="fr"?"Brouillon":"Draft" },
+      { key:"pending_director",  label: locale==="fr"?"Att. Directeur":"Pending Director" },
+      { key:"approved_director", label: locale==="fr"?"Approuve Directeur":"Director Approved" },
+      { key:"paid",              label: locale==="fr"?"Paye":"Paid" },
+      { key:"rejected",          label: locale==="fr"?"Rejete":"Rejected" },
+      { key:"cancelled",         label: locale==="fr"?"Annule":"Cancelled" },
+    ];
+  %>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3 d-flex gap-1 flex-wrap">
+    <% tabs.forEach(function(t){ %>
+      <a href="/finances/reimbursements?status=<%= t.key %>"
+         class="btn btn-xs <%= statusFilter===t.key?"btn-primary":"btn-outline-secondary" %>">
+        <%= t.label %>
+        <% if (t.key && countMap[t.key]) { %>
+          <span class="badge bg-secondary ms-1" style="font-size:.58rem;"><%= countMap[t.key] %></span>
+        <% } %>
+      </a>
+    <% }); %>
+  </div></div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <% if (!reqs || reqs.length === 0) { %>
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-money-check-alt fa-2x mb-2 d-block opacity-25"></i>
+          <%= locale==="fr"?"Aucune demande.":"No requests." %>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-xs table-hover align-middle mb-0">
+            <thead class="table-dark"><tr>
+              <th><%= locale==="fr"?"N° Demande":"Request No." %></th>
+              <th class="text-center"><%= locale==="fr"?"Statut":"Status" %></th>
+              <th>PO / <%= locale==="fr"?"Description":"Description" %></th>
+              <th class="text-end"><%= locale==="fr"?"Montant":"Amount" %></th>
+              <th><%= locale==="fr"?"Demandeur":"Requested by" %></th>
+              <th><%= locale==="fr"?"Date":"Date" %></th>
+              <th class="text-center">Actions</th>
+            </tr></thead>
+            <tbody>
+              <% reqs.forEach(function(r) { %>
+                <%
+                  var sLabel = {
+                    pending: locale==="fr"?"Brouillon":"Draft",
+                    pending_director: locale==="fr"?"Att. Directeur":"Pending Director",
+                    approved_director: locale==="fr"?"Approuve":"Director Approved",
+                    paid: locale==="fr"?"Paye":"Paid",
+                    rejected: locale==="fr"?"Rejete":"Rejected",
+                    cancelled: locale==="fr"?"Annule":"Cancelled",
+                  };
+                %>
+                <tr>
+                  <td><a href="/finances/reimbursements/<%= r.reimb_id %>" class="fw-bold text-decoration-none">
+                    <%= r.request_number %>
+                  </a></td>
+                  <td class="text-center">
+                    <span class="sp s-<%= r.status %>"><%= sLabel[r.status]||r.status %></span>
+                  </td>
+                  <td class="text-muted" style="font-size:.76rem;">
+                    <% if (r.po) { %>
+                      <a href="/warehouse/purchase-orders/<%= r.po_id %>" class="text-decoration-none fw-bold"><%= r.po.po_number %></a>
+                      <% if (r.po.supplier) { %> &mdash; <%= r.po.supplier.name %><% } %>
+                    <% } else { %>
+                      <%= r.purchase_description ? r.purchase_description.substring(0,50) : "—" %>
+                    <% } %>
+                  </td>
+                  <td class="text-end fw-bold" style="color:#0a3622;"><%= fmtFCFA(r.amount) %></td>
+                  <td class="text-muted"><%= r.created_by %></td>
+                  <td class="text-muted" style="font-size:.74rem;">
+                    <%= new Date(r.create_time).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                  </td>
+                  <td class="text-center">
+                    <a href="/finances/reimbursements/<%= r.reimb_id %>" class="btn btn-xs btn-outline-secondary">
+                      <i class="fas fa-eye"></i>
+                    </a>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+        <% if (totalPages > 1) { %>
+          <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+            <small class="text-muted">Page <%= currentPage %> / <%= totalPages %></small>
+            <div class="d-flex gap-1">
+              <% if (currentPage > 1) { %><a href="?page=<%= currentPage-1 %>&status=<%= statusFilter %>" class="btn btn-xs btn-outline-secondary">&#8249;</a><% } %>
+              <% if (currentPage < totalPages) { %><a href="?page=<%= currentPage+1 %>&status=<%= statusFilter %>" class="btn btn-xs btn-outline-secondary">&#8250;</a><% } %>
+            </div>
+          </div>
+        <% } %>
+      <% } %>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+

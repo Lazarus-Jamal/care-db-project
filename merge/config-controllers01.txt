@@ -1,0 +1,649 @@
+// File: c:\Users\Public\Projects\care-db-project\config\database.js
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASSWORD,
+  {
+    host: process.env.DB_HOST,
+    dialect: 'mysql',
+    logging: false,
+  }
+);
+
+module.exports = sequelize;
+
+
+// File: c:\Users\Public\Projects\care-db-project\controllers\adminFacilityController.js
+// controllers/adminFacilityController.js
+const { care_facilities, care_staff, care_person } = require('../models');
+const logActivity = require('../utils/activityLogger');
+const { validationResult } = require('express-validator');
+const { Op, Sequelize } = require('sequelize');
+
+// GET: Render the facility creation form
+exports.getCreateFacilityForm = async (req, res) => {
+    try {
+        const staff = await care_staff.findAll({
+            attributes: ['nr', 'job_function_title'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'},'name_last', 'ASC']],
+        });
+        
+        const mainFacilities = await care_facilities.findAll({
+            where: { 
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                type: 'Hospital' // <-- Added this filter
+            },
+            order: [['name', 'ASC']],
+        });
+
+        res.render('facilities/create', {
+            title: 'Create Facility',
+            user: req.user,
+            staff,
+            mainFacilities, // <-- Changed the variable name for clarity
+            errors: [],
+            success: req.query.success === '1',
+            activePage: 'admin-facilities-create',
+            csrfToken: req.csrfToken(),
+            name: '', code: '', type: '', address: '', city: '', region: '', country: '', latitude: '', longitude: '',
+            facility_type: '',
+            parent_id: '',
+            director_id: '',
+            head_nurse_id: '',
+            finance_officer_id: '',
+        });
+    } catch (error) {
+        console.error('Error fetching data for create facility form:', error);
+        res.status(500).send('Error loading page.');
+    }
+};
+
+// POST: Handle facility creation
+exports.createFacility = async (req, res) => {
+    const {
+        name, code, type, facility_type, parent_id,
+        director_id, head_nurse_id, finance_officer_id,
+        address, city, region, country, latitude, longitude
+    } = req.body;
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'},'name_last', 'ASC']],});
+        const mainFacilities = await care_facilities.findAll({ // <-- Updated this query
+            where: { 
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                type: 'Hospital'
+            },
+            order: [['name', 'ASC']],
+        });
+        return res.status(400).render('facilities/create', {
+            title: 'Create Facility',
+            user: req.user,
+            staff,
+            mainFacilities,
+            errors: errors.array().map(e => e.msg),
+            success: false,
+            activePage: 'admin-facilities-create',
+            csrfToken: req.csrfToken(),
+            name, code, type, address, city, region, country, latitude, longitude,
+            facility_type,
+            parent_id,
+            director_id,
+            head_nurse_id,
+            finance_officer_id,
+        });
+    }
+
+    try {
+        let finalParentId = null;
+        if (facility_type === 'satellite') {
+            finalParentId = parent_id;
+        }
+
+        const newFacility = await care_facilities.create({
+            name,
+            code,
+            type,
+            parent_id: finalParentId,
+            director_id: director_id || null,
+            head_nurse_id: head_nurse_id || null,
+            finance_officer_id: finance_officer_id || null,
+            address,
+            city,
+            region,
+            country,
+            latitude,
+            longitude,
+        });
+
+        if (facility_type === 'main') {
+            await newFacility.update({ parent_id: newFacility.id });
+        }
+
+        const lognote = `Admin '${req.user.username}' successfully created new facility '${name}' (type: ${facility_type})`;
+        await logActivity(req, lognote, true, 'admin-facilities-create');
+
+        res.redirect('/admin/facilities/create?success=1');
+    } catch (error) {
+        console.error('Facility creation failed:', error);
+        const errorMessages = ['An error occurred while creating the facility.'];
+        const lognote = `Admin '${req.user.username}' failed to create facility '${name}': ${error.message}`;
+        await logActivity(req, lognote, false, 'admin-facilities-create');
+        
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'},'name_last', 'ASC']],
+         });
+
+        const mainFacilities = await care_facilities.findAll({ // <-- Updated this query
+            where: { 
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                type: 'Hospital'
+            },
+            order: [['name', 'ASC']],
+        });
+
+        res.status(500).render('facilities/create', {
+            title: 'Create Facility',
+            user: req.user,
+            staff,
+            mainFacilities,
+            errors: errorMessages,
+            success: false,
+            activePage: 'admin-facilities-create',
+            csrfToken: req.csrfToken(),
+            name, code, type, address, city, region, country, latitude, longitude,
+            facility_type,
+            parent_id,
+            director_id,
+            head_nurse_id,
+            finance_officer_id,
+        });
+    }
+};
+
+// GET: Update Facility Form
+exports.getUpdateFacilityForm = async (req, res) => {
+    try {
+        const { facility_id, success } = req.query;
+        
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        let facility = null;
+        let staff = [];
+        let mainFacilities = [];
+        const errors = [];
+        let csrfToken = req.csrfToken(); 
+
+        if (facility_id) {
+            facility = await care_facilities.findByPk(facility_id);
+            if (!facility) {
+                errors.push('Facility not found.');
+            } else {
+                staff = await care_staff.findAll({
+                    attributes: ['nr', 'job_function_title', 'pid'],
+                    include: [{
+                        model: care_person,
+                        as: 'person',
+                        attributes: ['name_last', 'name_first']
+                    }],
+                    order: [[{model: care_person, as: 'person'}, 'name_last', 'ASC']],
+                });
+                mainFacilities = await care_facilities.findAll({
+                    where: {
+                        parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                        id: { [Op.ne]: facility_id },
+                        type: 'Hospital' // <-- Added this filter
+                    },
+                    order: [['name', 'ASC']],
+                });
+            }
+        }
+        
+        res.render('facilities/updateFacility', {
+            title: 'Update Facility',
+            user: req.user,
+            facilities: allFacilities, 
+            facility, 
+            staff,
+            mainFacilities,
+            errors,
+            success: success === '1',
+            activePage: 'admin-facilities-update',
+            csrfToken,
+        });
+    } catch (error) {
+        console.error('Error fetching data for update facility form:', error);
+        res.status(500).send('Error loading page.');
+    }
+};
+
+// POST: Handle facility update
+exports.updateFacility = async (req, res) => {
+    const {
+        facility_id, name, code, type, facility_type, parent_id,
+        director_id, head_nurse_id, finance_officer_id,
+        address, city, region, country, latitude, longitude
+    } = req.body;
+
+    const facilityToUpdate = await care_facilities.findByPk(facility_id);
+    if (!facilityToUpdate) {
+        return res.status(404).send('Facility not found.');
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }], 
+            order: [[{model: care_person, as: 'person'}, 'name_last', 'ASC']],
+        });
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        const mainFacilities = await care_facilities.findAll({
+            where: {
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                id: { [Op.ne]: facility_id },
+                type: 'Hospital' // <-- Added this filter
+            },
+            order: [['name', 'ASC']],
+        });
+        return res.status(400).render('facilities/updateFacility', {
+            title: 'Update Facility',
+            user: req.user,
+            facilities: allFacilities,
+            facility: facilityToUpdate,
+            staff,
+            mainFacilities,
+            errors: errors.array().map(e => e.msg),
+            success: false,
+            activePage: 'admin-facilities-update',
+            csrfToken: req.csrfToken(),
+        });
+    }
+
+    try {
+        let finalParentId = null;
+        if (facility_type === 'main') {
+            finalParentId = facilityToUpdate.id;
+        } else if (facility_type === 'satellite') {
+            finalParentId = parent_id;
+        }
+
+        await facilityToUpdate.update({
+            name,
+            code,
+            type,
+            parent_id: finalParentId,
+            director_id: director_id || null,
+            head_nurse_id: head_nurse_id || null,
+            finance_officer_id: finance_officer_id || null,
+            address,
+            city,
+            region,
+            country,
+            latitude,
+            longitude,
+        });
+
+        const lognote = `Admin '${req.user.username}' successfully updated facility '${name}' (ID: ${facility_id})`;
+        await logActivity(req, lognote, true, 'admin-facilities-update');
+
+        res.redirect(`/admin/facilities/update?success=1&facility_id=${facility_id}`);
+    } catch (error) {
+        console.error('Facility update failed:', error);
+        let errorMessage = 'An error occurred while updating the facility.';
+        if (error.name === 'SequelizeValidationError') {
+            errorMessage = error.errors.map(e => e.message).join(', ');
+        }
+        
+        const lognote = `Admin '${req.user.username}' failed to update facility '${name}': ${errorMessage}`;
+        await logActivity(req, lognote, false, 'admin-facilities-update');
+
+        const staff = await care_staff.findAll({ 
+            attributes: ['nr', 'job_function_title', 'pid'],
+            include: [{
+                model: care_person,
+                as: 'person',
+                attributes: ['name_last', 'name_first']
+            }],
+            order: [[{model: care_person, as: 'person'}, 'name_last', 'ASC']],
+        });
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        const mainFacilities = await care_facilities.findAll({
+            where: {
+                parent_id: { [Op.eq]: Sequelize.col('care_facilities.id') },
+                id: { [Op.ne]: facility_id },
+                type: 'Hospital'
+            },
+            order: [['name', 'ASC']],
+        });
+
+        res.status(500).render('facilities/updateFacility', {
+            title: 'Update Facility',
+            user: req.user,
+            facilities: allFacilities,
+            facility: facilityToUpdate,
+            staff,
+            mainFacilities,
+            errors: [errorMessage],
+            success: false,
+            activePage: 'admin-facilities-update',
+            csrfToken: req.csrfToken(),
+        });
+    }
+};
+// GET: Render the main facilities management form (with filtering options)
+exports.getFacilitiesManagement = async (req, res) => {
+    try {
+        const allFacilities = await care_facilities.findAll({ order: [['name', 'ASC']] });
+        res.render('facilities/listFacilities', {
+            title: 'Gérer les Etablissements',
+            user: req.user,
+            facilities: allFacilities,
+            activePage: 'admin-facilities-list',
+            csrfToken: req.csrfToken(),
+        });
+    } catch (error) {
+        console.error('Error fetching facilities for management page:', error);
+        res.status(500).send('Error loading page.');
+    }
+};
+
+// File: c:\Users\Public\Projects\care-db-project\controllers\authController.js
+// controllers/authController.js
+const { User, care_user_roles, care_staff, care_person, care_facilities } = require('../models');
+const bcrypt = require('bcrypt');
+const logActivity = require('../utils/activityLogger');
+const { validationResult } = require('express-validator');
+
+const activeUsers = require('../index').activeUsers; // Import the activeUsers Set
+
+// --- Login Logic ---
+exports.login = async (req, res) => {
+    const { username, password, localTime } = req.body;
+    const errors = validationResult(req);
+    let loginErrors = []; // Consolidate all errors into one array
+
+    // FIX #1: Pass the validation errors as an array, not a single string
+    if (!errors.isEmpty()) {
+        loginErrors = errors.array().map(e => e.msg);
+        return res.status(400).render('auth/login', {
+            errors: loginErrors, // Use the 'errors' variable as expected by your EJS file
+            username: username,
+            csrfToken: req.csrfToken(),
+        });
+    }
+
+    try {
+        const user = await User.findOne({
+            where: { username },
+            include: [
+                { model: care_user_roles, as: 'userRole' },
+                {
+                    model: care_staff,
+                    as: 'staff',
+                    include: [
+                        { model: care_person, as: 'person' },
+                        { model: care_facilities, as: 'facility' }
+                    ]
+                }
+            ],
+        });
+
+        const loginSuccess = user && await bcrypt.compare(password, user.password_hash);
+
+        if (!loginSuccess) {
+            loginErrors.push('Identifiants invalides');
+        } else {
+            if (user.userRole && user.userRole.role_name !== 'System Administrator') {
+                const serverTime = new Date();
+                const clientTime = new Date(localTime);
+                const timeDifferenceMs = Math.abs(serverTime.getTime() - clientTime.getTime());
+                const maxAllowedDiffMs = 3 * 60 * 1000;
+
+                // Time logic check
+                if (timeDifferenceMs > maxAllowedDiffMs) {
+                    loginErrors.push('Décalage horaire détecté. Veuillez synchroniser l\'heure de votre machine avec celle du serveur.');
+                }
+            }
+        }
+        
+        // This is the correct logic you already had
+        if (loginErrors.length > 0) {
+            await logActivity(req, `Échec de connexion pour l'utilisateur '${username}': ${loginErrors.join(' ')}`, false, '/auth/login', null);
+            return res.status(401).render('auth/login', {
+                title: 'Connexion',
+                user: null,
+                activePage: 'login',
+                errors: loginErrors, // Ensure 'errors' is used here
+                username,
+                csrfToken: req.csrfToken(),
+            });
+        }
+        
+        // ... (rest of the successful login code) ...
+        await User.update({ last_login: new Date() }, { where: { user_id: user.user_id } });
+
+        const userForSession = {
+            user_id: user.user_id,
+            username: user.username,
+            firstName: user.staff?.person?.name_first || '',
+            lastName: user.staff?.person?.name_last || '',
+            roleName: user.userRole?.role_name || '',
+            permissions: user.userRole?.permission ? JSON.parse(user.userRole.permission) : [],
+            facility: {
+                id: user.staff?.facility?.id || null,
+                name: user.staff?.facility?.name || 'Unknown Facility',
+            },
+            isAdmin: user.is_admin === 1,
+            isAppAdmin: user.userRole?.role_name === 'System Administrator'
+        };
+
+        const lognote = `Connexion réussie pour l'utilisateur '${username}'`;
+        await logActivity(req, lognote, true, '/auth/login', user.user_id, user.username);
+        
+        req.session.user = userForSession;
+        req.session.authenticated = true;
+        activeUsers.add(user.user_id);
+
+        res.redirect('/');
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        await logActivity(req, `Échec de connexion: ${error.message}`, false, '/auth/login', null);
+        // FIX #2: Pass the error message as an array here as well
+        res.status(500).render('auth/login', { 
+            title: 'Connexion',
+            user: null,
+            activePage: 'login',
+            errors: ['An unexpected error occurred.'], // Use 'errors' array
+            username: req.body.username || '',
+            csrfToken: req.csrfToken(), 
+        });
+    }
+};
+
+// --- Logout Logic ---
+exports.logout = (req, res) => {
+    // Log the logout activity
+    if (req.session.user) {
+        activeUsers.delete(req.session.user.user_id); // Remove the user from activeUsers set
+        const lognote = `Déconnexion réussie pour l'utilisateur '${req.session.user.username}'`;
+        logActivity(req, lognote, true, '/auth/logout', req.session.user.user_id, req.session.user.username);
+    }
+
+    // Destroy the session
+    req.session.destroy(err => {
+        if (err) {
+            console.error('Logout error:', err);
+            return res.status(500).send('Could not log out.');
+        }
+        // Redirect to the login page
+        res.clearCookie('connect.sid'); // Clears the session ID cookie
+        res.redirect('/auth/login');
+    });
+};
+
+/**
+ * Controller function for user registration (Admin only).
+ */
+exports.register = async (req, res) => {
+    const { username, password, role_id, person_id, facility_id, dept_nr } = req.body;
+    const createdBy = req.user.username; // Get the username of the logged-in admin
+    const createdId = req.user.user_id; // Get the user ID of the logged-in admin
+
+    // Start a transaction to ensure all operations succeed or fail together
+    const t = await User.sequelize.transaction();
+
+    try {
+        // 1. Get the facility code and count existing staff to generate a new staff number
+        const facility = await care_facilities.findByPk(facility_id, { transaction: t });
+        if (!facility) {
+            throw new Error('Facility not found.');
+        }
+
+        const staffCount = await care_staff.count({
+            where: { facility_id },
+            transaction: t
+        });
+        
+        // Generate the new staff number (e.g., 'HPN' + padded incremented count)
+        const nextStaffNumber = staffCount + 1;
+        const paddedStaffNumber = String(nextStaffNumber).padStart(3, '0');
+        const short_id = `${facility.code}${paddedStaffNumber}`;
+
+        // 2. Check for an existing staff record and create it if it doesn't exist
+        const [staffRecord, staffCreated] = await care_staff.findOrCreate({
+            where: { pid: person_id },
+            defaults: {
+                short_id: short_id,
+                job_type_nr: 0, // Default value
+                facility_id: facility_id,
+                dept_nr: dept_nr || null, // Allow null if not provided
+                status: 1, // '1' for active staff
+                job_function_title: 'Staff Member', // Default title
+            },
+            transaction: t
+        });
+        
+        // If the staff record already existed, ensure its fields are updated
+        if (!staffCreated) {
+            await staffRecord.update({
+                short_id: short_id,
+                facility_id: facility_id,
+                dept_nr: dept_nr || null,
+                status: 1,
+            }, { transaction: t });
+        }
+
+        // 3. Hash the password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // 4. Create the user record with all required fields
+        const newUser = await User.create({
+            username,
+            password_hash: hashedPassword,
+            role_id,
+            pid: person_id,
+            is_admin: role_id === 1 ? 1 : 0,
+            dept_nr: dept_nr,
+            staff_nr: staffRecord.nr, // Use the primary key from the care_staff table
+            facility_id: facility_id,
+            created_by: createdId, // Logged-in user's user_id
+        }, { transaction: t });
+
+        // Commit the transaction
+        await t.commit();
+
+        // Log the successful registration
+        await logActivity(req, `Admin '${createdBy}' created new user '${newUser.username}'`, true, 'authController.js');
+
+        res.redirect('/admin/users/create?success=1');
+    } catch (error) {
+        // If any operation fails, roll back the transaction
+        await t.rollback();
+        console.error('Error during user and staff creation:', error);
+
+        // Log the failure
+        await logActivity(req, `Admin '${createdBy}' failed to create user '${username}' due to error: ${error.message}`, false, 'authController.js');
+
+        // Render the registration form with the error message
+        res.status(500).send('Registration failed: ' + error.message);
+    }
+};
+
+/**
+ * Controller function to fetch user's facility and role based on username.
+ */
+exports.getUserFacilityAndRole = async (req, res) => {
+    const { username } = req.body;
+    try {
+        const user = await User.findOne({
+            where: { username },
+            include: [
+                { model: care_staff, as: 'staff', include: [{ model: care_facilities, as: 'facility' }] },
+                { model: care_user_roles, as: 'userRole' }
+            ],
+        });
+
+        if (!user) {
+            return res.json({ success: false, message: 'Utilisateur non trouvé.' });
+        }
+        
+        let facilityName;
+        let roleName = user.userRole?.role_name || 'Pas de rôle';
+
+        // Check for 'System Administrator' role first
+        if (roleName === 'System Administrator') {
+            facilityName = 'Accès à l\'ensemble du système';
+        } else if (user.staff?.facility) {
+            // Then check for a facility assigned to the staff member
+            facilityName = user.staff.facility.name;
+        } else {
+            // Fallback if no facility is found
+            facilityName = 'Non assigné';
+        }
+
+        res.json({
+            success: true,
+            facilityName: facilityName,
+            roleName: roleName
+        });
+    } catch (error) {
+        console.error('Sequelize Error in getUserFacilityAndRole:', error);
+        res.status(500).json({ success: false, message: 'Erreur du serveur' });
+    }
+};
+
+/**
+ * Controller function to get server time.
+ */
+exports.getServerTime = (req, res) => {
+    res.json({ serverTime: new Date() });
+};
+
+

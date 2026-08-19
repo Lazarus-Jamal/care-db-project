@@ -1,0 +1,480 @@
+
+<%- include("../partials/header", { title: t.patients.createTitle }) %>
+<%- include("../partials/navbar") %>
+
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .reg-card { max-width: 960px; margin: 0 auto; }
+  .section-title {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: #6c757d;
+    border-bottom: 1px solid #dee2e6; padding-bottom: 4px; margin-bottom: 8px;
+  }
+  .form-label  { font-size: 0.72rem; font-weight: 600; margin-bottom: 2px; color: #495057; }
+  .form-control, .form-select { font-size: 0.78rem; padding: 0.28rem 0.5rem; border-radius: 0.35rem; }
+  .form-check-label { font-size: 0.75rem; }
+  .code-sel  { max-width: 72px !important; font-size: 0.72rem; }
+  .req       { color: #dc3545; }
+  .photo-preview { width: 68px; height: 68px; object-fit: cover;
+    border-radius: 50%; border: 2px solid #dee2e6; display: none; }
+</style>
+
+<div class="container-fluid py-3">
+<div class="card shadow-sm reg-card">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+    <h6 class="mb-0"><i class="fas fa-user-plus me-2"></i><%= t.patients.createTitle %></h6>
+    <small><%= new Date().toLocaleDateString(locale === "fr" ? "fr-FR" : "en-GB") %></small>
+  </div>
+
+  <div class="card-body p-3">
+
+    <% if (errors && errors.length > 0) { %>
+      <div class="alert alert-danger py-2 mb-2" style="font-size:0.78rem;">
+        <% errors.forEach(function(e) { %><div><i class="fas fa-exclamation-circle me-1"></i><%= e %></div><% }); %>
+      </div>
+    <% } %>
+
+    <%/*
+      KEY FIX: The form action includes ?_csrf=TOKEN as a query parameter.
+      csurf checks req.query._csrf natively, so even though multer consumes
+      the multipart body before csurf can read it, the token is safe in the URL.
+    */%>
+    <form id="patientForm"
+          action="/patients/create?_csrf=<%= encodeURIComponent(csrfToken) %>"
+          method="POST"
+          enctype="multipart/form-data">
+
+      <%/* All hidden fields — populated by JS before submit */%>
+      <input type="hidden" name="name_last"        id="h_name_last">
+      <input type="hidden" name="name_first"       id="h_name_first">
+      <input type="hidden" name="name_maiden"      id="h_name_maiden">
+      <input type="hidden" name="date_birth"       id="h_date_birth">
+      <input type="hidden" name="sex"              id="h_sex">
+      <input type="hidden" name="blood_group"      id="h_blood_group">
+      <input type="hidden" name="rhesus"           id="h_rhesus">
+      <input type="hidden" name="civil_status"     id="h_civil_status">
+      <input type="hidden" name="citizenship"      id="h_citizenship">
+      <input type="hidden" name="nat_id_nr"        id="h_nat_id_nr">
+      <input type="hidden" name="profession"       id="h_profession">
+      <input type="hidden" name="religion"         id="h_religion">
+      <input type="hidden" name="ethnic_orig"      id="h_ethnic_orig">
+      <input type="hidden" name="email"            id="h_email">
+      <input type="hidden" name="addr_str"         id="h_addr_str">
+      <input type="hidden" name="addr_zip"         id="h_addr_zip">
+      <input type="hidden" name="phone_1_code"     id="h_phone_1_code">
+      <input type="hidden" name="cellphone_1_nr"   id="h_cellphone_1_nr">
+      <input type="hidden" name="phone_2_code"     id="h_phone_2_code">
+      <input type="hidden" name="cellphone_2_nr"   id="h_cellphone_2_nr">
+      <input type="hidden" name="contact_person"   id="h_contact_person">
+      <input type="hidden" name="contact_relation" id="h_contact_relation">
+      <input type="hidden" name="relative_phone"   id="h_relative_phone">
+      <%/* Photo lives inside the form so multipart includes it */%>
+      <input type="file" name="photo" id="photo" accept="image/jpeg,image/png,image/webp" style="display:none;">
+    </form>
+
+    <%/* ── Visual entry UI ── */%>
+    <div id="entryUI">
+
+      <%/* SECTION 1 — Identity */%>
+      <p class="section-title"><i class="fas fa-id-card me-1"></i>
+        <%= locale === "fr" ? "Identité du Patient" : "Patient Identity" %>
+      </p>
+      <div class="row g-2 mb-2">
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Nom" : "Last Name" %> <span class="req">*</span></label>
+          <input type="text" id="name_last" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Prénom(s)" : "First Name(s)" %> <span class="req">*</span></label>
+          <input type="text" id="name_first" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Nom de jeune fille" : "Maiden Name" %></label>
+          <input type="text" id="name_maiden" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Né(e) le" : "Date of Birth" %> <span class="req">*</span></label>
+          <input type="date" id="date_birth" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Nationalité" : "Nationality" %> <span class="req">*</span></label>
+          <select id="citizenship" class="form-select">
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <% countries.forEach(function(c) { %><option value="<%= c.name %>"><%= c.name %></option><% }); %>
+          </select>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Sexe" : "Sex" %></label>
+          <div class="d-flex gap-3 mt-1">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="sex_r" id="sexM" value="m" checked>
+              <label class="form-check-label" for="sexM"><%= locale === "fr" ? "Masc." : "Male" %></label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="sex_r" id="sexF" value="f">
+              <label class="form-check-label" for="sexF"><%= locale === "fr" ? "Fém." : "Female" %></label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Groupe Sanguin" : "Blood Group" %></label>
+          <div class="d-flex gap-1 flex-wrap mt-1">
+            <% ["A","B","AB","O"].forEach(function(bg) { %>
+              <div class="form-check form-check-inline me-1">
+                <input class="form-check-input" type="radio" name="bg_r"
+                  id="bg<%= bg %>" value="<%= bg %>" <%= bg === "A" ? "checked" : "" %>>
+                <label class="form-check-label" for="bg<%= bg %>"><%= bg %></label>
+              </div>
+            <% }); %>
+            <div class="form-check form-check-inline me-1 ms-1">
+              <input class="form-check-input" type="radio" name="rh_r" id="rhP" value="+" checked>
+              <label class="form-check-label" for="rhP">+</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="rh_r" id="rhN" value="-">
+              <label class="form-check-label" for="rhN">-</label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "État Civil" : "Civil Status" %></label>
+          <select id="civil_status" class="form-select">
+            <option value="single"><%= locale === "fr" ? "Célibataire" : "Single" %></option>
+            <option value="married"><%= locale === "fr" ? "Marié(e)" : "Married" %></option>
+            <option value="divorced"><%= locale === "fr" ? "Divorcé(e)" : "Divorced" %></option>
+            <option value="widowed"><%= locale === "fr" ? "Veuf / Veuve" : "Widowed" %></option>
+            <option value="separated"><%= locale === "fr" ? "Séparé(e)" : "Separated" %></option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "N° CNI" : "ID Number" %></label>
+          <input type="text" id="nat_id_nr" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label"><%= locale === "fr" ? "Profession" : "Profession" %></label>
+          <input type="text" id="profession" class="form-control">
+        </div>
+      </div>
+
+      <%/* SECTION 2 — Patient Contact */%>
+      <p class="section-title mt-2"><i class="fas fa-phone me-1"></i>
+        <%= locale === "fr" ? "Coordonnées" : "Contact Details" %>
+      </p>
+      <div class="row g-2 mb-2">
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Téléphone 1" : "Phone 1" %></label>
+          <input type="tel" id="cellphone_1_nr" class="form-control" maxlength="20"
+            placeholder="<%= locale === "fr" ? "ex: +237 6XXXXXXXX" : "e.g. +237 6XXXXXXXX" %>">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Téléphone 2" : "Phone 2" %></label>
+          <input type="tel" id="cellphone_2_nr" class="form-control" maxlength="20">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Adresse / Quartier" : "Address / Area" %></label>
+          <input type="text" id="addr_str" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Email</label>
+          <input type="email" id="email" class="form-control">
+        </div>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Religion" : "Religion" %></label>
+          <select id="religion" class="form-select">
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <option value="<%= locale === "fr" ? "Christianisme" : "Christianity" %>"><%= locale === "fr" ? "Christianisme" : "Christianity" %></option>
+            <option value="<%= locale === "fr" ? "Islam" : "Islam" %>"><%= locale === "fr" ? "Islam" : "Islam" %></option>
+            <option value="<%= locale === "fr" ? "Catholicisme" : "Catholicism" %>"><%= locale === "fr" ? "Catholicisme" : "Catholicism" %></option>
+            <option value="<%= locale === "fr" ? "Protestantisme" : "Protestantism" %>"><%= locale === "fr" ? "Protestantisme" : "Protestantism" %></option>
+            <option value="<%= locale === "fr" ? "Évangélisme" : "Evangelicalism" %>"><%= locale === "fr" ? "Évangélisme" : "Evangelicalism" %></option>
+            <option value="<%= locale === "fr" ? "Hindouisme" : "Hinduism" %>"><%= locale === "fr" ? "Hindouisme" : "Hinduism" %></option>
+            <option value="<%= locale === "fr" ? "Bouddhisme" : "Buddhism" %>"><%= locale === "fr" ? "Bouddhisme" : "Buddhism" %></option>
+            <option value="<%= locale === "fr" ? "Judaïsme" : "Judaism" %>"><%= locale === "fr" ? "Judaïsme" : "Judaism" %></option>
+            <option value="<%= locale === "fr" ? "Sikhisme" : "Sikhism" %>"><%= locale === "fr" ? "Sikhisme" : "Sikhism" %></option>
+            <option value="<%= locale === "fr" ? "Animisme / Tradition" : "Animism / Traditional" %>"><%= locale === "fr" ? "Animisme / Tradition" : "Animism / Traditional" %></option>
+            <option value="<%= locale === "fr" ? "Bahaïsme" : "Bahai Faith" %>"><%= locale === "fr" ? "Bahaïsme" : "Bahai Faith" %></option>
+            <option value="<%= locale === "fr" ? "Shintoïsme" : "Shinto" %>"><%= locale === "fr" ? "Shintoïsme" : "Shinto" %></option>
+            <option value="<%= locale === "fr" ? "Taoïsme" : "Taoism" %>"><%= locale === "fr" ? "Taoïsme" : "Taoism" %></option>
+            <option value="<%= locale === "fr" ? "Confucianisme" : "Confucianism" %>"><%= locale === "fr" ? "Confucianisme" : "Confucianism" %></option>
+            <option value="<%= locale === "fr" ? "Sans religion" : "No religion" %>"><%= locale === "fr" ? "Sans religion" : "No religion" %></option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Tribu / Origine ethnique" : "Tribe / Ethnic Origin" %></label>
+          <select id="ethnic_orig" class="form-select">
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <% if (typeof tribes !== "undefined") { tribes.forEach(function(tribe) { %>
+              <option value="<%= tribe.tribe_id %>"><%= tribe.tribe_name %></option>
+            <% }); } %>
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+          <div class="d-flex align-items-center gap-2">
+            <img id="photoPreview" src="#" alt="" class="photo-preview">
+            <label class="btn btn-sm btn-outline-secondary mb-0" for="photo" style="font-size:0.75rem;">
+              <i class="fas fa-camera me-1"></i><%= locale === "fr" ? "Photo" : "Photo" %>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <%/* SECTION 3 — Emergency Contact */%>
+      <p class="section-title mt-2"><i class="fas fa-ambulance me-1"></i>
+        <%= locale === "fr" ? "Contact d\"urgence" : "Emergency Contact" %>
+      </p>
+      <div class="row g-2 mb-3">
+        <div class="col-md-4">
+          <label class="form-label"><%= locale === "fr" ? "Nom complet" : "Full Name" %></label>
+          <input type="text" id="contact_person" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Lien de parenté" : "Relation" %></label>
+          <select id="contact_relation" class="form-select">
+            <option value=""><%= locale === "fr" ? "Sélectionner..." : "Select..." %></option>
+            <option value="<%= locale === "fr" ? "Conjoint(e)" : "Spouse" %>"><%= locale === "fr" ? "Conjoint(e)" : "Spouse" %></option>
+            <option value="<%= locale === "fr" ? "Père" : "Father" %>"><%= locale === "fr" ? "Père" : "Father" %></option>
+            <option value="<%= locale === "fr" ? "Mère" : "Mother" %>"><%= locale === "fr" ? "Mère" : "Mother" %></option>
+            <option value="<%= locale === "fr" ? "Fils" : "Son" %>"><%= locale === "fr" ? "Fils" : "Son" %></option>
+            <option value="<%= locale === "fr" ? "Fille" : "Daughter" %>"><%= locale === "fr" ? "Fille" : "Daughter" %></option>
+            <option value="<%= locale === "fr" ? "Frère" : "Brother" %>"><%= locale === "fr" ? "Frère" : "Brother" %></option>
+            <option value="<%= locale === "fr" ? "Sœur" : "Sister" %>"><%= locale === "fr" ? "Sœur" : "Sister" %></option>
+            <option value="<%= locale === "fr" ? "Oncle" : "Uncle" %>"><%= locale === "fr" ? "Oncle" : "Uncle" %></option>
+            <option value="<%= locale === "fr" ? "Tante" : "Aunt" %>"><%= locale === "fr" ? "Tante" : "Aunt" %></option>
+            <option value="<%= locale === "fr" ? "Cousin(e)" : "Cousin" %>"><%= locale === "fr" ? "Cousin(e)" : "Cousin" %></option>
+            <option value="<%= locale === "fr" ? "Grand-père" : "Grandfather" %>"><%= locale === "fr" ? "Grand-père" : "Grandfather" %></option>
+            <option value="<%= locale === "fr" ? "Grand-mère" : "Grandmother" %>"><%= locale === "fr" ? "Grand-mère" : "Grandmother" %></option>
+            <option value="<%= locale === "fr" ? "Ami(e)" : "Friend" %>"><%= locale === "fr" ? "Ami(e)" : "Friend" %></option>
+            <option value="<%= locale === "fr" ? "Collègue" : "Colleague" %>"><%= locale === "fr" ? "Collègue" : "Colleague" %></option>
+            <option value="<%= locale === "fr" ? "Tuteur / Tutrice" : "Guardian" %>"><%= locale === "fr" ? "Tuteur / Tutrice" : "Guardian" %></option>
+            <option value="<%= locale === "fr" ? "Autre" : "Other" %>"><%= locale === "fr" ? "Autre" : "Other" %></option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label"><%= locale === "fr" ? "Téléphone" : "Phone" %></label>
+          <input type="tel" id="relative_phone" class="form-control" maxlength="20">
+        </div>
+      </div>
+
+      <%/* Buttons */%>
+      <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+        <a href="/patients/list" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-times me-1"></i><%= t.common.cancel %>
+        </a>
+        <button type="button" id="btnReview" class="btn btn-sm btn-primary">
+          <i class="fas fa-eye me-1"></i>
+          <%= locale === "fr" ? "Vérifier & Inscrire" : "Review & Register" %>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<%/* ── Confirmation Modal ── */%>
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white py-2">
+        <h6 class="modal-title">
+          <i class="fas fa-clipboard-check me-2"></i>
+          <%= locale === "fr" ? "Vérification des informations" : "Information Review" %>
+        </h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3" style="font-size:0.82rem;">
+        <div id="duplicateWarningBox" style="display:none;" class="alert alert-warning py-2 px-3 mb-3"></div>
+        <div id="confirmBody"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-edit me-1"></i>
+          <%= locale === "fr" ? "Corriger" : "Edit" %>
+        </button>
+        <button type="button" id="btnConfirm" class="btn btn-sm btn-success">
+          <i class="fas fa-check me-1"></i>
+          <%= locale === "fr" ? "Confirmer l\"inscription" : "Confirm Registration" %>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Photo preview
+document.getElementById('photo').addEventListener('change', function() {
+  if (this.files[0]) {
+    var preview = document.getElementById('photoPreview');
+    preview.src = URL.createObjectURL(this.files[0]);
+    preview.style.display = 'block';
+  }
+});
+
+// Review button — validate then show modal
+document.getElementById('btnReview').addEventListener('click', function() {
+  var nameL = document.getElementById('name_last').value.trim();
+  var nameF = document.getElementById('name_first').value.trim();
+  var dob   = document.getElementById('date_birth').value;
+  var nat   = document.getElementById('citizenship').value;
+  var isFr  = '<%= locale %>' === 'fr';
+
+  var missing = [];
+  if (!nameL) missing.push(isFr ? 'Nom' : 'Last name');
+  if (!nameF) missing.push(isFr ? 'Prénom' : 'First name');
+  if (!dob)   missing.push(isFr ? 'Date de naissance' : 'Date of birth');
+  if (!nat)   missing.push(isFr ? 'Nationalité' : 'Nationality');
+
+  if (missing.length) {
+    alert((isFr ? 'Champs obligatoires : ' : 'Required fields: ') + missing.join(', '));
+    return;
+  }
+
+  var sex    = document.querySelector('input[name="sex_r"]:checked').value;
+  var bg     = document.querySelector('input[name="bg_r"]:checked').value;
+  var rh     = document.querySelector('input[name="rh_r"]:checked').value;
+  var civil  = document.getElementById('civil_status');
+  var rel    = document.getElementById('contact_relation');
+  var dobFmt = new Date(dob + 'T00:00:00').toLocaleDateString(isFr ? 'fr-FR' : 'en-GB');
+
+  var rows = [
+    [isFr ? 'Nom'             : 'Last Name',      nameL],
+    [isFr ? 'Prénom(s)'       : 'First Name',     nameF],
+    [isFr ? 'Nom jeune fille' : 'Maiden Name',    document.getElementById('name_maiden').value || '—'],
+    [isFr ? 'Date naissance'  : 'Date of Birth',  dobFmt],
+    [isFr ? 'Sexe'            : 'Sex',            sex === 'm' ? (isFr ? 'Masculin' : 'Male') : (isFr ? 'Féminin' : 'Female')],
+    [isFr ? 'Nationalité'     : 'Nationality',    nat],
+    [isFr ? 'Groupe sanguin'  : 'Blood Group',    bg + rh],
+    [isFr ? 'État civil'      : 'Civil Status',   civil.options[civil.selectedIndex].text],
+    [isFr ? 'Profession'      : 'Profession',     document.getElementById('profession').value || '—'],
+    [isFr ? 'Religion'        : 'Religion',       document.getElementById('religion').value || '—'],
+    [isFr ? 'Tribu / Origine'  : 'Tribe / Ethnic Origin',
+      (function() {
+        var el = document.getElementById('ethnic_orig');
+        return el && el.selectedIndex > 0 ? el.options[el.selectedIndex].text : '—';
+      }())
+    ],
+    [isFr ? 'Téléphone 1'     : 'Phone 1',        document.getElementById('cellphone_1_nr').value || '—'],
+    [isFr ? 'Téléphone 2'     : 'Phone 2',        document.getElementById('cellphone_2_nr').value || '—'],
+    [isFr ? 'Email'           : 'Email',          document.getElementById('email').value || '—'],
+    [isFr ? 'Adresse'         : 'Address',        document.getElementById('addr_str').value || '—'],
+    [isFr ? 'Contact urgence' : 'Emergency',
+      document.getElementById('contact_person').value
+        ? document.getElementById('contact_person').value
+          + (rel.value ? ' (' + rel.options[rel.selectedIndex].text + ')' : '')
+          + (document.getElementById('relative_phone').value ? ' — ' + document.getElementById('relative_phone').value : '')
+        : '—'
+    ],
+  ];
+
+  var html = '<div class="row g-0">';
+  rows.forEach(function(pair) {
+    html += '<div class="col-md-6 d-flex border-bottom py-1 px-2">'
+      + '<span class="text-muted me-2" style="min-width:110px;font-size:0.72rem;">' + pair[0] + '</span>'
+      + '<strong style="font-size:0.8rem;">' + pair[1] + '</strong></div>';
+  });
+  html += '</div>';
+
+  document.getElementById('confirmBody').innerHTML = html;
+
+  // Multi-Facility Phase 1 (§2.6) — advisory duplicate-patient check. Never
+  // blocks: this only ever adds a warning box above the review summary
+  // already built above. Reset first so a previous check's result from an
+  // earlier "Edit" round-trip doesn't linger.
+  var dupBox = document.getElementById('duplicateWarningBox');
+  dupBox.style.display = 'none';
+  dupBox.innerHTML = '';
+
+  var csrfToken = '<%= csrfToken %>';
+  fetch(window.location.origin + '/patients/check-duplicate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-csrf-token': csrfToken,
+    },
+    body: JSON.stringify({ name_last: nameL, name_first: nameF, date_birth: dob }),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.matches || !data.matches.length) return;
+      var label = isFr
+        ? 'Ce patient pourrait déjà être enregistré — vouliez-vous dire :'
+        : 'This patient might already be registered — did you mean:';
+      var list = data.matches.map(function(m) {
+        var sexLabel = m.sex === 'm' ? (isFr ? 'M' : 'M') : (isFr ? 'F' : 'F');
+        return '<li><a href="/patients/' + m.pid + '/record" target="_blank">'
+          + m.name_first + ' ' + m.name_last + '</a> ('+ sexLabel + ', '
+          + (isFr ? 'dossier ' : 'file ') + m.hospital_file_nr + ')</li>';
+      }).join('');
+      dupBox.innerHTML = '<i class="fas fa-triangle-exclamation me-1"></i>' + label
+        + '<ul class="mb-0 mt-1">' + list + '</ul>'
+        + '<div class="mt-1" style="font-size:0.75rem;">'
+        + (isFr
+            ? 'Vous pouvez tout de même confirmer l\'inscription si c\'est une personne différente.'
+            : 'You can still confirm registration below if this is a different person.')
+        + '</div>';
+      dupBox.style.display = 'block';
+    })
+    .catch(function() { /* advisory only — a failed check should never block registration */ });
+
+  new bootstrap.Modal(document.getElementById('confirmModal')).show();
+});
+
+// Confirm — copy all visible values into hidden inputs, then submit form
+document.getElementById('btnConfirm').addEventListener('click', function() {
+  var map = {
+    'h_name_last':        'name_last',
+    'h_name_first':       'name_first',
+    'h_name_maiden':      'name_maiden',
+    'h_date_birth':       'date_birth',
+    'h_nat_id_nr':        'nat_id_nr',
+    'h_profession':       'profession',
+    'h_religion':         'religion',
+    'h_ethnic_orig':      'ethnic_orig',
+    'h_email':            'email',
+    'h_addr_str':         'addr_str',
+    'h_addr_zip':         'addr_zip',
+    'h_cellphone_1_nr':   'cellphone_1_nr',
+    'h_cellphone_2_nr':   'cellphone_2_nr',
+    'h_contact_person':   'contact_person',
+    'h_relative_phone':   'relative_phone',
+    'h_citizenship':      'citizenship'
+  };
+  Object.keys(map).forEach(function(hid) {
+    var src = document.getElementById(map[hid]);
+    if (src) document.getElementById(hid).value = src.value;
+  });
+
+  // Select elements
+  var civilEl = document.getElementById('civil_status');
+  var relEl   = document.getElementById('contact_relation');
+  document.getElementById('h_civil_status').value     = civilEl ? civilEl.value : '';
+  document.getElementById('h_contact_relation').value = relEl   ? relEl.value   : '';
+
+  // Radio buttons
+  var sexChecked = document.querySelector('input[name="sex_r"]:checked');
+  var bgChecked  = document.querySelector('input[name="bg_r"]:checked');
+  var rhChecked  = document.querySelector('input[name="rh_r"]:checked');
+  if (sexChecked) document.getElementById('h_sex').value        = sexChecked.value;
+  if (bgChecked)  document.getElementById('h_blood_group').value = bgChecked.value;
+  if (rhChecked)  document.getElementById('h_rhesus').value      = rhChecked.value;
+
+  // No phone codes — phone numbers include country code typed directly
+  document.getElementById('h_phone_1_code').value = '';
+  document.getElementById('h_phone_2_code').value = '';
+
+  document.getElementById('patientForm').submit();
+});
+</script>
+
+<%- include("../partials/footer") %>
+
+
+
+
+
+

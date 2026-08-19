@@ -1,0 +1,144 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "warehouse", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .table-xs td,.table-xs th { padding:4px 8px; font-size:.78rem; }
+  .btn-xs { padding:2px 7px; font-size:.70rem; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .stat-box { background:#fff; border-radius:.5rem; border:1px solid #dee2e6;
+              padding:14px 16px; text-align:center; }
+  .stat-val  { font-size:1.5rem; font-weight:800; line-height:1; }
+  .stat-lbl  { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; font-weight:600; margin-top:4px; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+</style>
+<div class="container-fluid py-3 px-4 content-wrapper">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="fas fa-coins me-2" style="color:#0d6efd;"></i>
+        <%= locale==="fr"?"Valorisation du stock":"Stock Valuation" %>
+      </h5>
+      <small class="text-muted"><%= locale==="fr"?"Genere le":"Generated" %> <%= new Date().toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></small>
+    </div>
+    <a href="/warehouse/reports" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i><%= locale==="fr"?"Rapports":"Reports" %>
+    </a>
+  </div>
+
+  <%/* Filters */%>
+  <div class="card shadow-sm mb-3"><div class="card-body py-2 px-3">
+    <form method="GET" action="/warehouse/reports/valuation" class="d-flex gap-2 flex-wrap align-items-end">
+      <div><label class="lbl"><%= locale==="fr"?"Categorie":"Category" %></label>
+        <select name="category_id" class="form-select form-select-sm">
+          <option value=""><%= locale==="fr"?"Toutes":"All" %></option>
+          <% categories.forEach(function(c){ %>
+            <option value="<%= c.category_id %>" <%= catId==c.category_id?"selected":"" %>><%= c.name %></option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="form-check mt-4">
+        <input class="form-check-input" type="checkbox" name="low_stock" value="1" id="ls" <%= lowOnly?"checked":"" %>>
+        <label class="form-check-label" for="ls" style="font-size:.80rem;"><%= locale==="fr"?"Stock bas seulement":"Low stock only" %></label>
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter"></i></button>
+      <a href="/warehouse/reports/valuation?print=1<%= catId?"&category_id="+catId:"" %><%= lowOnly?"&low_stock=1":"" %>"
+         target="_blank" class="btn btn-sm btn-outline-primary ms-auto">
+        <i class="fas fa-print me-1"></i><%= locale==="fr"?"Imprimer":"Print" %>
+      </a>
+    </form>
+  </div></div>
+
+  <%/* Summary by category */%>
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="stat-box shadow-sm">
+        <div class="stat-val text-primary"><%= rows.length %></div>
+        <div class="stat-lbl"><%= locale==="fr"?"Produits":"Products" %></div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="stat-box shadow-sm">
+        <div class="stat-val text-success" style="font-size:1.2rem;"><%= fmtFCFA(totalValue) %></div>
+        <div class="stat-lbl"><%= locale==="fr"?"Valeur totale":"Total Value" %></div>
+      </div>
+    </div>
+    <div class="col-md-5">
+      <div class="card shadow-sm h-100"><div class="card-body py-2 px-3">
+        <div class="lbl mb-1"><%= locale==="fr"?"Par categorie":"By category" %></div>
+        <% byCat.slice(0,5).forEach(function(c){ %>
+          <div class="d-flex justify-content-between" style="font-size:.76rem;">
+            <span class="text-muted"><%= c.name %></span>
+            <span class="fw-bold"><%= fmtFCFA(c.value) %> FCFA</span>
+          </div>
+        <% }); %>
+      </div></div>
+    </div>
+  </div>
+
+  <%/* Table */%>
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-xs table-hover align-middle mb-0">
+          <thead class="table-dark"><tr>
+            <th><%= locale==="fr"?"Produit":"Product" %></th>
+            <th><%= locale==="fr"?"Code":"Code" %></th>
+            <th><%= locale==="fr"?"Categorie":"Category" %></th>
+            <th><%= locale==="fr"?"Unite":"Unit" %></th>
+            <th class="text-center"><%= locale==="fr"?"Stock actuel":"Current Stock" %></th>
+            <th class="text-end"><%= locale==="fr"?"Dernier px unit.":"Last Unit Price" %></th>
+            <th class="text-end"><%= locale==="fr"?"Valeur totale":"Total Value" %></th>
+          </tr></thead>
+          <tbody>
+            <% if (!rows || rows.length===0) { %>
+              <tr><td colspan="7" class="text-center text-muted py-4"><%= locale==="fr"?"Aucun produit.":"No products." %></td></tr>
+            <% } else { rows.forEach(function(r){ %>
+              <tr class="<%= r.current_stock===0?"opacity-50":"" %>">
+                <td class="fw-bold" style="font-size:.78rem;"><%= r.name %></td>
+                <td><code style="font-size:.70rem;"><%= r.item_code %></code></td>
+                <td class="text-muted"><%= r.categoryName %></td>
+                <td class="text-muted"><%= r.unit_of_measure %></td>
+                <td class="text-center">
+                  <% if (r.reorder_level > 0 && r.current_stock <= r.reorder_level) { %>
+                    <span class="badge bg-danger" style="font-size:.62rem;"><%= r.current_stock %></span>
+                  <% } else { %>
+                    <%= r.current_stock %>
+                  <% } %>
+                </td>
+                <td class="text-end text-muted"><%= r.lastPrice > 0 ? fmtFCFA(r.lastPrice)+" FCFA" : "—" %></td>
+                <td class="text-end fw-bold" style="color:#0a3622;"><%= fmtFCFA(r.totalValue) %> FCFA</td>
+              </tr>
+            <% }); } %>
+          </tbody>
+          <tfoot class="table-light">
+            <tr>
+              <td colspan="6" class="fw-bold text-end"><%= locale==="fr"?"TOTAL":"TOTAL" %></td>
+              <td class="fw-bold text-end" style="color:#0a3622;font-size:.9rem;"><%= fmtFCFA(totalValue) %> FCFA</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

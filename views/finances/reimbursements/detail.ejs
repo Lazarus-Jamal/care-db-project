@@ -1,0 +1,470 @@
+<%- include("../../partials/header", { title: title }) %>
+<%- include("../../partials/navbar", { activePage: "finances", user: user }) %>
+<style>
+  .content-wrapper { background-color: #f0f2f5; }
+  .card { background:#fff !important; }
+  .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6c757d; }
+  .pipeline-wrap { display:flex; align-items:center; }
+  .pip-step { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:72px; }
+  .pip-dot  { width:34px; height:34px; border-radius:50%; display:flex; align-items:center;
+              justify-content:center; font-size:.85rem; font-weight:700; }
+  .pip-done { background:#198754; color:#fff; }
+  .pip-curr { background:#0d6efd; color:#fff; }
+  .pip-wait { background:#dee2e6; color:#6c757d; }
+  .pip-fail { background:#dc3545; color:#fff; }
+  .pip-line { flex:1; height:3px; margin:0 2px; margin-bottom:18px; }
+  .pip-line-done { background:#198754; }
+  .pip-line-wait { background:#dee2e6; }
+  .pip-label { font-size:.64rem; font-weight:600; text-align:center; line-height:1.2; }
+  .receipt-thumb { width:90px; height:90px; object-fit:cover; border-radius:.4rem;
+                   border:1px solid #dee2e6; cursor:pointer; transition:transform .15s; }
+  .receipt-thumb:hover { transform:scale(1.05); }
+  .action-card { border:1px solid #dee2e6; border-radius:.5rem; padding:14px; margin-top:12px; }
+  .info-row { display:flex; justify-content:space-between; align-items:baseline;
+              padding:5px 0; border-bottom:1px solid #f5f5f5; font-size:.82rem; }
+  .info-row:last-child { border-bottom:none; }
+</style>
+
+<div class="fin-page"><div class="container-fluid px-3 pt-2">
+
+  <nav style="font-size:.78rem;" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="/finances/reimbursements"><%= locale==="fr"?"Remboursements":"Reimbursements" %></a></li>
+      <li class="breadcrumb-item active fw-bold"><%= reimb.request_number %></li>
+    </ol>
+  </nav>
+
+  <% if (success) { %>
+    <div class="alert alert-success py-2 mb-3 alert-dismissible" style="font-size:.82rem;">
+      <i class="fas fa-check me-2"></i>
+      <%= success==="created" ? (locale==="fr"?"Demande creee.":"Request created.") :
+          success==="submitted" ? (locale==="fr"?"Soumise au directeur.":"Submitted to director.") :
+          success==="approved" ? (locale==="fr"?"Approuvee par le directeur.":"Approved by director.") :
+          success==="paid" ? (locale==="fr"?"Paiement enregistre.":"Payment recorded.") :
+          (locale==="fr"?"Operation realisee.":"Done.") %>
+      <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+    </div>
+  <% } %>
+
+  <div class="row g-3">
+
+    <%/* ── LEFT: Info + Pipeline ── */%>
+    <div class="col-lg-4">
+
+      <%/* Pipeline */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+          <i class="fas fa-stream me-2 text-primary"></i><%= locale==="fr"?"Progression":"Progress" %>
+        </div>
+        <div class="card-body py-3 px-2">
+          <%
+            var st = reimb.status;
+            var pipSteps = [
+              { key:"pending",          icon:"fas fa-edit",         label:locale==="fr"?"Brouillon":"Draft" },
+              { key:"pending_director", icon:"fas fa-user-tie",     label:locale==="fr"?"Dir.":"Director" },
+              { key:"approved_director",icon:"fas fa-check-double", label:locale==="fr"?"Approuve":"Approved" },
+              { key:"paid",             icon:"fas fa-money-bill",   label:locale==="fr"?"Paye":"Paid" },
+            ];
+            var order = ["pending","pending_director","approved_director","paid"];
+            var currIdx = order.indexOf(st);
+            var isRejected  = st === "rejected";
+            var isCancelled = st === "cancelled";
+          %>
+          <div class="pipeline-wrap">
+            <% pipSteps.forEach(function(step, idx) { %>
+              <%
+                var state = "pip-wait";
+                if (isRejected || isCancelled) {
+                  state = idx === 0 ? "pip-fail" : "pip-wait";
+                } else if (currIdx > idx) {
+                  state = "pip-done";
+                } else if (currIdx === idx) {
+                  state = "pip-curr";
+                }
+                var lineState = (currIdx > idx) ? "pip-line-done" : "pip-line-wait";
+              %>
+              <div class="pip-step">
+                <div class="pip-dot <%= state %>">
+                  <% if (state==="pip-done") { %><i class="fas fa-check"></i>
+                  <% } else if (state==="pip-fail") { %><i class="fas fa-times"></i>
+                  <% } else { %><i class="<%= step.icon %>"></i><% } %>
+                </div>
+                <div class="pip-label" style="color:<%= state==="pip-done"?"#198754":state==="pip-curr"?"#0d6efd":state==="pip-fail"?"#dc3545":"#adb5bd" %>">
+                  <%= step.label %>
+                </div>
+              </div>
+              <% if (idx < pipSteps.length-1) { %>
+                <div class="pip-line <%= lineState %>"></div>
+              <% } %>
+            <% }); %>
+          </div>
+          <% if (isRejected) { %>
+            <div class="mt-2 text-center">
+              <span class="badge bg-danger" style="font-size:.70rem;">
+                <i class="fas fa-times-circle me-1"></i><%= locale==="fr"?"Demande rejetee":"Request Rejected" %>
+              </span>
+            </div>
+          <% } else if (isCancelled) { %>
+            <div class="mt-2 text-center">
+              <span class="badge bg-secondary" style="font-size:.70rem;">
+                <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Annulee":"Cancelled" %>
+              </span>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <%/* Request info */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold" style="font-size:.85rem;">
+          <i class="fas fa-file-invoice-dollar me-2 text-success"></i>
+          <%= locale==="fr"?"Details":"Details" %>
+        </div>
+        <div class="card-body py-2 px-3">
+          <div class="info-row">
+            <span class="text-muted"><%= locale==="fr"?"N° demande":"Request No." %></span>
+            <span class="fw-bold"><%= reimb.request_number %></span>
+          </div>
+          <div class="info-row">
+            <span class="text-muted"><%= locale==="fr"?"Montant":"Amount" %></span>
+            <span class="fw-bold" style="color:#0a3622;font-size:.9rem;"><%= fmtFCFA(reimb.amount) %></span>
+          </div>
+          <% if (reimb.po) { %>
+            <div class="info-row">
+              <span class="text-muted">PO</span>
+              <a href="/warehouse/purchase-orders/<%= reimb.po_id %>" class="fw-bold text-decoration-none">
+                <%= reimb.po.po_number %>
+              </a>
+            </div>
+            <% if (reimb.po.supplier) { %>
+              <div class="info-row">
+                <span class="text-muted"><%= locale==="fr"?"Fournisseur":"Supplier" %></span>
+                <span><%= reimb.po.supplier.name %></span>
+              </div>
+            <% } %>
+          <% } else if (reimb.purchase_description) { %>
+            <div class="info-row flex-column align-items-start gap-1">
+              <span class="text-muted"><%= locale==="fr"?"Description achat":"Purchase Desc." %></span>
+              <span style="font-size:.78rem;"><%= reimb.purchase_description %></span>
+            </div>
+          <% } %>
+          <div class="info-row">
+            <span class="text-muted"><%= locale==="fr"?"Demandeur":"Requested by" %></span>
+            <span><%= reimb.created_by %></span>
+          </div>
+          <div class="info-row">
+            <span class="text-muted"><%= locale==="fr"?"Date":"Date" %></span>
+            <span style="font-size:.76rem;">
+              <%= new Date(reimb.create_time).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+            </span>
+          </div>
+          <% if (reimb.reason) { %>
+            <div class="info-row flex-column align-items-start gap-1">
+              <span class="text-muted"><%= locale==="fr"?"Motif":"Reason" %></span>
+              <span style="font-size:.78rem;"><%= reimb.reason %></span>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <%/* Director approval info */%>
+      <% if (reimb.director_approved_by) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #198754;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-1"><i class="fas fa-user-tie me-1 text-success"></i><%= locale==="fr"?"Approbation Directeur":"Director Approval" %></div>
+            <div class="info-row">
+              <span class="text-muted"><%= locale==="fr"?"Par":"By" %></span>
+              <span><%= reimb.director_approved_by %></span>
+            </div>
+            <div class="info-row">
+              <span class="text-muted"><%= locale==="fr"?"Date":"Date" %></span>
+              <span style="font-size:.76rem;">
+                <%= new Date(reimb.director_approved_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+              </span>
+            </div>
+            <% if (reimb.director_notes) { %>
+              <div class="mt-1 text-muted" style="font-size:.76rem;"><%= reimb.director_notes %></div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+      <%/* Payment info */%>
+      <% if (reimb.paid_at) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #6f42c1;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-1"><i class="fas fa-money-bill me-1" style="color:#6f42c1;"></i><%= locale==="fr"?"Paiement":"Payment" %></div>
+            <div class="info-row">
+              <span class="text-muted"><%= locale==="fr"?"Methode":"Method" %></span>
+              <span class="fw-bold">
+                <%
+                  var pmLabel = {
+                    bank_transfer: locale==="fr"?"Virement":"Bank Transfer",
+                    cheque: locale==="fr"?"Cheque":"Cheque",
+                    cash:   locale==="fr"?"Especes":"Cash",
+                    mobile_money: "Mobile Money"
+                  };
+                %>
+                <%= pmLabel[reimb.payment_method] || reimb.payment_method %>
+              </span>
+            </div>
+            <% if (reimb.payment_reference) { %>
+              <div class="info-row">
+                <span class="text-muted"><%= locale==="fr"?"Reference":"Reference" %></span>
+                <span><%= reimb.payment_reference %></span>
+              </div>
+            <% } %>
+            <div class="info-row">
+              <span class="text-muted"><%= locale==="fr"?"Date paiement":"Paid on" %></span>
+              <span style="font-size:.76rem;">
+                <%= new Date(reimb.paid_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="text-muted"><%= locale==="fr"?"Enregistre par":"By" %></span>
+              <span><%= reimb.paid_by %></span>
+            </div>
+          </div>
+        </div>
+      <% } %>
+
+      <%/* Rejection info */%>
+      <% if (reimb.status === "rejected" && reimb.rejected_by) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #dc3545;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-1 text-danger"><i class="fas fa-times-circle me-1"></i><%= locale==="fr"?"Motif de rejet":"Rejection" %></div>
+            <div class="info-row">
+              <span class="text-muted"><%= locale==="fr"?"Rejete par":"By" %></span>
+              <span><%= reimb.rejected_by %></span>
+            </div>
+            <div class="info-row">
+              <span class="text-muted"><%= locale==="fr"?"Date":"Date" %></span>
+              <span style="font-size:.76rem;">
+                <%= new Date(reimb.rejected_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+              </span>
+            </div>
+            <% if (reimb.rejection_reason) { %>
+              <div class="mt-1" style="font-size:.78rem;color:#842029;"><%= reimb.rejection_reason %></div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+    </div>
+
+    <%/* ── RIGHT: Actions + Receipts ── */%>
+    <div class="col-lg-8">
+
+      <%/* ACTION CARDS — only shown when relevant */%>
+
+      <%/* Submit to Director — shown when pending */%>
+      <% if (reimb.status === "pending" &&
+             typeof hasPermission !== "undefined" &&
+             hasAnyPermission(["Finance.Create.Reimbursement","Admin.FullAccess"])) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #0d6efd;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2"><i class="fas fa-paper-plane me-1 text-primary"></i><%= locale==="fr"?"Soumettre au Directeur":"Submit to Director" %></div>
+            <p style="font-size:.80rem;color:#6c757d;">
+              <%= locale==="fr"
+                ? "Soumettez cette demande pour approbation du Directeur avant traitement par les Finances."
+                : "Submit this request for Director approval before Finance processes payment." %>
+            </p>
+            <button class="btn btn-sm btn-primary" onclick="doAction('submit','','')">
+              <i class="fas fa-paper-plane me-1"></i><%= locale==="fr"?"Soumettre":"Submit" %>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary ms-2" onclick="doAction('cancel','','')">
+              <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Annuler la demande":"Cancel Request" %>
+            </button>
+          </div>
+        </div>
+      <% } %>
+
+      <%/* Director approve/reject — shown when pending_director */%>
+      <% if (reimb.status === "pending_director" &&
+             typeof hasPermission !== "undefined" &&
+             hasAnyPermission(["Finance.Approve.Director","Admin.FullAccess"])) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #ffc107;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2"><i class="fas fa-user-tie me-1 text-warning"></i><%= locale==="fr"?"Decision du Directeur":"Director Decision" %></div>
+            <div class="mb-2">
+              <label class="lbl"><%= locale==="fr"?"Notes (optionnel)":"Notes (optional)" %></label>
+              <textarea id="dir_notes" class="form-control form-control-sm" rows="2" maxlength="500"
+                placeholder="<%= locale==="fr"?"Remarques du Directeur...":"Director comments..." %>"></textarea>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-success" onclick="doAction('approve',document.getElementById('dir_notes').value,'')">
+                <i class="fas fa-check me-1"></i><%= locale==="fr"?"Approuver":"Approve" %>
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="promptReject()">
+                <i class="fas fa-times me-1"></i><%= locale==="fr"?"Rejeter":"Reject" %>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="doAction('cancel','','')">
+                <i class="fas fa-ban me-1"></i><%= locale==="fr"?"Annuler":"Cancel" %>
+              </button>
+            </div>
+          </div>
+        </div>
+      <% } %>
+
+      <%/* Finance pay — shown when approved_director */%>
+      <% if (reimb.status === "approved_director" &&
+             typeof hasPermission !== "undefined" &&
+             hasAnyPermission(["Finance.Process.Reimbursement","Admin.FullAccess"])) { %>
+        <div class="card shadow-sm mb-3" style="border-left:4px solid #198754;">
+          <div class="card-body py-2 px-3">
+            <div class="lbl mb-2"><i class="fas fa-money-bill me-1 text-success"></i><%= locale==="fr"?"Enregistrer le paiement":"Record Payment" %></div>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-5">
+                <label class="lbl"><%= locale==="fr"?"Mode de paiement":"Payment Method" %> <span style="color:#dc3545;">*</span></label>
+                <select id="pay_method" class="form-select form-select-sm">
+                  <option value="">-- <%= locale==="fr"?"Choisir":"Select" %> --</option>
+                  <option value="bank_transfer"><%= locale==="fr"?"Virement bancaire":"Bank Transfer" %></option>
+                  <option value="cheque"><%= locale==="fr"?"Cheque":"Cheque" %></option>
+                  <option value="cash"><%= locale==="fr"?"Especes":"Cash" %></option>
+                  <option value="mobile_money">Mobile Money</option>
+                </select>
+              </div>
+              <div class="col-sm-7">
+                <label class="lbl"><%= locale==="fr"?"Reference (No. cheque, virement...)":"Reference (cheque no., transfer ref...)" %></label>
+                <input type="text" id="pay_ref" class="form-control form-control-sm"
+                  placeholder="<%= locale==="fr"?"Optionnel":"Optional" %>" maxlength="100">
+              </div>
+              <div class="col-12">
+                <label class="lbl">Notes</label>
+                <textarea id="pay_notes" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-success" onclick="doPay()">
+              <i class="fas fa-check-circle me-1"></i><%= locale==="fr"?"Confirmer le paiement":"Confirm Payment" %>
+              <strong class="ms-1"><%= fmtFCFA(reimb.amount) %></strong>
+            </button>
+            <button class="btn btn-sm btn-danger ms-2" onclick="promptReject()">
+              <i class="fas fa-times me-1"></i><%= locale==="fr"?"Rejeter":"Reject" %>
+            </button>
+          </div>
+        </div>
+      <% } %>
+
+      <%/* Receipts section */%>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 fw-bold d-flex justify-content-between align-items-center" style="font-size:.85rem;">
+          <span><i class="fas fa-receipt me-2 text-warning"></i><%= locale==="fr"?"Justificatifs":"Supporting Documents" %>
+            <span class="badge bg-secondary ms-1"><%= reimb.receipts ? reimb.receipts.length : 0 %></span>
+          </span>
+          <% if (!["paid","rejected","cancelled"].includes(reimb.status)) { %>
+            <label class="btn btn-xs btn-outline-warning mb-0" style="cursor:pointer;">
+              <i class="fas fa-plus me-1"></i><%= locale==="fr"?"Ajouter":"Add" %>
+              <input type="file" class="d-none" id="addReceiptInput"
+                accept="image/*" onchange="uploadReceipt(this)">
+            </label>
+          <% } %>
+        </div>
+        <div class="card-body">
+          <% if (!reimb.receipts || reimb.receipts.length === 0) { %>
+            <p class="text-muted mb-0" style="font-size:.80rem;">
+              <i class="fas fa-inbox me-2 opacity-50"></i>
+              <%= locale==="fr"?"Aucun justificatif joint.":"No documents attached." %>
+            </p>
+          <% } else { %>
+            <div class="d-flex flex-wrap gap-2">
+              <% reimb.receipts.forEach(function(r) { %>
+                <div class="text-center" style="width:100px;">
+                  <a href="/images/<%= r.filename %>" target="_blank">
+                    <img src="/images/<%= r.filename %>" class="receipt-thumb" alt="<%= r.original_name %>"
+                      onerror="this.src='/images/placeholder.png'">
+                  </a>
+                  <div style="font-size:.62rem;color:#6c757d;margin-top:2px;word-break:break-all;">
+                    <%= r.original_name.substring(0,20) %>
+                  </div>
+                  <div style="font-size:.60rem;color:#adb5bd;">
+                    <%= new Date(r.uploaded_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+                  </div>
+                </div>
+              <% }); %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div></div>
+
+<script>
+var _csrf   = '<%= csrfToken %>';
+var _id     = <%= reimb.reimb_id %>;
+var _locale = '<%= locale %>';
+
+function apiPost(url, body) {
+  return fetch(url + '?_csrf=' + encodeURIComponent(_csrf), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).then(function(r) { return r.json(); });
+}
+
+function doAction(action, notes, reason) {
+  var msgs = {
+    submit:  _locale==='fr'?'Soumettre au Directeur ?':'Submit to Director?',
+    approve: _locale==='fr'?'Approuver cette demande ?':'Approve this request?',
+    cancel:  _locale==='fr'?'Annuler cette demande ?':'Cancel this request?',
+  };
+  if (!confirm(msgs[action] || 'Confirm?')) return;
+  apiPost('/finances/reimbursements/' + _id + '/' + action,
+    { notes: notes, reason: reason })
+    .then(function(d) {
+      if (d.ok) {
+        window.location.href = '/finances/reimbursements/' + _id + '?success=' + action;
+      } else { alert(d.error || 'Error'); }
+    });
+}
+
+function promptReject() {
+  var reason = prompt(_locale==='fr'?'Motif du rejet (obligatoire):':'Rejection reason (required):');
+  if (!reason || !reason.trim()) return;
+  apiPost('/finances/reimbursements/' + _id + '/reject', { reason: reason.trim() })
+    .then(function(d) {
+      if (d.ok) { window.location.href = '/finances/reimbursements/' + _id + '?success=rejected'; }
+      else { alert(d.error || 'Error'); }
+    });
+}
+
+function doPay() {
+  var method = document.getElementById('pay_method').value;
+  var ref    = document.getElementById('pay_ref').value;
+  var notes  = document.getElementById('pay_notes').value;
+  if (!method) {
+    alert(_locale==='fr'?'Choisissez un mode de paiement.':'Select a payment method.');
+    return;
+  }
+  if (!confirm(_locale==='fr'?'Confirmer le paiement ?':'Confirm payment?')) return;
+  apiPost('/finances/reimbursements/' + _id + '/pay',
+    { payment_method: method, payment_reference: ref, notes: notes })
+    .then(function(d) {
+      if (d.ok) { window.location.href = '/finances/reimbursements/' + _id + '?success=paid'; }
+      else { alert(d.error || 'Error'); }
+    });
+}
+
+function uploadReceipt(input) {
+  if (!input.files[0]) return;
+  var fd = new FormData();
+  fd.append('receipt', input.files[0]);
+  fd.append('_csrf', _csrf);
+  fetch('/finances/reimbursements/' + _id + '/receipt?_csrf=' + encodeURIComponent(_csrf), { method: 'POST', body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || 'Upload failed'); }
+    });
+}
+</script>
+<%- include("../../partials/footer") %>
+
+
+
+
+
+
+
+

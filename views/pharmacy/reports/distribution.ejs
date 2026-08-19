@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="<%= typeof locale !== "undefined" ? locale : "en" %>">
+<head>
+  <meta charset="UTF-8">
+  <title><%= locale==="fr"?"Rapport de distribution":"Distribution Report" %> — Oseel Care</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Arial',sans-serif; font-size:10pt; color:#222; background:#fff; padding:20px 28px; }
+    h1   { font-size:14pt; margin-bottom:2px; }
+    .meta{ font-size:8pt; color:#666; margin-bottom:14px; }
+    .summary { display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
+    .s-box { border:1px solid #dee2e6; border-radius:4px; padding:7px 12px; min-width:100px; }
+    .s-val { font-size:13pt; font-weight:800; }
+    .s-lbl { font-size:7pt; text-transform:uppercase; color:#666; }
+    .section-title { font-size:10pt; font-weight:700; margin:14px 0 5px;
+                     border-bottom:2px solid #333; padding-bottom:2px; }
+    table { width:100%; border-collapse:collapse; font-size:9pt; }
+    th  { background:#333; color:#fff; padding:5px 7px; text-align:left;
+          font-size:8pt; text-transform:uppercase; letter-spacing:.03em; }
+    td  { padding:3px 7px; border-bottom:1px solid #eee; }
+  tbody tr:nth-child(odd) > td,
+  tbody tr:nth-child(odd) > th  { background-color: #f0f4ff !important; }
+  tbody tr:nth-child(even) > td,
+  tbody tr:nth-child(even) > th { background-color: #ffffff !important; }
+  tbody tr:hover > td,
+  tbody tr:hover > th           { background-color: #dce8ff !important; }
+    @media print { body { padding:0; } }
+  </style>
+</head>
+<body>
+
+  <h1>Oseel Care — <%= locale==="fr"?"Rapport de distribution pharmacie":"Pharmacy Distribution Report" %></h1>
+  <div class="meta">
+    <%= locale==="fr"?"Periode":"Period" %>: <%= dateFrom %> → <%= dateTo %>
+    &bull; <%= locale==="fr"?"Genere le":"Generated" %>: <%= new Date(generatedAt).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %>
+    <% if (typeof user !== "undefined" && user) { %>&bull; <%= user.username %><% } %>
+  </div>
+
+  <div class="summary">
+    <div class="s-box"><div class="s-val" style="color:#0d6efd"><%= totalOrders %></div>
+      <div class="s-lbl"><%= locale==="fr"?"Commandes":"Orders" %></div></div>
+    <div class="s-box"><div class="s-val" style="color:#198754"><%= totalRows %></div>
+      <div class="s-lbl"><%= locale==="fr"?"Lignes emises":"Lines Issued" %></div></div>
+    <div class="s-box"><div class="s-val" style="color:#6f42c1"><%= byProduct.length %></div>
+      <div class="s-lbl"><%= locale==="fr"?"Produits":"Products" %></div></div>
+    <div class="s-box">
+      <div class="s-val" style="color:#0a3622"><%= rows.reduce(function(s,r){return s+r.qty_issued;},0) %></div>
+      <div class="s-lbl"><%= locale==="fr"?"Unites totales":"Total Units" %></div></div>
+  </div>
+
+  <div class="section-title"><%= locale==="fr"?"Resume par produit":"Summary by Product" %></div>
+  <table>
+    <thead class="table-dark"><tr>
+      <th><%= locale==="fr"?"Produit":"Product" %></th>
+      <th><%= locale==="fr"?"Code":"Code" %></th>
+      <th><%= locale==="fr"?"Unite":"Unit" %></th>
+      <th style="text-align:right"><%= locale==="fr"?"Commandes":"Orders" %></th>
+      <th style="text-align:right"><%= locale==="fr"?"Total demande":"Requested" %></th>
+      <th style="text-align:right"><%= locale==="fr"?"Total emis":"Issued" %></th>
+      <th style="text-align:right"><%= locale==="fr"?"Taux service":"Fill%" %></th>
+    </tr></thead>
+    <tbody>
+      <% byProduct.forEach(function(p) {
+        var fill = p.total_requested > 0 ? Math.round(p.total_issued/p.total_requested*100) : 0;
+      %>
+        <tr>
+          <td style="font-weight:700"><%= p.name %></td>
+          <td><%= p.code %></td>
+          <td><%= p.unit %></td>
+          <td style="text-align:right"><%= p.order_count %></td>
+          <td style="text-align:right"><%= p.total_requested %></td>
+          <td style="text-align:right;font-weight:700;color:#198754"><%= p.total_issued %></td>
+          <td style="text-align:right"><%= fill %>%</td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <div class="section-title" style="margin-top:18px;"><%= locale==="fr"?"Detail complet":"Full Detail" %></div>
+  <table>
+    <thead class="table-dark"><tr>
+      <th><%= locale==="fr"?"N° Commande":"Order No." %></th>
+      <th><%= locale==="fr"?"Date":"Date" %></th>
+      <th><%= locale==="fr"?"Produit":"Product" %></th>
+      <th style="text-align:right"><%= locale==="fr"?"Dem.":"Req." %></th>
+      <th style="text-align:right"><%= locale==="fr"?"Emis":"Issued" %></th>
+      <th><%= locale==="fr"?"Lot":"Batch" %></th>
+      <th><%= locale==="fr"?"Peremption":"Expiry" %></th>
+      <th><%= locale==="fr"?"Collecte par":"Collected by" %></th>
+    </tr></thead>
+    <tbody>
+      <% rows.forEach(function(r) { %>
+        <tr>
+          <td style="font-weight:700"><%= r.order_number %></td>
+          <td><%= new Date(r.requested_at).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %></td>
+          <td><%= r.product %></td>
+          <td style="text-align:right"><%= r.qty_requested %></td>
+          <td style="text-align:right;font-weight:700;color:#198754"><%= r.qty_issued %></td>
+          <td><%= r.batch_number %></td>
+          <td><% if (r.expiry_date) { %><%= new Date(r.expiry_date).toLocaleDateString(locale==="fr"?"fr-FR":"en-GB") %><% } else { %>—<% } %></td>
+          <td><%= r.collected_by || "—" %></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <script>window.onload = function() { window.print(); }</script>
+</body>
+</html>
+
+
+
+
+
+
