@@ -92,6 +92,18 @@ app.use(session({
     },
 }));
 
+// ── TEMP DEBUG — remove after diagnosing missing Set-Cookie ─
+app.use((req, res, next) => {
+    res.on('finish', () => {
+        if (req.path === '/auth/login') {
+            console.log('DEBUG', req.method, req.path,
+                'NODE_ENV=', process.env.NODE_ENV,
+                'set-cookie=', res.getHeader('set-cookie'));
+        }
+    });
+    next();
+});
+
 // ── Locale ─────────────────────────────────────────────────
 app.use(localeMiddleware);
 
