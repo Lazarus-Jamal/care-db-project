@@ -95,6 +95,7 @@ app.use(session({
 // ── TEMP DEBUG — remove after diagnosing missing Set-Cookie ─
 app.use((req, res, next) => {
     res.set('X-Debug-Build', 'diag2-' + Date.now());
+    res.cookie('debug_test', 'hello123', { httpOnly: false, secure: false, sameSite: 'lax' });
     res.on('finish', () => {
         if (req.path === '/auth/login') {
             console.log('DEBUG', req.method, req.path,
