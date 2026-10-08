@@ -16,6 +16,8 @@ const sequelize = new Sequelize(
     logging:  false,
     timezone: '+01:00',
     dialectOptions: {
+      // Hosted MySQL (e.g. Aiven) requires TLS
+      ...(process.env.DB_SSL === 'true' && { ssl: { rejectUnauthorized: false } }),
       typeCast: function (field, next) {
         if (field.type === 'DATETIME' || field.type === 'TIMESTAMP') {
           return field.string();
