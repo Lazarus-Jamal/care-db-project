@@ -38,8 +38,12 @@ dotenv.config();
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// Behind Railway's HTTPS proxy: needed so secure session cookies are sent
+app.set('trust proxy', 1);
+
 // ── Static files ───────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
+if (process.env.UPLOAD_DIR) app.use('/images', express.static(process.env.UPLOAD_DIR));
 app.use('/bootstrap',    express.static(path.join(__dirname, 'node_modules/bootstrap')));
 app.use('/@fortawesome', express.static(path.join(__dirname, 'node_modules/@fortawesome')));
 
@@ -91,20 +95,6 @@ app.use(session({
         sameSite: 'lax',
     },
 }));
-
-// ── TEMP DEBUG — remove after diagnosing missing Set-Cookie ─
-app.use((req, res, next) => {
-    res.set('X-Debug-Build', 'diag2-' + Date.now());
-    res.cookie('debug_test', 'hello123', { httpOnly: false, secure: false, sameSite: 'lax' });
-    res.on('finish', () => {
-        if (req.path === '/auth/login') {
-            console.log('DEBUG', req.method, req.path,
-                'NODE_ENV=', process.env.NODE_ENV,
-                'set-cookie=', res.getHeader('set-cookie'));
-        }
-    });
-    next();
-});
 
 // ── Locale ─────────────────────────────────────────────────
 app.use(localeMiddleware);

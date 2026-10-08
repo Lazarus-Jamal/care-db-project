@@ -3,7 +3,8 @@ const path = require('path');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'public/images/');
+    // UPLOAD_DIR points to a persistent volume in production (served at /images)
+    cb(null, process.env.UPLOAD_DIR || 'public/images/');
   },
   filename: function (req, file, cb) {
     cb(null, Date.now() + path.extname(file.originalname));
